@@ -1,0 +1,14 @@
+# Development config (placeholder UDP broadcast)
+#
+# NOTE: This is NOT yet real GDL90 framing.
+# It exists to validate Wi‑Fi/AP networking end-to-end.
+
+gdl90:
+  # Typical GDL90 UDP port is commonly 4000 in the ecosystem.
+  # Adjust as needed for your EFB/testing.
+  dest: "192.168.10.255:4000"
+
+  # Go duration string
+  interval: 1s
+
+  test_payload: "STRATUX-NG TEST"

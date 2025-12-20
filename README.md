@@ -57,9 +57,16 @@ You can develop without SDR/GPS/AHRS hardware using the built-in simulator:
 - Simulated traffic targets
 - GDL90 broadcast over UDP so EFBs can connect and display traffic/position
 
-### Quick start (planned)
+### Quick start
+
+Run Stratux-NG (currently sends placeholder UDP packets to validate networking):
+
 - `go run ./cmd/stratux-ng --config ./dev.yaml`
-- Connect your tablet/phone to the Pi Wi‑Fi and point the EFB at GDL90 (per-app instructions)
+
+Then:
+
+- Bring up the Wi‑Fi AP (see [docs/wifi-ap-hostapd-dnsmasq.md](docs/wifi-ap-hostapd-dnsmasq.md))
+- Connect your tablet/phone (EFB device) to the Pi Wi‑Fi
 
 ## Prerequisites (planned)
 

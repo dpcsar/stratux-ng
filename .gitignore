@@ -1,0 +1,42 @@
+# Go build outputs
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go test binaries
+*.test
+
+# Go coverage output
+*.out
+
+# Go workspace files (Go 1.18+)
+go.work
+
+# Build directories
+/bin/
+/dist/
+/build/
+
+# Logs
+*.log
+
+# Local env/config overrides
+.env
+.env.*
+*.local
+
+# Editor/OS
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+*.swo
+
+# VS Code (keep workspace settings if you want them tracked)
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
