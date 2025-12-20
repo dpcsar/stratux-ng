@@ -1,4 +1,9 @@
 {
+    "github.copilot.chat.codeGeneration.instructions": [
+        {
+            "file": "copilot-instructions.md"
+        }
+    ],
     "cSpell.words": [
         "AHRS",
         "bootable",
