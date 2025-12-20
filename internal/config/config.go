@@ -10,6 +10,7 @@ import (
 
 type Config struct {
 	GDL90 GDL90Config `yaml:"gdl90"`
+	Sim   SimConfig   `yaml:"sim"`
 }
 
 type GDL90Config struct {
@@ -17,6 +18,22 @@ type GDL90Config struct {
 	Interval    time.Duration `yaml:"interval"`
 	Mode        string        `yaml:"mode"`
 	TestPayload string        `yaml:"test_payload"`
+}
+
+type SimConfig struct {
+	Ownship OwnshipSimConfig `yaml:"ownship"`
+}
+
+type OwnshipSimConfig struct {
+	Enable       bool          `yaml:"enable"`
+	CenterLatDeg float64       `yaml:"center_lat_deg"`
+	CenterLonDeg float64       `yaml:"center_lon_deg"`
+	AltFeet      int           `yaml:"alt_feet"`
+	GroundKt     int           `yaml:"ground_kt"`
+	RadiusNm     float64       `yaml:"radius_nm"`
+	Period       time.Duration `yaml:"period"`
+	ICAO         string        `yaml:"icao"`
+	Callsign     string        `yaml:"callsign"`
 }
 
 func Load(path string) (Config, error) {
@@ -41,6 +58,26 @@ func Load(path string) (Config, error) {
 	}
 	if cfg.GDL90.TestPayload == "" {
 		cfg.GDL90.TestPayload = "STRATUX-NG TEST"
+	}
+
+	// Simulator defaults (safe even if disabled).
+	if cfg.Sim.Ownship.Period <= 0 {
+		cfg.Sim.Ownship.Period = 120 * time.Second
+	}
+	if cfg.Sim.Ownship.RadiusNm <= 0 {
+		cfg.Sim.Ownship.RadiusNm = 0.5
+	}
+	if cfg.Sim.Ownship.GroundKt <= 0 {
+		cfg.Sim.Ownship.GroundKt = 90
+	}
+	if cfg.Sim.Ownship.AltFeet == 0 {
+		cfg.Sim.Ownship.AltFeet = 3000
+	}
+	if cfg.Sim.Ownship.ICAO == "" {
+		cfg.Sim.Ownship.ICAO = "F00000"
+	}
+	if cfg.Sim.Ownship.Callsign == "" {
+		cfg.Sim.Ownship.Callsign = "STRATUX"
 	}
 
 	return cfg, nil

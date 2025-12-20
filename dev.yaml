@@ -17,3 +17,18 @@ gdl90:
   interval: 1s
 
   test_payload: "STRATUX-NG TEST"
+
+sim:
+  ownship:
+    enable: true
+    # Pick a realistic center point for your testing.
+    # Hillsboro, Oregon (KHIO) area.
+    center_lat_deg: 45.5404
+    center_lon_deg: -122.9498
+    alt_feet: 3000
+    ground_kt: 90
+    radius_nm: 0.5
+    period: 120s
+    # 24-bit ICAO address as 6 hex chars.
+    icao: "F00000"
+    callsign: "STRATUX"

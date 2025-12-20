@@ -83,3 +83,19 @@ func StratuxHeartbeatFrame(gpsValid bool, ahrsValid bool) []byte {
 	msg[1] = b
 	return Frame(msg)
 }
+
+// OwnshipGeometricAltitudeFrame builds and frames the GDL90 Ownship Geometric
+// Altitude report (0x0B).
+//
+// Altitude is encoded as a signed 16-bit integer at 5-foot resolution.
+func OwnshipGeometricAltitudeFrame(altFeetMSL int) []byte {
+	msg := make([]byte, 5)
+	msg[0] = 0x0B
+	alt := int16(altFeetMSL / 5)
+	msg[1] = byte((alt >> 8) & 0xFF)
+	msg[2] = byte(alt & 0xFF)
+	// Figure of Merit (unknown in MVP). Use Stratux defaults.
+	msg[3] = 0x00
+	msg[4] = 0x0A
+	return Frame(msg)
+}
