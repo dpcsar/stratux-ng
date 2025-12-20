@@ -4,7 +4,7 @@ Stratux-NG is a modern, Raspberry Pi–focused, 64-bit-first avionics data appli
 
 ## Status
 
-This repository is currently in **early bring-up / design + scaffolding**. The README describes the intended architecture and milestones; implementation will follow.
+This repository is currently in **early bring-up**. The simulator + UDP output path is working; hardware inputs (SDR/GPS/AHRS) are planned.
 
 This is a **new implementation** (new repository) with a modular architecture and reproducible builds, intended to support:
 
@@ -59,7 +59,7 @@ You can develop without SDR/GPS/AHRS hardware using the built-in simulator:
 
 ### Quick start
 
-Run Stratux-NG (currently sends placeholder UDP packets to validate networking):
+Run Stratux-NG (sends framed GDL90 over UDP from simulated ownship + traffic):
 
 - `go run ./cmd/stratux-ng --config ./dev.yaml`
 
@@ -97,7 +97,28 @@ Stratux-NG itself focuses on:
 ## EFB compatibility
 
 - Output format: **GDL90 over UDP**
-- Initial focus: **Garmin Pilot** and **enRoute Flight Navigation** (enRoute is the primary early test target)
+
+### Compatibility targets
+
+Stratux-NG aims to be compatible with EFBs that can consume Stratux-style GDL90 over UDP. In practice, behavior varies by app/version, so we bias toward matching Stratux quirks where known.
+
+Common EFBs that typically support GDL90/Stratux-style receivers:
+
+- enRoute Flight Navigation (primary early test target)
+- Garmin Pilot
+- ForeFlight
+- Others vary (e.g., WingX, iFly EFB, Avare, OzRunways)
+
+### Message set (current)
+
+When simulator is enabled, Stratux-NG currently emits these GDL90 message IDs:
+
+- `0x00` Heartbeat
+- `0x0A` Ownship Report
+- `0x0B` Ownship Geometric Altitude
+- `0x14` Traffic Report (simulated targets)
+- `0x65` Device ID / Capabilities ("ForeFlight ID")
+- `0xCC` Stratux Heartbeat
 
 Per-app connection steps will be documented once defaults (UDP port/broadcast behavior) are finalized.
 

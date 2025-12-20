@@ -6,8 +6,8 @@ import (
 )
 
 type Broadcaster struct {
-	dest     string
-	conn     *net.UDPConn
+	dest string
+	conn *net.UDPConn
 }
 
 func NewBroadcaster(dest string) (*Broadcaster, error) {
@@ -23,8 +23,8 @@ func NewBroadcaster(dest string) (*Broadcaster, error) {
 	}
 
 	return &Broadcaster{
-		dest:     dest,
-		conn:     conn,
+		dest: dest,
+		conn: conn,
 	}, nil
 }
 

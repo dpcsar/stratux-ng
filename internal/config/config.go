@@ -22,6 +22,15 @@ type GDL90Config struct {
 
 type SimConfig struct {
 	Ownship OwnshipSimConfig `yaml:"ownship"`
+	Traffic TrafficSimConfig `yaml:"traffic"`
+}
+
+type TrafficSimConfig struct {
+	Enable   bool          `yaml:"enable"`
+	Count    int           `yaml:"count"`
+	RadiusNm float64       `yaml:"radius_nm"`
+	Period   time.Duration `yaml:"period"`
+	GroundKt int           `yaml:"ground_kt"`
 }
 
 type OwnshipSimConfig struct {
@@ -78,6 +87,20 @@ func Load(path string) (Config, error) {
 	}
 	if cfg.Sim.Ownship.Callsign == "" {
 		cfg.Sim.Ownship.Callsign = "STRATUX"
+	}
+
+	// Traffic simulator defaults.
+	if cfg.Sim.Traffic.Count <= 0 {
+		cfg.Sim.Traffic.Count = 3
+	}
+	if cfg.Sim.Traffic.RadiusNm <= 0 {
+		cfg.Sim.Traffic.RadiusNm = 2.0
+	}
+	if cfg.Sim.Traffic.Period <= 0 {
+		cfg.Sim.Traffic.Period = 90 * time.Second
+	}
+	if cfg.Sim.Traffic.GroundKt <= 0 {
+		cfg.Sim.Traffic.GroundKt = 120
 	}
 
 	return cfg, nil

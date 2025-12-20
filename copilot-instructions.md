@@ -34,12 +34,15 @@
   - Heartbeat (0x00) should be sent at ~1 Hz.
   - When we simulate GPS, set the heartbeat GPS/UTC-valid bits consistently.
   - Prefer emitting Ownship Report (0x0A) + Ownship Geo Altitude (0x0B) when presenting a “GPS valid” device.
-- If adding new message types, add at least one focused unit test in `internal/gdl90`.
+- If adding or changing message types, field packing, sentinels, or emission cadence:
+  - Add/extend at least one focused unit test in `internal/gdl90`.
+  - Add/extend a lightweight “sender emits expected message IDs” test in `cmd/stratux-ng` when main-loop output behavior changes.
 
 ## Code quality / build hygiene
 - Run `go test ./...` after code changes.
 - Keep code formatted with `gofmt`.
 - Avoid adding new dependencies unless there is a clear benefit.
+- Prefer tests that do not require network access (unit tests and small integration-ish tests that operate on frames in-memory).
 
 ## Networking
 - Default to simple, robust networking:

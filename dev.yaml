@@ -1,7 +1,7 @@
-# Development config (placeholder UDP broadcast)
+# Development config
 #
-# NOTE: This is NOT yet real GDL90 framing.
-# It exists to validate Wi‑Fi/AP networking end-to-end.
+# This config drives the built-in simulator and sends real framed GDL90 over UDP.
+# Use `mode: test` only for plain-text UDP debugging.
 
 gdl90:
   # Typical GDL90 UDP port is commonly 4000 in the ecosystem.
@@ -9,7 +9,7 @@ gdl90:
   dest: "192.168.10.255:4000"
 
   # Output mode:
-  # - gdl90 (default): send framed GDL90 heartbeat messages
+  # - gdl90 (default): send framed GDL90 (heartbeat + Stratux heartbeat + sim ownship/traffic if enabled)
   # - test: send plain text UDP payloads (debugging only)
   mode: gdl90
 
@@ -32,3 +32,11 @@ sim:
     # 24-bit ICAO address as 6 hex chars.
     icao: "F00000"
     callsign: "STRATUX"
+
+  # Simulated traffic targets (GDL90 0x14).
+  traffic:
+    enable: true
+    count: 3
+    radius_nm: 2.0
+    period: 90s
+    ground_kt: 120
