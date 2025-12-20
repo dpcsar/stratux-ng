@@ -1,0 +1,22 @@
+# Example dnsmasq config for Stratux-NG AP network
+#
+# Assumes the AP interface (ap0) uses a static IP such as 192.168.10.1/24
+# and you want DHCP for clients (EFBs).
+
+# Bind to the AP interface only.
+interface=ap0
+bind-interfaces
+
+# DHCP range (example): 192.168.10.50 - 192.168.10.150, 12h lease
+# Adjust to match your chosen subnet.
+dhcp-range=192.168.10.50,192.168.10.150,255.255.255.0,12h
+
+# Provide the Pi as default gateway and DNS.
+# (dnsmasq will advertise itself as DNS when it can).
+dhcp-option=option:router,192.168.10.1
+
+domain-needed
+bogus-priv
+
+# Optional: if you want clients to resolve stratux-ng.local-like names,
+# consider running mDNS separately (avahi) instead of forcing a domain here.

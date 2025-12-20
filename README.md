@@ -76,6 +76,12 @@ To keep networking reliable on Raspberry Pi, **AP configuration is host-managed*
 - **Option A:** `systemd` + `hostapd` + `dnsmasq`
 - **Option B:** NetworkManager (if that fits your base image better)
 
+Setup guide + templates:
+
+- [docs/wifi-ap-hostapd-dnsmasq.md](docs/wifi-ap-hostapd-dnsmasq.md)
+- `configs/wifi/hostapd.conf.example`
+- `configs/wifi/dnsmasq-stratux-ng.conf.example`
+
 Stratux-NG itself focuses on:
 
 - Binding/broadcasting GDL90 UDP on the Pi’s Wi‑Fi interface (details configurable; exact ports/addresses TBD)

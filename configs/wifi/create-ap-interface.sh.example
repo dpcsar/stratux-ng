@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Create a virtual AP interface (ap0) from wlan0 for AP+STA on a single radio.
+#
+# This script is intentionally minimal. It is safe to run multiple times.
+
+STA_IFACE="wlan0"
+AP_IFACE="ap0"
+
+if iw dev "$AP_IFACE" info >/dev/null 2>&1; then
+  exit 0
+fi
+
+# Ensure the STA interface exists
+iw dev "$STA_IFACE" info >/dev/null
+
+# Create the AP interface
+iw dev "$STA_IFACE" interface add "$AP_IFACE" type __ap
