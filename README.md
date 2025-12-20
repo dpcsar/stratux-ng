@@ -2,6 +2,10 @@
 
 Stratux-NG is a modern, Raspberry Pi–focused, 64-bit-first avionics data appliance inspired by Stratux, designed to run on Raspberry Pi 3/4/5 and provide **GDL90** traffic/weather-style outputs over Wi‑Fi to EFB apps.
 
+## Status
+
+This repository is currently in **early bring-up / design + scaffolding**. The README describes the intended architecture and milestones; implementation will follow.
+
 This is a **new implementation** (new repository) with a modular architecture and reproducible builds, intended to support:
 
 - **SDR inputs**
@@ -57,6 +61,33 @@ You can develop without SDR/GPS/AHRS hardware using the built-in simulator:
 - `go run ./cmd/stratux-ng --config ./dev.yaml`
 - Connect your tablet/phone to the Pi Wi‑Fi and point the EFB at GDL90 (per-app instructions)
 
+## Prerequisites (planned)
+
+- **Target OS:** Raspberry Pi OS 64-bit (arm64)
+- **Tooling:** Go toolchain (version TBD), plus typical Pi utilities for networking/AP setup
+- **Decoders (optional):** `readsb` (1090) and `dump978` (978) treated as external processes/data sources
+
+## Networking / Wi‑Fi AP
+
+Stratux-NG is intended to behave like an “appliance” on a Raspberry Pi: you power it on, connect your tablet/phone to its Wi‑Fi network, and your EFB receives **GDL90 over UDP**.
+
+To keep networking reliable on Raspberry Pi, **AP configuration is host-managed** initially:
+
+- **Option A:** `systemd` + `hostapd` + `dnsmasq`
+- **Option B:** NetworkManager (if that fits your base image better)
+
+Stratux-NG itself focuses on:
+
+- Binding/broadcasting GDL90 UDP on the Pi’s Wi‑Fi interface (details configurable; exact ports/addresses TBD)
+- Serving an HTTP API + minimal web UI (for status/config)
+
+## EFB compatibility
+
+- Output format: **GDL90 over UDP**
+- Initial focus: **Garmin Pilot** and **enRoute Flight Navigation** (enRoute is the primary early test target)
+
+Per-app connection steps will be documented once defaults (UDP port/broadcast behavior) are finalized.
+
 ## Configuration
 Stratux-NG supports both:
 - **Config file** (YAML) for headless provisioning
@@ -71,3 +102,14 @@ Stratux-NG supports both:
 - [ ] Record/replay mode for decoder feeds (for repeatable testing)
 - [ ] Raspberry Pi image build pipeline (pi-gen or equivalent)
 - [ ] Hardware integration: SDR 1090, SDR 978, GPS, AHRS
+
+## Contributing
+
+If you want to help early, the highest-value next steps are:
+
+- Establish the initial Go module + `cmd/stratux-ng` entrypoint
+- Define the YAML config schema and defaults
+- Implement a minimal simulator producing ownship + a few traffic targets
+- Implement a first-pass GDL90 encoder + UDP broadcaster
+
+If you tell me your preferred direction (core Go skeleton vs networking/AP scripts vs UI/API), I can start by scaffolding that structure next.
