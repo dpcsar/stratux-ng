@@ -8,6 +8,11 @@ gdl90:
   # Adjust as needed for your EFB/testing.
   dest: "192.168.10.255:4000"
 
+  # Output mode:
+  # - gdl90 (default): send framed GDL90 heartbeat messages
+  # - test: send plain text UDP payloads (debugging only)
+  mode: gdl90
+
   # Go duration string
   interval: 1s
 

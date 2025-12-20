@@ -15,6 +15,7 @@ type Config struct {
 type GDL90Config struct {
 	Dest        string        `yaml:"dest"`
 	Interval    time.Duration `yaml:"interval"`
+	Mode        string        `yaml:"mode"`
 	TestPayload string        `yaml:"test_payload"`
 }
 
@@ -34,6 +35,9 @@ func Load(path string) (Config, error) {
 	}
 	if cfg.GDL90.Interval <= 0 {
 		cfg.GDL90.Interval = 1 * time.Second
+	}
+	if cfg.GDL90.Mode == "" {
+		cfg.GDL90.Mode = "gdl90"
 	}
 	if cfg.GDL90.TestPayload == "" {
 		cfg.GDL90.TestPayload = "STRATUX-NG TEST"
