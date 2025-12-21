@@ -12,6 +12,12 @@ import (
 type Config struct {
 	GDL90 GDL90Config `yaml:"gdl90"`
 	Sim   SimConfig   `yaml:"sim"`
+	Web   WebConfig   `yaml:"web"`
+}
+
+type WebConfig struct {
+	Enable bool   `yaml:"enable"`
+	Listen string `yaml:"listen"`
 }
 
 type GDL90Config struct {
@@ -190,6 +196,16 @@ func DefaultAndValidate(cfg *Config) error {
 		}
 		if _, err := time.Parse(time.RFC3339, cfg.Sim.Scenario.StartTimeUTC); err != nil {
 			return fmt.Errorf("sim.scenario.start_time_utc must be RFC3339 (e.g. 2020-01-01T00:00:00Z): %w", err)
+		}
+	}
+
+	// Web UI defaults + validation.
+	if strings.TrimSpace(cfg.Web.Listen) == "" {
+		cfg.Web.Listen = ":8080"
+	}
+	if cfg.Web.Enable {
+		if strings.TrimSpace(cfg.Web.Listen) == "" {
+			return fmt.Errorf("web.listen is required when web.enable is true")
 		}
 	}
 

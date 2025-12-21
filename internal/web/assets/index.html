@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Stratux-NG</title>
+    <link rel="stylesheet" href="/assets/app.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <button id="btn-more" class="iconbtn" aria-label="Menu" title="Menu">
+        <span class="icon">☰</span>
+      </button>
+      <div class="titleblock">
+        <div class="title">Stratux-NG</div>
+        <div id="subtitle" class="subtitle">Connecting…</div>
+      </div>
+      <span></span>
+    </header>
+
+    <main id="content" class="content" role="main">
+      <section id="view-ahrs" class="view" aria-label="AHRS">
+        <h2>AHRS</h2>
+        <p class="muted">Coming soon. This area will show attitude and basic flight instruments.</p>
+        <div class="controls card">
+          <label class="control">
+            <input id="ahrs-show-raw" type="checkbox" />
+            <span>Show raw status JSON</span>
+          </label>
+        </div>
+        <pre id="ahrs-summary" class="card">Loading…</pre>
+      </section>
+
+      <section id="view-radar" class="view" aria-label="Radar">
+        <h2>Radar</h2>
+        <p class="muted">Coming soon. This area will show nearby traffic relative to ownship.</p>
+        <div class="controls card">
+          <label class="control">
+            <span>Range</span>
+            <select id="radar-range">
+              <option value="5">5 nm</option>
+              <option value="10" selected>10 nm</option>
+              <option value="20">20 nm</option>
+            </select>
+          </label>
+        </div>
+        <pre id="radar-summary" class="card">Loading…</pre>
+      </section>
+
+      <section id="view-map" class="view" aria-label="Map">
+        <h2>Map</h2>
+        <p class="muted">Coming soon. This area will show ownship position and track.</p>
+        <div class="controls card">
+          <label class="control">
+            <input id="map-follow" type="checkbox" checked />
+            <span>Follow ownship</span>
+          </label>
+        </div>
+        <pre id="map-summary" class="card">Loading…</pre>
+      </section>
+
+      <section id="view-status" class="view" aria-label="Status">
+        <h2>Status</h2>
+        <p class="muted">Live snapshot from <a href="/api/status">/api/status</a>.</p>
+        <pre id="status-json" class="card">Loading…</pre>
+      </section>
+
+      <section id="view-settings" class="view" aria-label="Settings">
+        <h2>Settings</h2>
+        <p class="muted">Edits are saved to your YAML config and require a restart to take effect.</p>
+
+        <form id="settings-form" class="card" autocomplete="off">
+          <div class="formrow">
+            <label class="control">
+              <span>GDL90 destination</span>
+              <input id="set-gdl90-dest" type="text" placeholder="192.168.10.255:4000" />
+            </label>
+          </div>
+
+          <div class="formrow">
+            <label class="control">
+              <input id="set-ownship-enable" type="checkbox" />
+              <span>Sim ownship enabled</span>
+            </label>
+          </div>
+
+          <div class="formrow">
+            <label class="control">
+              <input id="set-traffic-enable" type="checkbox" />
+              <span>Sim traffic enabled</span>
+            </label>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="formrow">
+            <label class="control">
+              <input id="set-scenario-enable" type="checkbox" />
+              <span>Scenario simulation enabled</span>
+            </label>
+          </div>
+
+          <div class="formrow">
+            <label class="control">
+              <span>Scenario path</span>
+              <input id="set-scenario-path" type="text" placeholder="./configs/scenarios/edgecases.yaml" />
+            </label>
+          </div>
+
+          <div class="formrow">
+            <label class="control">
+              <span>Scenario start time (RFC3339 UTC)</span>
+              <input id="set-scenario-start" type="text" placeholder="2020-01-01T00:00:00Z" />
+            </label>
+          </div>
+
+          <div class="formrow">
+            <label class="control">
+              <input id="set-scenario-loop" type="checkbox" />
+              <span>Scenario loop</span>
+            </label>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="formrow">
+            <label class="control">
+              <span>Web listen</span>
+              <input id="set-web-listen" type="text" placeholder=":8080" />
+            </label>
+          </div>
+
+          <div class="formrow">
+            <label class="control">
+              <input id="set-web-enable" type="checkbox" />
+              <span>Web enabled</span>
+            </label>
+          </div>
+
+          <div class="formactions">
+            <button id="btn-save" type="submit" class="primary">Save</button>
+            <span id="save-msg" class="muted"></span>
+          </div>
+        </form>
+      </section>
+    </main>
+
+    <nav class="bottomnav" aria-label="Primary">
+      <button class="navbtn" data-view="ahrs" aria-label="AHRS">
+        <span class="navlabel">AHRS</span>
+      </button>
+      <button class="navbtn" data-view="radar" aria-label="Radar">
+        <span class="navlabel">Radar</span>
+      </button>
+      <button class="navbtn" data-view="map" aria-label="Map">
+        <span class="navlabel">Map</span>
+      </button>
+    </nav>
+
+    <div id="drawer-backdrop" class="backdrop" hidden></div>
+    <aside id="drawer" class="drawer" aria-label="More" hidden>
+      <div class="drawer-head">
+        <div class="drawer-title">More</div>
+        <button id="btn-close" class="iconbtn" aria-label="Close menu" title="Close">✕</button>
+      </div>
+      <div class="drawer-body">
+        <button class="drawer-item drawerbtn" data-view="status" type="button">Status</button>
+        <button class="drawer-item drawerbtn" data-view="settings" type="button">Settings</button>
+        <div class="drawer-item" id="drawer-status">Loading…</div>
+      </div>
+    </aside>
+
+    <script src="/assets/app.js"></script>
+  </body>
+</html>

@@ -77,6 +77,16 @@ Run Stratux-NG (sends framed GDL90 over UDP from simulated ownship + traffic):
 
 - `go run ./cmd/stratux-ng --config ./dev.yaml`
 
+Optional: enable the minimal Web UI/status API:
+
+- Set `web.enable: true` in `dev.yaml`
+- Browse to `http://<pi-ip>:8080/` (or whatever `web.listen` port you choose)
+
+Web UI notes:
+- Mobile-first layout intended for phone/tablet use.
+- Bottom navigation switches between: AHRS, Radar, Map (placeholders for now).
+- The menu button opens a small “More” drawer.
+
 Then:
 
 - Bring up the Wi‑Fi AP (see [docs/wifi-ap-hostapd-dnsmasq.md](docs/wifi-ap-hostapd-dnsmasq.md))

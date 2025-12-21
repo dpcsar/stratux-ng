@@ -1,78 +1,39 @@
-# Development config
-#
-# This config drives the built-in simulator and sends real framed GDL90 over UDP.
-# Use `mode: test` only for plain-text UDP debugging.
-
 gdl90:
-  # Typical GDL90 UDP port is commonly 4000 in the ecosystem.
-  # Adjust as needed for your EFB/testing.
-  #
-  # Networks used by this project:
-  # - Pi AP: 192.168.10.1/24 -> broadcast 192.168.10.255
-  # - Home Wi-Fi: 192.168.0.0/24 -> broadcast 192.168.0.255
-  dest: "192.168.10.255:4000"
-
-  # Output mode:
-  # - gdl90 (default): send framed GDL90 (heartbeat + Stratux heartbeat + sim ownship/traffic if enabled)
-  # - test: send plain text UDP payloads (debugging only)
-  mode: gdl90
-
-  # Go duration string
-  interval: 1s
-
-  # Record/replay (framed GDL90 only).
-  #
-  # Record writes every outgoing framed GDL90 packet to a simple line-based log.
-  # Replay reads a previously recorded log and re-sends the raw framed packets.
-  #
-  # Note: record and replay are mutually exclusive.
-  record:
-    enable: false
-    path: "./gdl90-record.log"
-
-  replay:
-    enable: false
-    path: "./gdl90-record.log"
-    # 1.0 = real-time. 2.0 = 2x speed. 0.5 = half speed.
-    speed: 1.0
-    # If true, loops forever until Ctrl+C.
-    loop: false
-
-  test_payload: "STRATUX-NG TEST"
-
+    dest: 192.168.10.255:4000
+    interval: 1s
+    mode: gdl90
+    test_payload: STRATUX-NG TEST
+    record:
+        enable: false
+        path: ./gdl90-record.log
+    replay:
+        enable: false
+        path: ./gdl90-record.log
+        speed: 1
+        loop: false
 sim:
-  # Deterministic, script-driven simulation.
-  # When enabled, `sim.ownship` and `sim.traffic` are ignored.
-  scenario:
-    enable: false
-    # Path to a YAML scenario script (see `configs/scenarios/`).
-    path: "./configs/scenarios/edgecases.yaml"
-    # RFC3339 UTC start time. Fixed value makes runs reproducible.
-    start_time_utc: "2020-01-01T00:00:00Z"
-    # If true, wraps time back to the beginning when the script duration ends.
-    loop: true
-
-  ownship:
+    ownship:
+        enable: true
+        center_lat_deg: 45.5404
+        center_lon_deg: -122.9498
+        alt_feet: 3000
+        ground_kt: 90
+        gps_horizontal_accuracy_m: 50
+        radius_nm: 0.5
+        period: 2m0s
+        icao: F00000
+        callsign: STRATUX
+    traffic:
+        enable: true
+        count: 6
+        radius_nm: 2
+        period: 1m30s
+        ground_kt: 120
+    scenario:
+        enable: false
+        path: ./configs/scenarios/edgecases.yaml
+        start_time_utc: "2020-01-01T00:00:00Z"
+        loop: true
+web:
     enable: true
-    # Pick a realistic center point for your testing.
-    # Hillsboro, Oregon (KHIO) area.
-    center_lat_deg: 45.5404
-    center_lon_deg: -122.9498
-    alt_feet: 3000
-    ground_kt: 90
-    # Simulated 95% horizontal position accuracy (meters).
-    # Used to derive NACp similarly to Stratux.
-    gps_horizontal_accuracy_m: 50
-    radius_nm: 0.5
-    period: 120s
-    # 24-bit ICAO address as 6 hex chars.
-    icao: "F00000"
-    callsign: "STRATUX"
-
-  # Simulated traffic targets (GDL90 0x14).
-  traffic:
-    enable: true
-    count: 6
-    radius_nm: 2.0
-    period: 90s
-    ground_kt: 120
+    listen: :8080

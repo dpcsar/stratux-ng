@@ -20,6 +20,7 @@ import (
 	"stratux-ng/internal/replay"
 	"stratux-ng/internal/sim"
 	"stratux-ng/internal/udp"
+	"stratux-ng/internal/web"
 )
 
 type ctxSleeper struct{ ctx context.Context }
@@ -80,6 +81,8 @@ func main() {
 	var listenMode bool
 	var listenAddr string
 	var listenHex bool
+	var webEnable bool
+	var webListen string
 
 	flag.StringVar(&configPath, "config", "./dev.yaml", "Path to YAML config")
 	flag.StringVar(&recordPath, "record", "", "Record framed GDL90 packets to PATH (overrides config)")
@@ -90,6 +93,8 @@ func main() {
 	flag.BoolVar(&listenMode, "listen", false, "Listen for UDP GDL90 frames and dump decoded messages (no transmit)")
 	flag.StringVar(&listenAddr, "listen-addr", ":4000", "UDP address to bind in listen mode (e.g. :4000 or 127.0.0.1:4000)")
 	flag.BoolVar(&listenHex, "listen-hex", false, "In listen mode, also print raw frame bytes as hex")
+	flag.BoolVar(&webEnable, "web", false, "Enable Web UI (overrides config)")
+	flag.StringVar(&webListen, "web-listen", "", "Web UI listen address (overrides config when non-empty)")
 	flag.Parse()
 
 	if strings.TrimSpace(logSummaryPath) != "" {
@@ -112,6 +117,14 @@ func main() {
 		log.Fatalf("config load failed: %v", err)
 	}
 
+	// CLI overrides.
+	if webEnable {
+		cfg.Web.Enable = true
+	}
+	if strings.TrimSpace(webListen) != "" {
+		cfg.Web.Listen = webListen
+	}
+
 	// CLI overrides (useful for quick record/replay without editing YAML).
 	if recordPath != "" {
 		cfg.GDL90.Record.Enable = true
@@ -127,7 +140,7 @@ func main() {
 	if replayLoop {
 		cfg.GDL90.Replay.Loop = true
 	}
-	if recordPath != "" || replayPath != "" || replaySpeed >= 0 || replayLoop {
+	if recordPath != "" || replayPath != "" || replaySpeed >= 0 || replayLoop || webEnable || strings.TrimSpace(webListen) != "" {
 		if err := config.DefaultAndValidate(&cfg); err != nil {
 			log.Fatalf("config validation failed after CLI overrides: %v", err)
 		}
@@ -135,6 +148,27 @@ func main() {
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
+
+	status := web.NewStatus()
+	status.SetStatic(cfg.GDL90.Mode, cfg.GDL90.Dest, cfg.GDL90.Interval.String(), map[string]any{
+		"config_path": configPath,
+		"scenario":    cfg.Sim.Scenario.Enable,
+		"ownship":     cfg.Sim.Ownship.Enable,
+		"traffic":     cfg.Sim.Traffic.Enable,
+		"record":      cfg.GDL90.Record.Enable,
+		"replay":      cfg.GDL90.Replay.Enable,
+	})
+
+	if cfg.Web.Enable {
+		log.Printf("web ui enabled listen=%s", cfg.Web.Listen)
+		go func() {
+			err := web.Serve(ctx, cfg.Web.Listen, status, web.SettingsStore{ConfigPath: configPath})
+			if err != nil && ctx.Err() == nil {
+				log.Printf("web ui stopped: %v", err)
+				cancel()
+			}
+		}()
+	}
 
 	broadcaster, err := udp.NewBroadcaster(cfg.GDL90.Dest)
 	if err != nil {
@@ -269,6 +303,7 @@ func main() {
 						now = time.Now()
 						frames = buildGDL90Frames(cfg, now.UTC())
 					}
+					status.MarkTick(now.UTC(), len(frames))
 					for _, frame := range frames {
 						if rec != nil {
 							if err := rec.WriteFrame(now, frame); err != nil {
