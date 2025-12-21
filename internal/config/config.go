@@ -18,6 +18,20 @@ type GDL90Config struct {
 	Interval    time.Duration `yaml:"interval"`
 	Mode        string        `yaml:"mode"`
 	TestPayload string        `yaml:"test_payload"`
+	Record      RecordConfig  `yaml:"record"`
+	Replay      ReplayConfig  `yaml:"replay"`
+}
+
+type RecordConfig struct {
+	Enable bool   `yaml:"enable"`
+	Path   string `yaml:"path"`
+}
+
+type ReplayConfig struct {
+	Enable bool    `yaml:"enable"`
+	Path   string  `yaml:"path"`
+	Speed  float64 `yaml:"speed"`
+	Loop   bool    `yaml:"loop"`
 }
 
 type SimConfig struct {
@@ -67,6 +81,34 @@ func Load(path string) (Config, error) {
 	}
 	if cfg.GDL90.TestPayload == "" {
 		cfg.GDL90.TestPayload = "STRATUX-NG TEST"
+	}
+
+	if cfg.GDL90.Record.Enable {
+		if cfg.GDL90.Mode == "test" {
+			return Config{}, fmt.Errorf("gdl90.record cannot be used with gdl90.mode=test")
+		}
+		if cfg.GDL90.Record.Path == "" {
+			return Config{}, fmt.Errorf("gdl90.record.path is required when gdl90.record.enable is true")
+		}
+	}
+
+	if cfg.GDL90.Replay.Enable {
+		if cfg.GDL90.Mode == "test" {
+			return Config{}, fmt.Errorf("gdl90.replay cannot be used with gdl90.mode=test")
+		}
+		if cfg.GDL90.Replay.Path == "" {
+			return Config{}, fmt.Errorf("gdl90.replay.path is required when gdl90.replay.enable is true")
+		}
+		if cfg.GDL90.Replay.Speed == 0 {
+			cfg.GDL90.Replay.Speed = 1
+		}
+		if cfg.GDL90.Replay.Speed < 0 {
+			return Config{}, fmt.Errorf("gdl90.replay.speed must be > 0")
+		}
+	}
+
+	if cfg.GDL90.Record.Enable && cfg.GDL90.Replay.Enable {
+		return Config{}, fmt.Errorf("gdl90.record and gdl90.replay cannot both be enabled")
 	}
 
 	// Simulator defaults (safe even if disabled).

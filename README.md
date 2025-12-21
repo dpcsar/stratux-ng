@@ -68,6 +68,24 @@ Then:
 - Bring up the Wi‑Fi AP (see [docs/wifi-ap-hostapd-dnsmasq.md](docs/wifi-ap-hostapd-dnsmasq.md))
 - Connect your tablet/phone (EFB device) to the Pi Wi‑Fi
 
+### Record / replay (GDL90 output frames)
+
+Stratux-NG can record the *framed* GDL90 UDP packets it emits, then replay them later for deterministic EFB testing (no SDR/GPS/AHRS required).
+
+- Record (writes a simple timestamped hex log):
+  - Set `gdl90.record.enable: true` and `gdl90.record.path: ./gdl90-record.log`
+- Replay (re-sends the recorded framed packets over UDP):
+  - Set `gdl90.replay.enable: true` and `gdl90.replay.path: ./gdl90-record.log`
+  - Optional: `gdl90.replay.speed` (e.g., `2.0` for 2x) and `gdl90.replay.loop: true`
+
+Notes:
+- Record and replay are mutually exclusive.
+- Recording is only supported in `gdl90.mode: gdl90` (not `mode: test`).
+
+Log format (written by record mode):
+- First line: `START`
+- Then one frame per line: `<t_ns>,<hex>` where `t_ns` is nanoseconds since START and `<hex>` is the raw framed UDP payload.
+
 ## Prerequisites (planned)
 
 - **Target OS:** Raspberry Pi OS 64-bit (arm64)
@@ -133,7 +151,7 @@ Stratux-NG supports both:
 - [ ] Simulator input (ownship + traffic)
 - [ ] HTTP API + minimal UI
 - [ ] Process supervisor scaffolding for `readsb` / `dump978`
-- [ ] Record/replay mode for decoder feeds (for repeatable testing)
+- [ ] Record/replay mode for decoder feeds (and/or importers) for repeatable testing
 - [ ] Raspberry Pi image build pipeline (pi-gen or equivalent)
 - [ ] Hardware integration: SDR 1090, SDR 978, GPS, AHRS
 

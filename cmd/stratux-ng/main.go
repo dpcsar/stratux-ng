@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -12,9 +14,58 @@ import (
 
 	"stratux-ng/internal/config"
 	"stratux-ng/internal/gdl90"
+	"stratux-ng/internal/replay"
 	"stratux-ng/internal/sim"
 	"stratux-ng/internal/udp"
 )
+
+type ctxSleeper struct{ ctx context.Context }
+
+func (cs ctxSleeper) Sleep(d time.Duration) {
+	if d <= 0 {
+		return
+	}
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-cs.ctx.Done():
+		return
+	case <-t.C:
+		return
+	}
+}
+
+type replayOpener func(path string) (io.ReadCloser, error)
+type frameSender func(frame []byte) error
+
+func runReplay(ctx context.Context, cfg config.Config, open replayOpener, send frameSender) error {
+	if open == nil {
+		open = func(path string) (io.ReadCloser, error) { return os.Open(path) }
+	}
+	if send == nil {
+		return errors.New("send is nil")
+	}
+
+	rc, err := open(cfg.GDL90.Replay.Path)
+	if err != nil {
+		return err
+	}
+	defer rc.Close()
+
+	recs, err := replay.NewReader(rc).ReadAll()
+	if err != nil {
+		return err
+	}
+
+	return replay.Play(recs, cfg.GDL90.Replay.Speed, cfg.GDL90.Replay.Loop, ctxSleeper{ctx: ctx}, func(frame []byte) error {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		return send(frame)
+	})
+}
 
 func main() {
 	var configPath string
@@ -35,6 +86,21 @@ func main() {
 	}
 	defer broadcaster.Close()
 
+	var rec *replay.Writer
+	if cfg.GDL90.Record.Enable {
+		w, err := replay.CreateWriter(cfg.GDL90.Record.Path)
+		if err != nil {
+			log.Fatalf("record init failed: %v", err)
+		}
+		rec = w
+		defer func() {
+			if err := rec.Close(); err != nil {
+				log.Printf("record close failed: %v", err)
+			}
+		}()
+		log.Printf("recording enabled path=%s", cfg.GDL90.Record.Path)
+	}
+
 	log.Printf("stratux-ng starting")
 	log.Printf("udp dest=%s interval=%s", cfg.GDL90.Dest, cfg.GDL90.Interval)
 	if cfg.GDL90.Mode != "test" {
@@ -45,6 +111,16 @@ func main() {
 	}
 
 	go func() {
+		if cfg.GDL90.Replay.Enable {
+			log.Printf("replay enabled path=%s speed=%.3gx loop=%t", cfg.GDL90.Replay.Path, cfg.GDL90.Replay.Speed, cfg.GDL90.Replay.Loop)
+			err := runReplay(ctx, cfg, nil, broadcaster.Send)
+			if err != nil && ctx.Err() == nil {
+				log.Printf("replay stopped: %v", err)
+				cancel()
+			}
+			return
+		}
+
 		ticker := time.NewTicker(cfg.GDL90.Interval)
 		defer ticker.Stop()
 
@@ -65,10 +141,25 @@ func main() {
 						return
 					}
 				default:
-					frames := buildGDL90Frames(cfg, time.Now().UTC())
-					for _, f := range frames {
-						if err := broadcaster.Send(f); err != nil {
+					now := time.Now()
+					frames := buildGDL90Frames(cfg, now.UTC())
+					for _, frame := range frames {
+						if rec != nil {
+							if err := rec.WriteFrame(now, frame); err != nil {
+								log.Printf("record write failed: %v", err)
+								cancel()
+								return
+							}
+						}
+						if err := broadcaster.Send(frame); err != nil {
 							log.Printf("udp send failed: %v", err)
+							cancel()
+							return
+						}
+					}
+					if rec != nil {
+						if err := rec.Flush(); err != nil {
+							log.Printf("record flush failed: %v", err)
 							cancel()
 							return
 						}

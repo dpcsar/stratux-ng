@@ -16,6 +16,28 @@ gdl90:
   # Go duration string
   interval: 1s
 
+  # Record/replay (framed GDL90 only).
+  #
+  # Record writes every outgoing framed GDL90 packet to a simple line-based log.
+  # Replay reads a previously recorded log and re-sends the raw framed packets.
+  #
+  # Log format:
+  # - First line: START
+  # - Then: <t_ns>,<hex> where t_ns is nanoseconds since START.
+  #
+  # Note: record and replay are mutually exclusive.
+  record:
+    enable: false
+    path: "./gdl90-record.log"
+
+  replay:
+    enable: false
+    path: "./gdl90-record.log"
+    # 1.0 = real-time. 2.0 = 2x speed. 0.5 = half speed.
+    speed: 1.0
+    # If true, loops forever until Ctrl+C.
+    loop: false
+
   test_payload: "STRATUX-NG TEST"
 
 sim:
