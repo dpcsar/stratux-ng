@@ -69,9 +69,25 @@ func Load(path string) (Config, error) {
 	if err := yaml.Unmarshal(b, &cfg); err != nil {
 		return Config{}, err
 	}
+	if err := DefaultAndValidate(&cfg); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
+}
+
+// DefaultAndValidate applies defaults to cfg and validates it.
+//
+// This is exported so callers (e.g. CLI overrides) can safely mutate a loaded
+// config and then re-run the same validation logic as Load().
+//
+// Error strings are treated as test-stable.
+func DefaultAndValidate(cfg *Config) error {
+	if cfg == nil {
+		return fmt.Errorf("config is nil")
+	}
 
 	if cfg.GDL90.Dest == "" {
-		return Config{}, fmt.Errorf("gdl90.dest is required")
+		return fmt.Errorf("gdl90.dest is required")
 	}
 	if cfg.GDL90.Interval <= 0 {
 		cfg.GDL90.Interval = 1 * time.Second
@@ -85,30 +101,30 @@ func Load(path string) (Config, error) {
 
 	if cfg.GDL90.Record.Enable {
 		if cfg.GDL90.Mode == "test" {
-			return Config{}, fmt.Errorf("gdl90.record cannot be used with gdl90.mode=test")
+			return fmt.Errorf("gdl90.record cannot be used with gdl90.mode=test")
 		}
 		if cfg.GDL90.Record.Path == "" {
-			return Config{}, fmt.Errorf("gdl90.record.path is required when gdl90.record.enable is true")
+			return fmt.Errorf("gdl90.record.path is required when gdl90.record.enable is true")
 		}
 	}
 
 	if cfg.GDL90.Replay.Enable {
 		if cfg.GDL90.Mode == "test" {
-			return Config{}, fmt.Errorf("gdl90.replay cannot be used with gdl90.mode=test")
+			return fmt.Errorf("gdl90.replay cannot be used with gdl90.mode=test")
 		}
 		if cfg.GDL90.Replay.Path == "" {
-			return Config{}, fmt.Errorf("gdl90.replay.path is required when gdl90.replay.enable is true")
+			return fmt.Errorf("gdl90.replay.path is required when gdl90.replay.enable is true")
 		}
 		if cfg.GDL90.Replay.Speed == 0 {
 			cfg.GDL90.Replay.Speed = 1
 		}
 		if cfg.GDL90.Replay.Speed < 0 {
-			return Config{}, fmt.Errorf("gdl90.replay.speed must be > 0")
+			return fmt.Errorf("gdl90.replay.speed must be > 0")
 		}
 	}
 
 	if cfg.GDL90.Record.Enable && cfg.GDL90.Replay.Enable {
-		return Config{}, fmt.Errorf("gdl90.record and gdl90.replay cannot both be enabled")
+		return fmt.Errorf("gdl90.record and gdl90.replay cannot both be enabled")
 	}
 
 	// Simulator defaults (safe even if disabled).
@@ -145,5 +161,5 @@ func Load(path string) (Config, error) {
 		cfg.Sim.Traffic.GroundKt = 120
 	}
 
-	return cfg, nil
+	return nil
 }

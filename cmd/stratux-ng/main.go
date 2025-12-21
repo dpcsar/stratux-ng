@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -69,12 +70,51 @@ func runReplay(ctx context.Context, cfg config.Config, open replayOpener, send f
 
 func main() {
 	var configPath string
+	var recordPath string
+	var replayPath string
+	var replaySpeed float64
+	var replayLoop bool
+	var logSummaryPath string
+
 	flag.StringVar(&configPath, "config", "./dev.yaml", "Path to YAML config")
+	flag.StringVar(&recordPath, "record", "", "Record framed GDL90 packets to PATH (overrides config)")
+	flag.StringVar(&replayPath, "replay", "", "Replay framed GDL90 packets from PATH (overrides config)")
+	flag.Float64Var(&replaySpeed, "replay-speed", -1, "Replay speed multiplier (e.g., 2.0 = 2x). -1 uses config")
+	flag.BoolVar(&replayLoop, "replay-loop", false, "Loop replay forever (overrides config when true)")
+	flag.StringVar(&logSummaryPath, "log-summary", "", "Print summary of a record/replay log at PATH and exit")
 	flag.Parse()
+
+	if strings.TrimSpace(logSummaryPath) != "" {
+		if err := printLogSummary(logSummaryPath); err != nil {
+			log.Fatalf("log summary failed: %v", err)
+		}
+		return
+	}
 
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		log.Fatalf("config load failed: %v", err)
+	}
+
+	// CLI overrides (useful for quick record/replay without editing YAML).
+	if recordPath != "" {
+		cfg.GDL90.Record.Enable = true
+		cfg.GDL90.Record.Path = recordPath
+	}
+	if replayPath != "" {
+		cfg.GDL90.Replay.Enable = true
+		cfg.GDL90.Replay.Path = replayPath
+	}
+	if replaySpeed >= 0 {
+		cfg.GDL90.Replay.Speed = replaySpeed
+	}
+	if replayLoop {
+		cfg.GDL90.Replay.Loop = true
+	}
+	if recordPath != "" || replayPath != "" || replaySpeed >= 0 || replayLoop {
+		if err := config.DefaultAndValidate(&cfg); err != nil {
+			log.Fatalf("config validation failed after CLI overrides: %v", err)
+		}
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
