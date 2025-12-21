@@ -7,7 +7,7 @@ import (
 	"stratux-ng/internal/config"
 )
 
-func unframeForMsgID(t *testing.T, frame []byte) byte {
+func unframeForMsg(t *testing.T, frame []byte) []byte {
 	t.Helper()
 	if len(frame) < 4 {
 		t.Fatalf("frame too short: %d", len(frame))
@@ -39,7 +39,7 @@ func unframeForMsgID(t *testing.T, frame []byte) byte {
 	if len(msg) == 0 {
 		t.Fatalf("empty message")
 	}
-	return msg[0]
+	return msg
 }
 
 func TestBuildGDL90Frames_SimOwnshipAndTrafficMessageSet(t *testing.T) {
@@ -78,19 +78,27 @@ func TestBuildGDL90Frames_SimOwnshipAndTrafficMessageSet(t *testing.T) {
 	}
 
 	counts := map[byte]int{}
+	ffSub := map[byte]int{}
 	for _, f := range frames {
-		counts[unframeForMsgID(t, f)]++
+		msg := unframeForMsg(t, f)
+		counts[msg[0]]++
+		if msg[0] == 0x65 && len(msg) >= 2 {
+			ffSub[msg[1]]++
+		}
 	}
 
-	// Baseline: heartbeat + stratux hb + device ID.
+	// Baseline: heartbeat + stratux hb + ForeFlight messages.
 	if counts[0x00] != 1 {
 		t.Fatalf("expected 1 heartbeat (0x00), got %d", counts[0x00])
 	}
 	if counts[0xCC] != 1 {
 		t.Fatalf("expected 1 stratux heartbeat (0xCC), got %d", counts[0xCC])
 	}
-	if counts[0x65] != 1 {
-		t.Fatalf("expected 1 device ID (0x65), got %d", counts[0x65])
+	if ffSub[0x00] != 1 {
+		t.Fatalf("expected 1 device ID (0x65/0x00), got %d", ffSub[0x00])
+	}
+	if ffSub[0x01] != 1 {
+		t.Fatalf("expected 1 AHRS message (0x65/0x01), got %d", ffSub[0x01])
 	}
 
 	// Ownship + geo-alt.

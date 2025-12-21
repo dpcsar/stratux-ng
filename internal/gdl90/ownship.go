@@ -13,15 +13,18 @@ const (
 )
 
 type Ownship struct {
-	ICAO      [3]byte
-	LatDeg    float64
-	LonDeg    float64
-	AltFeet   int
-	GroundKt  int
-	TrackDeg  float64
-	Callsign  string
-	Emitter   byte // e.g. 0x01 "Light"
-	Emergency byte // upper nibble of msg[27]
+	ICAO        [3]byte
+	LatDeg      float64
+	LonDeg      float64
+	AltFeet     int
+	HaveNICNACp bool
+	NIC         byte // 0-15 (high nibble in msg[13])
+	NACp        byte // 0-15 (low nibble in msg[13])
+	GroundKt    int
+	TrackDeg    float64
+	Callsign    string
+	Emitter     byte // e.g. 0x01 "Light"
+	Emergency   byte // upper nibble of msg[27]
 }
 
 // OwnshipReportFrame builds and frames a minimal Ownship Report (0x0A).
@@ -59,9 +62,14 @@ func OwnshipReportFrame(o Ownship) []byte {
 
 	// Position containment / navigational accuracy (msg[13]):
 	// high nibble = NIC, low nibble = NACp.
-	// For simulator bring-up we pick a reasonable "good" value.
-	// Stratux uses NIC=8 and NACp from GPS.
-	msg[13] = 0x80 | 0x08
+	// Stratux uses NIC=8 and NACp derived from GPS accuracy.
+	if o.HaveNICNACp {
+		nic := o.NIC & 0x0F
+		nacp := o.NACp & 0x0F
+		msg[13] = ((nic << 4) & 0xF0) | nacp
+	} else {
+		msg[13] = 0x80 | 0x08
+	}
 
 	// Ground speed (12-bit). We use 1 kt resolution.
 	gs := encodeU12(o.GroundKt)
@@ -106,20 +114,21 @@ func ParseICAOHex(s string) ([3]byte, error) {
 
 func encodeLatLon24(deg float64) [3]byte {
 	v := deg / latLonResolution
-	wk := int32(math.Round(v))
+	// Match Stratux behavior: truncate toward zero.
+	wk := int32(v)
 	u := uint32(wk) & 0x00FFFFFF
 	return [3]byte{byte((u >> 16) & 0xFF), byte((u >> 8) & 0xFF), byte(u & 0xFF)}
 }
 
 func encodeAltitude12(altFeet int) uint16 {
 	// 25 ft resolution with +1000 ft offset.
+	// GDL90 spec / Stratux convention:
+	//   - range -1000..101350 -> 0x000..0xFFE
+	//   - invalid/unavailable -> 0xFFF
+	if altFeet < -1000 || altFeet > 101350 {
+		return 0x0FFF
+	}
 	v := (altFeet + 1000) / 25
-	if v < 0 {
-		return 0
-	}
-	if v > 0xFFE {
-		return 0xFFE
-	}
 	return uint16(v) & 0x0FFF
 }
 

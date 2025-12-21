@@ -228,11 +228,11 @@ func TestTrafficReportFrame_IndicatorBitsAndNICNACp(t *testing.T) {
 }
 
 func TestEncodeAltitude12_Clamps(t *testing.T) {
-	if got := encodeAltitude12(-2000); got != 0 {
-		t.Fatalf("expected clamp low to 0, got 0x%03X", got)
+	if got := encodeAltitude12(-2000); got != 0xFFF {
+		t.Fatalf("expected invalid sentinel 0xFFF, got 0x%03X", got)
 	}
-	if got := encodeAltitude12(200000); got != 0xFFE {
-		t.Fatalf("expected clamp high to 0xFFE, got 0x%03X", got)
+	if got := encodeAltitude12(200000); got != 0xFFF {
+		t.Fatalf("expected invalid sentinel 0xFFF, got 0x%03X", got)
 	}
 }
 

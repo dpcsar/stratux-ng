@@ -49,6 +49,9 @@ sim:
     center_lon_deg: -122.9498
     alt_feet: 3000
     ground_kt: 90
+    # Simulated 95% horizontal position accuracy (meters).
+    # Used to derive NACp similarly to Stratux.
+    gps_horizontal_accuracy_m: 50
     radius_nm: 0.5
     period: 120s
     # 24-bit ICAO address as 6 hex chars.

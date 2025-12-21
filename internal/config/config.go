@@ -48,15 +48,16 @@ type TrafficSimConfig struct {
 }
 
 type OwnshipSimConfig struct {
-	Enable       bool          `yaml:"enable"`
-	CenterLatDeg float64       `yaml:"center_lat_deg"`
-	CenterLonDeg float64       `yaml:"center_lon_deg"`
-	AltFeet      int           `yaml:"alt_feet"`
-	GroundKt     int           `yaml:"ground_kt"`
-	RadiusNm     float64       `yaml:"radius_nm"`
-	Period       time.Duration `yaml:"period"`
-	ICAO         string        `yaml:"icao"`
-	Callsign     string        `yaml:"callsign"`
+	Enable                 bool          `yaml:"enable"`
+	CenterLatDeg           float64       `yaml:"center_lat_deg"`
+	CenterLonDeg           float64       `yaml:"center_lon_deg"`
+	AltFeet                int           `yaml:"alt_feet"`
+	GroundKt               int           `yaml:"ground_kt"`
+	GPSHorizontalAccuracyM float64       `yaml:"gps_horizontal_accuracy_m"`
+	RadiusNm               float64       `yaml:"radius_nm"`
+	Period                 time.Duration `yaml:"period"`
+	ICAO                   string        `yaml:"icao"`
+	Callsign               string        `yaml:"callsign"`
 }
 
 func Load(path string) (Config, error) {
@@ -145,6 +146,10 @@ func DefaultAndValidate(cfg *Config) error {
 	}
 	if cfg.Sim.Ownship.Callsign == "" {
 		cfg.Sim.Ownship.Callsign = "STRATUX"
+	}
+	if cfg.Sim.Ownship.GPSHorizontalAccuracyM == 0 {
+		// 50m maps to NACp=8 in Stratux.
+		cfg.Sim.Ownship.GPSHorizontalAccuracyM = 50
 	}
 
 	// Traffic simulator defaults.

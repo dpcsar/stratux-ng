@@ -217,10 +217,11 @@ func buildGDL90Frames(cfg config.Config, now time.Time) [][]byte {
 	// If the ownship simulator is enabled, we advertise GPS as valid so EFBs
 	// don't show "No GPS reception".
 	gpsValid := cfg.Sim.Ownship.Enable
+	ahrsValid := cfg.Sim.Ownship.Enable
 	frames := make([][]byte, 0, 16)
 	frames = append(frames,
 		gdl90.HeartbeatFrame(gpsValid, false),
-		gdl90.StratuxHeartbeatFrame(gpsValid, false),
+		gdl90.StratuxHeartbeatFrame(gpsValid, ahrsValid),
 	)
 
 	// Identify as a Stratux-like device for apps that key off 0x65.
@@ -245,17 +246,43 @@ func buildGDL90Frames(cfg config.Config, now time.Time) [][]byte {
 		Period:       cfg.Sim.Ownship.Period,
 	}
 	lat, lon, trk := s.Position(now)
+	nacp := gdl90.NACpFromHorizontalAccuracyMeters(cfg.Sim.Ownship.GPSHorizontalAccuracyM)
 	frames = append(frames, gdl90.OwnshipReportFrame(gdl90.Ownship{
-		ICAO:     icao,
-		LatDeg:   lat,
-		LonDeg:   lon,
-		AltFeet:  cfg.Sim.Ownship.AltFeet,
-		GroundKt: cfg.Sim.Ownship.GroundKt,
-		TrackDeg: trk,
-		Callsign: cfg.Sim.Ownship.Callsign,
-		Emitter:  0x01,
+		ICAO:        icao,
+		LatDeg:      lat,
+		LonDeg:      lon,
+		AltFeet:     cfg.Sim.Ownship.AltFeet,
+		HaveNICNACp: true,
+		NIC:         8,
+		NACp:        nacp,
+		GroundKt:    cfg.Sim.Ownship.GroundKt,
+		TrackDeg:    trk,
+		Callsign:    cfg.Sim.Ownship.Callsign,
+		Emitter:     0x01,
 	}))
 	frames = append(frames, gdl90.OwnshipGeometricAltitudeFrame(cfg.Sim.Ownship.AltFeet))
+
+	// Stratux-like AHRS messages (sim-driven). Even without a real IMU, some
+	// EFBs expect to see these message types.
+	att := gdl90.Attitude{
+		Valid:                ahrsValid,
+		RollDeg:              0,
+		PitchDeg:             0,
+		HeadingDeg:           trk,
+		SlipSkidDeg:          0,
+		YawRateDps:           0,
+		GLoad:                1.0,
+		IndicatedAirspeedKt:  cfg.Sim.Ownship.GroundKt,
+		TrueAirspeedKt:       cfg.Sim.Ownship.GroundKt,
+		PressureAltitudeFeet: float64(cfg.Sim.Ownship.AltFeet),
+		PressureAltValid:     true,
+		VerticalSpeedFpm:     0,
+		VerticalSpeedValid:   true,
+	}
+	frames = append(frames,
+		gdl90.ForeFlightAHRSFrame(att),
+		gdl90.AHRSGDL90LEFrame(att),
+	)
 
 	if !cfg.Sim.Traffic.Enable {
 		return frames

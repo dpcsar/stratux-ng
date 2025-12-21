@@ -35,6 +35,14 @@ func Frame(message []byte) []byte {
 //
 // This is the minimum message many clients expect to see once per second.
 func HeartbeatFrame(gpsValid bool, maintenanceRequired bool) []byte {
+	return HeartbeatFrameAt(time.Now().UTC(), gpsValid, maintenanceRequired)
+}
+
+// HeartbeatFrameAt builds and frames a standard GDL90 Heartbeat (0x00) at a
+// provided UTC time.
+//
+// This exists primarily for deterministic tests.
+func HeartbeatFrameAt(nowUTC time.Time, gpsValid bool, maintenanceRequired bool) []byte {
 	msg := make([]byte, 7)
 	msg[0] = 0x00
 
@@ -52,7 +60,6 @@ func HeartbeatFrame(gpsValid bool, maintenanceRequired bool) []byte {
 	}
 	msg[1] = flags
 
-	nowUTC := time.Now().UTC()
 	midnightUTC := time.Date(nowUTC.Year(), nowUTC.Month(), nowUTC.Day(), 0, 0, 0, 0, time.UTC)
 	seconds := uint32(nowUTC.Sub(midnightUTC).Seconds())
 
