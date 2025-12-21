@@ -11,7 +11,7 @@ func TestAPIStatus(t *testing.T) {
 	st := NewStatus()
 	st.SetStatic("gdl90", "127.0.0.1:4000", "1s", map[string]any{"scenario": false})
 
-	ts := httptest.NewServer(Handler(st, SettingsStore{}))
+	ts := httptest.NewServer(Handler(st, SettingsStore{}, nil))
 	defer ts.Close()
 
 	resp, err := http.Get(ts.URL + "/api/status")
@@ -40,7 +40,7 @@ func TestAPIStatus(t *testing.T) {
 
 func TestRootPage(t *testing.T) {
 	st := NewStatus()
-	ts := httptest.NewServer(Handler(st, SettingsStore{}))
+	ts := httptest.NewServer(Handler(st, SettingsStore{}, nil))
 	defer ts.Close()
 
 	resp, err := http.Get(ts.URL + "/")

@@ -149,6 +149,9 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
+	logBuf := web.NewLogBuffer(4000)
+	log.SetOutput(io.MultiWriter(os.Stdout, logBuf))
+
 	status := web.NewStatus()
 	status.SetStatic(cfg.GDL90.Mode, cfg.GDL90.Dest, cfg.GDL90.Interval.String(), map[string]any{
 		"config_path": configPath,
@@ -162,7 +165,7 @@ func main() {
 	if cfg.Web.Enable {
 		log.Printf("web ui enabled listen=%s", cfg.Web.Listen)
 		go func() {
-			err := web.Serve(ctx, cfg.Web.Listen, status, web.SettingsStore{ConfigPath: configPath})
+			err := web.Serve(ctx, cfg.Web.Listen, status, web.SettingsStore{ConfigPath: configPath}, logBuf)
 			if err != nil && ctx.Err() == nil {
 				log.Printf("web ui stopped: %v", err)
 				cancel()

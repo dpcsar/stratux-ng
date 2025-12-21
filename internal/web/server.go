@@ -14,7 +14,7 @@ import (
 //go:embed assets/*
 var embeddedAssets embed.FS
 
-func Handler(status *Status, settings SettingsStore) http.Handler {
+func Handler(status *Status, settings SettingsStore, logs *LogBuffer) http.Handler {
 	mux := http.NewServeMux()
 
 	assetsFS, err := fs.Sub(embeddedAssets, "assets")
@@ -43,6 +43,13 @@ func Handler(status *Status, settings SettingsStore) http.Handler {
 	// Settings API (read/write YAML config). Changes require restart to take effect.
 	// Kept intentionally small for the first UI iteration.
 	mux.Handle("/api/settings", settings.Handler())
+
+	if logs != nil {
+		mux.Handle("/api/logs", logs.Handler())
+	}
+
+	// About.
+	mux.Handle("/api/about", AboutHandler())
 
 	if assetsFS != nil {
 		fileServer := http.FileServer(http.FS(assetsFS))
@@ -95,14 +102,14 @@ func Handler(status *Status, settings SettingsStore) http.Handler {
 	return mux
 }
 
-func Serve(ctx context.Context, listenAddr string, status *Status, settings SettingsStore) error {
+func Serve(ctx context.Context, listenAddr string, status *Status, settings SettingsStore, logs *LogBuffer) error {
 	if status == nil {
 		status = NewStatus()
 	}
 
 	srv := &http.Server{
 		Addr:              listenAddr,
-		Handler:           Handler(status, settings),
+		Handler:           Handler(status, settings, logs),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,

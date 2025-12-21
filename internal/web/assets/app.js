@@ -1,10 +1,12 @@
 (() => {
   const views = [
-    { key: 'ahrs', el: document.getElementById('view-ahrs') },
+    { key: 'attitude', el: document.getElementById('view-attitude') },
     { key: 'radar', el: document.getElementById('view-radar') },
     { key: 'map', el: document.getElementById('view-map') },
     { key: 'status', el: document.getElementById('view-status') },
     { key: 'settings', el: document.getElementById('view-settings') },
+    { key: 'logs', el: document.getElementById('view-logs') },
+    { key: 'about', el: document.getElementById('view-about') },
   ];
 
   const subtitle = document.getElementById('subtitle');
@@ -12,14 +14,13 @@
   const drawerBackdrop = document.getElementById('drawer-backdrop');
   const btnMore = document.getElementById('btn-more');
   const btnClose = document.getElementById('btn-close');
-  const drawerStatus = document.getElementById('drawer-status');
 
-  const ahrsSummary = document.getElementById('ahrs-summary');
+  const attitudeSummary = document.getElementById('attitude-summary');
   const radarSummary = document.getElementById('radar-summary');
   const mapSummary = document.getElementById('map-summary');
   const statusJSON = document.getElementById('status-json');
 
-  const ahrsShowRaw = document.getElementById('ahrs-show-raw');
+  const attitudeShowRaw = document.getElementById('attitude-show-raw');
   const radarRange = document.getElementById('radar-range');
   const mapFollow = document.getElementById('map-follow');
 
@@ -34,6 +35,85 @@
   const setScenarioLoop = document.getElementById('set-scenario-loop');
   const setWebListen = document.getElementById('set-web-listen');
   const setWebEnable = document.getElementById('set-web-enable');
+
+  const logsText = document.getElementById('logs-text');
+  const logsMeta = document.getElementById('logs-meta');
+  const logsTail = document.getElementById('logs-tail');
+  const logsRefresh = document.getElementById('logs-refresh');
+
+  const aboutJSON = document.getElementById('about-json');
+  const aboutMeta = document.getElementById('about-meta');
+  const aboutRefresh = document.getElementById('about-refresh');
+
+  function pretty(obj) {
+    return JSON.stringify(obj, null, 2);
+  }
+
+  function timeNow() {
+    try {
+      return new Date().toLocaleTimeString();
+    } catch {
+      return '';
+    }
+  }
+
+  async function loadLogs() {
+    if (!logsText) return;
+
+    const tail = parseInt(logsTail?.value || '200', 10) || 200;
+    logsText.textContent = 'Loading…';
+    if (logsMeta) logsMeta.textContent = '';
+
+    try {
+      const url = `/api/logs?format=text&tail=${encodeURIComponent(String(tail))}`;
+      const resp = await fetch(url, { cache: 'no-store' });
+      if (!resp.ok) {
+        if (resp.status === 404) {
+          logsText.textContent = 'Logs endpoint is not enabled in this build.';
+        } else {
+          logsText.textContent = `Failed to load logs: HTTP ${resp.status}`;
+        }
+        return;
+      }
+      const text = await resp.text();
+      logsText.textContent = text || '(no logs)';
+
+      // Optional: pull dropped/meta from JSON snapshot.
+      try {
+        const j = await fetch(`/api/logs?tail=${encodeURIComponent(String(tail))}`, { cache: 'no-store' });
+        if (j.ok) {
+          const js = await j.json();
+          const dropped = (typeof js.dropped === 'number') ? js.dropped : 0;
+          if (logsMeta) logsMeta.textContent = `Updated ${timeNow()}${dropped ? ` · dropped ${dropped}` : ''}`;
+        } else if (logsMeta) {
+          logsMeta.textContent = `Updated ${timeNow()}`;
+        }
+      } catch {
+        if (logsMeta) logsMeta.textContent = `Updated ${timeNow()}`;
+      }
+    } catch (e) {
+      logsText.textContent = `Failed to load logs: ${String(e)}`;
+    }
+  }
+
+  async function loadAbout() {
+    if (!aboutJSON) return;
+
+    aboutJSON.textContent = 'Loading…';
+    if (aboutMeta) aboutMeta.textContent = '';
+    try {
+      const resp = await fetch('/api/about', { cache: 'no-store' });
+      if (!resp.ok) {
+        aboutJSON.textContent = `Failed to load about: HTTP ${resp.status}`;
+        return;
+      }
+      const js = await resp.json();
+      aboutJSON.textContent = pretty(js);
+      if (aboutMeta) aboutMeta.textContent = `Updated ${timeNow()}`;
+    } catch (e) {
+      aboutJSON.textContent = `Failed to load about: ${String(e)}`;
+    }
+  }
 
   function setView(key) {
     for (const v of views) {
@@ -50,6 +130,10 @@
     } catch {
       // ignore
     }
+
+    if (key === 'logs') loadLogs();
+    if (key === 'about') loadAbout();
+    if (key === 'settings') loadSettings();
   }
 
   function openDrawer() {
@@ -89,10 +173,6 @@
     });
   }
 
-  function pretty(obj) {
-    return JSON.stringify(obj, null, 2);
-  }
-
   function setStatusText(s) {
     const mode = s?.mode || '';
     const dest = s?.gdl90_dest || '';
@@ -100,16 +180,15 @@
     const frames = s?.frames_sent_total ?? 0;
 
     subtitle.textContent = `${mode} → ${dest} (${interval}) · frames ${frames}`;
-    drawerStatus.textContent = `Uptime: ${s?.uptime_sec ?? 0}s\nLast tick: ${s?.last_tick_utc || '—'}\nScenario: ${s?.sim?.scenario ? 'on' : 'off'}`;
 
     statusJSON.textContent = pretty(s);
 
     const rr = radarRange?.value || '10';
     const follow = !!mapFollow?.checked;
-    const showRaw = !!ahrsShowRaw?.checked;
+    const showRaw = !!attitudeShowRaw?.checked;
 
-    ahrsSummary.textContent = pretty({
-      ahrs: 'planned',
+    attitudeSummary.textContent = pretty({
+      attitude: 'planned',
       mode,
       interval,
       last_tick_utc: s?.last_tick_utc || null,
@@ -137,8 +216,9 @@
       if (rr && radarRange) radarRange.value = rr;
       const mf = localStorage.getItem('map_follow');
       if (mf !== null && mapFollow) mapFollow.checked = mf === 'true';
-      const raw = localStorage.getItem('ahrs_show_raw');
-      if (raw !== null && ahrsShowRaw) ahrsShowRaw.checked = raw === 'true';
+      const raw = localStorage.getItem('attitude_show_raw');
+      const rawCompat = raw !== null ? raw : localStorage.getItem('ahrs_show_raw');
+      if (rawCompat !== null && attitudeShowRaw) attitudeShowRaw.checked = rawCompat === 'true';
     } catch {
       // ignore
     }
@@ -155,9 +235,9 @@
         localStorage.setItem('map_follow', String(!!mapFollow.checked));
       } catch {}
     });
-    ahrsShowRaw?.addEventListener('change', () => {
+    attitudeShowRaw?.addEventListener('change', () => {
       try {
-        localStorage.setItem('ahrs_show_raw', String(!!ahrsShowRaw.checked));
+        localStorage.setItem('attitude_show_raw', String(!!attitudeShowRaw.checked));
       } catch {}
     });
   }
@@ -222,11 +302,16 @@
   }
 
   // Initial view.
-  const initial = (location.hash || '#radar').slice(1);
-  setView(['ahrs', 'radar', 'map', 'status', 'settings'].includes(initial) ? initial : 'radar');
+  const initial = (location.hash || '#map').slice(1);
+  const compat = initial === 'ahrs' ? 'attitude' : initial;
+  setView(['attitude', 'radar', 'map', 'status', 'settings', 'logs', 'about'].includes(compat) ? compat : 'map');
 
   loadControlState();
   wireControlState();
+  logsRefresh?.addEventListener('click', loadLogs);
+  logsTail?.addEventListener('change', loadLogs);
+  aboutRefresh?.addEventListener('click', loadAbout);
+
   loadSettings();
   settingsForm?.addEventListener('submit', (e) => {
     e.preventDefault();

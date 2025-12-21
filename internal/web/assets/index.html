@@ -20,16 +20,16 @@
     </header>
 
     <main id="content" class="content" role="main">
-      <section id="view-ahrs" class="view" aria-label="AHRS">
-        <h2>AHRS</h2>
+      <section id="view-attitude" class="view" aria-label="Attitude">
+        <h2>Attitude</h2>
         <p class="muted">Coming soon. This area will show attitude and basic flight instruments.</p>
         <div class="controls card">
           <label class="control">
-            <input id="ahrs-show-raw" type="checkbox" />
+            <input id="attitude-show-raw" type="checkbox" />
             <span>Show raw status JSON</span>
           </label>
         </div>
-        <pre id="ahrs-summary" class="card">Loading…</pre>
+        <pre id="attitude-summary" class="card">Loading…</pre>
       </section>
 
       <section id="view-radar" class="view" aria-label="Radar">
@@ -144,11 +144,43 @@
           </div>
         </form>
       </section>
+
+      <section id="view-logs" class="view" aria-label="Logs">
+        <h2>Logs</h2>
+        <p class="muted">Recent Stratux-NG logs from <a href="/api/logs?format=text">/api/logs</a>.</p>
+        <div class="controls card">
+          <label class="control">
+            <span>Tail</span>
+            <select id="logs-tail">
+              <option value="200" selected>200 lines</option>
+              <option value="500">500 lines</option>
+              <option value="2000">2000 lines</option>
+            </select>
+          </label>
+          <div class="formactions">
+            <button id="logs-refresh" type="button" class="primary">Refresh</button>
+            <span id="logs-meta" class="muted"></span>
+          </div>
+        </div>
+        <pre id="logs-text" class="card">Loading…</pre>
+      </section>
+
+      <section id="view-about" class="view" aria-label="About">
+        <h2>About</h2>
+        <p class="muted">Build/runtime info from <a href="/api/about">/api/about</a>.</p>
+        <div class="controls card">
+          <div class="formactions">
+            <button id="about-refresh" type="button" class="primary">Refresh</button>
+            <span id="about-meta" class="muted"></span>
+          </div>
+        </div>
+        <pre id="about-json" class="card">Loading…</pre>
+      </section>
     </main>
 
     <nav class="bottomnav" aria-label="Primary">
-      <button class="navbtn" data-view="ahrs" aria-label="AHRS">
-        <span class="navlabel">AHRS</span>
+      <button class="navbtn" data-view="attitude" aria-label="Attitude">
+        <span class="navlabel">Attitude</span>
       </button>
       <button class="navbtn" data-view="radar" aria-label="Radar">
         <span class="navlabel">Radar</span>
@@ -167,7 +199,8 @@
       <div class="drawer-body">
         <button class="drawer-item drawerbtn" data-view="status" type="button">Status</button>
         <button class="drawer-item drawerbtn" data-view="settings" type="button">Settings</button>
-        <div class="drawer-item" id="drawer-status">Loading…</div>
+        <button class="drawer-item drawerbtn" data-view="logs" type="button">Logs</button>
+        <button class="drawer-item drawerbtn" data-view="about" type="button">About</button>
       </div>
     </aside>
 
