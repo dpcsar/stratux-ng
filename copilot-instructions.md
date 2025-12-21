@@ -69,7 +69,7 @@
 ## Networking
 - Default to simple, robust networking:
   - UDP destination must match the AP subnet (broadcast or explicit unicast).
-  - Prefer configurability via `dev.yaml` and documented defaults.
+  - Prefer configurability via `config.yaml` and documented defaults.
 
 ## Documentation policy
 - When code changes affect behavior, configuration, defaults, CLI flags, network setup, or interoperability, update docs in the same PR:

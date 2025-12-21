@@ -23,7 +23,7 @@ This is a generic checklist for any EFB that supports **GDL90** or **Stratux-sty
 - `gdl90.dest` set per above
 
 Run:
-- `go run ./cmd/stratux-ng --config ./dev.yaml`
+- `go run ./cmd/stratux-ng --config ./config.yaml`
 
 ## 3) Configure the EFB
 

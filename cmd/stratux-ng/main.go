@@ -135,6 +135,7 @@ func runReplay(ctx context.Context, cfg config.Config, open replayOpener, send f
 
 func main() {
 	var configPath string
+	var resolvedConfigPath string
 	var recordPath string
 	var replayPath string
 	var replaySpeed float64
@@ -145,7 +146,7 @@ func main() {
 	var listenHex bool
 	var webListen string
 
-	flag.StringVar(&configPath, "config", "./dev.yaml", "Path to YAML config")
+	flag.StringVar(&configPath, "config", "", "Path to YAML config (optional; defaults to /data/stratux-ng/config.yaml; STRATUX_NG_CONFIG overrides)")
 	flag.StringVar(&recordPath, "record", "", "Record framed GDL90 packets to PATH (overrides config)")
 	flag.StringVar(&replayPath, "replay", "", "Replay framed GDL90 packets from PATH (overrides config)")
 	flag.Float64Var(&replaySpeed, "replay-speed", -1, "Replay speed multiplier (e.g., 2.0 = 2x). -1 uses config")
@@ -172,10 +173,11 @@ func main() {
 		return
 	}
 
-	cfg, err := config.Load(configPath)
+	cfg, resolved, err := config.LoadAuto(configPath)
 	if err != nil {
 		log.Fatalf("config load failed: %v", err)
 	}
+	resolvedConfigPath = resolved
 
 	// CLI overrides.
 	if strings.TrimSpace(webListen) != "" {
@@ -211,7 +213,7 @@ func main() {
 
 	status := web.NewStatus()
 	status.SetStatic(cfg.GDL90.Mode, cfg.GDL90.Dest, cfg.GDL90.Interval.String(), map[string]any{
-		"config_path": configPath,
+		"config_path": resolvedConfigPath,
 		"scenario":    cfg.Sim.Scenario.Enable,
 		"ownship":     cfg.Sim.Ownship.Enable,
 		"traffic":     cfg.Sim.Traffic.Enable,
@@ -221,7 +223,7 @@ func main() {
 
 	log.Printf("web ui enabled listen=%s", cfg.Web.Listen)
 	go func() {
-		err := web.Serve(ctx, cfg.Web.Listen, status, web.SettingsStore{ConfigPath: configPath}, logBuf)
+		err := web.Serve(ctx, cfg.Web.Listen, status, web.SettingsStore{ConfigPath: resolvedConfigPath}, logBuf)
 		if err != nil && ctx.Err() == nil {
 			if errors.Is(err, syscall.EACCES) {
 				log.Printf("web ui bind failed (permission denied) listen=%s: %v", cfg.Web.Listen, err)

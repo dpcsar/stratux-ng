@@ -77,9 +77,11 @@ UUID=<your-uuid>  /data  ext4  defaults,noatime  0  2
 
 ## Stratux-NG config for appliance use
 
-Point the service at the persistent config:
+Point the service at the persistent config (recommended: via systemd environment):
 
-- `stratux-ng --config /data/stratux-ng/config.yaml`
+- `Environment=STRATUX_NG_CONFIG=/data/stratux-ng/config.yaml`
+
+If no config is specified, Stratux-NG defaults to `/data/stratux-ng/config.yaml`.
 
 Example config values commonly used for a Pi AP subnet:
 

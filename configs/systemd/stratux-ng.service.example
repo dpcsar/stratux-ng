@@ -7,7 +7,7 @@
 # Install (example):
 #   sudo install -m 644 configs/systemd/stratux-ng.service.example /etc/systemd/system/stratux-ng.service
 #   sudo mkdir -p /data/stratux-ng
-#   sudo install -m 644 dev.yaml /data/stratux-ng/config.yaml
+#   sudo install -m 644 config.yaml /data/stratux-ng/config.yaml
 #   sudo systemctl daemon-reload
 #   sudo systemctl enable --now stratux-ng
 
@@ -18,7 +18,8 @@ After=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/stratux-ng --config /data/stratux-ng/config.yaml
+Environment=STRATUX_NG_CONFIG=/data/stratux-ng/config.yaml
+ExecStart=/usr/local/bin/stratux-ng
 Restart=on-failure
 RestartSec=1
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -77,6 +78,43 @@ type OwnshipSimConfig struct {
 	Period                 time.Duration `yaml:"period"`
 	ICAO                   string        `yaml:"icao"`
 	Callsign               string        `yaml:"callsign"`
+}
+
+// DefaultPath is the canonical appliance config path.
+//
+// When running as a service, prefer keeping config in /data so it can be
+// persisted across updates and be writable for in-place edits.
+const DefaultPath = "/data/stratux-ng/config.yaml"
+
+// ResolvePath returns the config path to load.
+//
+// Resolution order:
+//  1. explicit path argument (when non-empty)
+//  2. STRATUX_NG_CONFIG environment variable (when non-empty)
+//  3. DefaultPath
+func ResolvePath(path string) (string, error) {
+	path = strings.TrimSpace(path)
+	if path != "" {
+		return filepath.Clean(path), nil
+	}
+	if env := strings.TrimSpace(os.Getenv("STRATUX_NG_CONFIG")); env != "" {
+		return filepath.Clean(env), nil
+	}
+	return DefaultPath, nil
+}
+
+// LoadAuto resolves a config path (via ResolvePath) and loads it.
+// It returns both the loaded config and the resolved path.
+func LoadAuto(path string) (Config, string, error) {
+	resolved, err := ResolvePath(path)
+	if err != nil {
+		return Config{}, "", err
+	}
+	cfg, err := Load(resolved)
+	if err != nil {
+		return Config{}, "", err
+	}
+	return cfg, resolved, nil
 }
 
 func Load(path string) (Config, error) {

@@ -75,7 +75,11 @@ Sample scripts:
 
 Run Stratux-NG (sends framed GDL90 over UDP from simulated ownship + traffic):
 
-- `go run ./cmd/stratux-ng --config ./dev.yaml`
+- `go run ./cmd/stratux-ng --config ./config.yaml`
+
+Config loading:
+- If `--config` is not provided, Stratux-NG loads `/data/stratux-ng/config.yaml`.
+- You can also set `STRATUX_NG_CONFIG` to a path (no CLI flag needed).
 
 Web UI/status API:
 
@@ -121,8 +125,8 @@ Notes:
 You can override record/replay settings without editing YAML:
 
 ```
-go run ./cmd/stratux-ng --config dev.yaml --record /tmp/gdl90.log
-go run ./cmd/stratux-ng --config dev.yaml --replay /tmp/gdl90.log --replay-speed 2 --replay-loop
+go run ./cmd/stratux-ng --record /tmp/gdl90.log
+go run ./cmd/stratux-ng --replay /tmp/gdl90.log --replay-speed 2 --replay-loop
 ```
 
 ### Log summary
@@ -163,6 +167,17 @@ Stratux-NG itself focuses on:
 - Binding/broadcasting GDL90 UDP on the Pi’s Wi‑Fi interface (details configurable; exact ports/addresses TBD)
 - Serving an HTTP API + minimal web UI (for status/config)
 
+### SD image layout (planned)
+
+The intended “flashable SD image” delivery is an appliance-style system:
+
+- Binary: `/usr/local/bin/stratux-ng`
+- systemd unit: `/etc/systemd/system/stratux-ng.service`
+- Persistent data mount: `/data` (ext4)
+- Live config (read/write): `/data/stratux-ng/config.yaml`
+
+The example systemd unit sets `STRATUX_NG_CONFIG=/data/stratux-ng/config.yaml` so the service always loads the same config path.
+
 ## EFB compatibility
 
 - Output format: **GDL90 over UDP**
@@ -196,7 +211,7 @@ Per-app connection steps will be documented once defaults (UDP port/broadcast be
 ### Current defaults (Stratux-NG)
 
 - GDL90 UDP destination is configured via `gdl90.dest` in YAML.
-- `dev.yaml` defaults to broadcast: `192.168.10.255:4000`
+- `config.yaml` defaults to broadcast: `192.168.10.255:4000`
 - Message transport: UDP, framed GDL90 (with CRC + byte-stuffing)
 
 Notes:
@@ -213,7 +228,7 @@ Example: local loopback test in two terminals:
   - `go run ./cmd/stratux-ng --listen --listen-addr :4000`
 - Terminal B (sender, unicast to localhost):
   - Set `gdl90.dest: "127.0.0.1:4000"` in your config
-  - `go run ./cmd/stratux-ng --config ./dev.yaml`
+  - `go run ./cmd/stratux-ng`
 
 Optional: add `--listen-hex` to print raw packet bytes as hex.
 
