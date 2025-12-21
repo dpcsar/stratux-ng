@@ -13,7 +13,7 @@ gdl90:
         loop: false
 sim:
     ownship:
-        enable: true
+        enable: false
         center_lat_deg: 45.5404
         center_lon_deg: -122.9498
         alt_feet: 3000
@@ -24,7 +24,7 @@ sim:
         icao: F00000
         callsign: STRATUX
     traffic:
-        enable: true
+        enable: false
         count: 6
         radius_nm: 2
         period: 1m30s
@@ -33,7 +33,6 @@ sim:
         enable: false
         path: ./configs/scenarios/edgecases.yaml
         start_time_utc: "2020-01-01T00:00:00Z"
-        loop: true
+        loop: false
 web:
-    enable: true
-    listen: :8080
+    listen: :80

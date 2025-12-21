@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"strings"
 	"time"
@@ -16,7 +17,6 @@ type Config struct {
 }
 
 type WebConfig struct {
-	Enable bool   `yaml:"enable"`
 	Listen string `yaml:"listen"`
 }
 
@@ -199,15 +199,32 @@ func DefaultAndValidate(cfg *Config) error {
 		}
 	}
 
-	// Web UI defaults + validation.
-	if strings.TrimSpace(cfg.Web.Listen) == "" {
-		cfg.Web.Listen = ":8080"
+	// Web UI defaults + validation (Web UI is always enabled).
+	listen := strings.TrimSpace(cfg.Web.Listen)
+	if listen == "" {
+		listen = ":80"
 	}
-	if cfg.Web.Enable {
-		if strings.TrimSpace(cfg.Web.Listen) == "" {
-			return fmt.Errorf("web.listen is required when web.enable is true")
-		}
+	// Common UX: accept bare port like "80" and normalize to ":80".
+	if isAllDigits(listen) {
+		listen = ":" + listen
 	}
+	// Basic validity: must be host:port or :port.
+	if _, _, err := net.SplitHostPort(listen); err != nil {
+		return fmt.Errorf("web.listen must be in the form :PORT or HOST:PORT: %w", err)
+	}
+	cfg.Web.Listen = listen
 
 	return nil
+}
+
+func isAllDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }

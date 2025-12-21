@@ -8,7 +8,7 @@ This doc focuses on **reducing SD-card writes** and **limiting corruption risk**
 
 Stratux-NG itself is relatively write-light:
 
-- Config file: written via the Web UI (`/api/settings`) using **atomic write + rename**.
+- Config file: can be written via the Web UI (`/api/settings`) using **atomic write + rename** (note: `web.listen` is config-only).
 - Record/replay logs: only written when `gdl90.record.enable: true`.
 - Normal logs: written to stdout/stderr (when run under systemd, this goes to `journald`).
 
@@ -84,5 +84,5 @@ Point the service at the persistent config:
 Example config values commonly used for a Pi AP subnet:
 
 - `gdl90.dest: 192.168.10.255:4000`
-- `web.enable: true`
+- Web UI is enabled by default.
 - `web.listen: 0.0.0.0:8080`

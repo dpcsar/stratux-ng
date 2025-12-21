@@ -14,7 +14,7 @@
       </button>
       <div class="titleblock">
         <div class="title">Stratux-NG</div>
-        <div id="subtitle" class="subtitle">Connecting…</div>
+        <div id="subtitle" class="subtitle"></div>
       </div>
       <span></span>
     </header>
@@ -23,47 +23,107 @@
       <section id="view-attitude" class="view" aria-label="Attitude">
         <h2>Attitude</h2>
         <p class="muted">Coming soon. This area will show attitude and basic flight instruments.</p>
-        <div class="controls card">
-          <label class="control">
-            <input id="attitude-show-raw" type="checkbox" />
-            <span>Show raw status JSON</span>
-          </label>
-        </div>
-        <pre id="attitude-summary" class="card">Loading…</pre>
       </section>
 
       <section id="view-radar" class="view" aria-label="Radar">
         <h2>Radar</h2>
         <p class="muted">Coming soon. This area will show nearby traffic relative to ownship.</p>
-        <div class="controls card">
-          <label class="control">
-            <span>Range</span>
-            <select id="radar-range">
-              <option value="5">5 nm</option>
-              <option value="10" selected>10 nm</option>
-              <option value="20">20 nm</option>
-            </select>
-          </label>
-        </div>
-        <pre id="radar-summary" class="card">Loading…</pre>
       </section>
 
       <section id="view-map" class="view" aria-label="Map">
         <h2>Map</h2>
         <p class="muted">Coming soon. This area will show ownship position and track.</p>
-        <div class="controls card">
-          <label class="control">
-            <input id="map-follow" type="checkbox" checked />
-            <span>Follow ownship</span>
-          </label>
-        </div>
-        <pre id="map-summary" class="card">Loading…</pre>
       </section>
 
       <section id="view-status" class="view" aria-label="Status">
         <h2>Status</h2>
-        <p class="muted">Live snapshot from <a href="/api/status">/api/status</a>.</p>
-        <pre id="status-json" class="card">Loading…</pre>
+        <div id="status-card" class="card">
+          <div class="formrow">
+            <label class="control">
+              <span>Uptime</span>
+              <input id="st-uptime" type="text" readonly />
+            </label>
+          </div>
+
+          <div class="formrow">
+            <label class="control">
+              <span>Now (UTC)</span>
+              <input id="st-now" type="text" readonly />
+            </label>
+          </div>
+
+          <div class="formrow">
+            <label class="control">
+              <span>Last tick (UTC)</span>
+              <input id="st-last-tick" type="text" readonly />
+            </label>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="formrow">
+            <label class="control">
+              <span>Mode</span>
+              <input id="st-mode" type="text" readonly />
+            </label>
+          </div>
+
+          <div class="formrow">
+            <label class="control">
+              <span>GDL90 destination</span>
+              <input id="st-gdl90-dest" type="text" readonly />
+            </label>
+          </div>
+
+          <div class="formrow">
+            <label class="control">
+              <span>Interval</span>
+              <input id="st-interval" type="text" readonly />
+            </label>
+          </div>
+
+          <div class="formrow">
+            <label class="control">
+              <span>Frames sent</span>
+              <input id="st-frames" type="text" readonly />
+            </label>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="formrow">
+            <label class="control">
+              <input id="st-sim-scenario" type="checkbox" disabled />
+              <span>Scenario enabled</span>
+            </label>
+          </div>
+          <div class="formrow">
+            <label class="control">
+              <input id="st-sim-ownship" type="checkbox" disabled />
+              <span>Sim ownship enabled</span>
+            </label>
+          </div>
+          <div class="formrow">
+            <label class="control">
+              <input id="st-sim-traffic" type="checkbox" disabled />
+              <span>Sim traffic enabled</span>
+            </label>
+          </div>
+          <div class="formrow">
+            <label class="control">
+              <input id="st-record" type="checkbox" disabled />
+              <span>Recording enabled</span>
+            </label>
+          </div>
+          <div class="formrow">
+            <label class="control">
+              <input id="st-replay" type="checkbox" disabled />
+              <span>Replay enabled</span>
+            </label>
+          </div>
+
+          <div class="divider"></div>
+        </div>
       </section>
 
       <section id="view-settings" class="view" aria-label="Settings">
@@ -124,20 +184,6 @@
 
           <div class="divider"></div>
 
-          <div class="formrow">
-            <label class="control">
-              <span>Web listen</span>
-              <input id="set-web-listen" type="text" placeholder=":8080" />
-            </label>
-          </div>
-
-          <div class="formrow">
-            <label class="control">
-              <input id="set-web-enable" type="checkbox" />
-              <span>Web enabled</span>
-            </label>
-          </div>
-
           <div class="formactions">
             <button id="btn-save" type="submit" class="primary">Save</button>
             <span id="save-msg" class="muted"></span>
@@ -167,15 +213,13 @@
 
       <section id="view-about" class="view" aria-label="About">
         <h2>About</h2>
-        <p class="muted">Build/runtime info from <a href="/api/about">/api/about</a>.</p>
-        <div class="controls card">
-          <div class="formactions">
-            <button id="about-refresh" type="button" class="primary">Refresh</button>
-            <span id="about-meta" class="muted"></span>
-          </div>
+        <p class="muted">Basic information for now. More details will be added later.</p>
+        <div class="card">
+          <p class="muted">Raw build/runtime details:</p>
+          <p><a href="/api/about">/api/about</a></p>
         </div>
-        <pre id="about-json" class="card">Loading…</pre>
       </section>
+
     </main>
 
     <nav class="bottomnav" aria-label="Primary">

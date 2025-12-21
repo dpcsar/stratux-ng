@@ -81,7 +81,6 @@ func main() {
 	var listenMode bool
 	var listenAddr string
 	var listenHex bool
-	var webEnable bool
 	var webListen string
 
 	flag.StringVar(&configPath, "config", "./dev.yaml", "Path to YAML config")
@@ -93,7 +92,6 @@ func main() {
 	flag.BoolVar(&listenMode, "listen", false, "Listen for UDP GDL90 frames and dump decoded messages (no transmit)")
 	flag.StringVar(&listenAddr, "listen-addr", ":4000", "UDP address to bind in listen mode (e.g. :4000 or 127.0.0.1:4000)")
 	flag.BoolVar(&listenHex, "listen-hex", false, "In listen mode, also print raw frame bytes as hex")
-	flag.BoolVar(&webEnable, "web", false, "Enable Web UI (overrides config)")
 	flag.StringVar(&webListen, "web-listen", "", "Web UI listen address (overrides config when non-empty)")
 	flag.Parse()
 
@@ -118,9 +116,6 @@ func main() {
 	}
 
 	// CLI overrides.
-	if webEnable {
-		cfg.Web.Enable = true
-	}
 	if strings.TrimSpace(webListen) != "" {
 		cfg.Web.Listen = webListen
 	}
@@ -140,7 +135,7 @@ func main() {
 	if replayLoop {
 		cfg.GDL90.Replay.Loop = true
 	}
-	if recordPath != "" || replayPath != "" || replaySpeed >= 0 || replayLoop || webEnable || strings.TrimSpace(webListen) != "" {
+	if recordPath != "" || replayPath != "" || replaySpeed >= 0 || replayLoop || strings.TrimSpace(webListen) != "" {
 		if err := config.DefaultAndValidate(&cfg); err != nil {
 			log.Fatalf("config validation failed after CLI overrides: %v", err)
 		}
@@ -162,16 +157,21 @@ func main() {
 		"replay":      cfg.GDL90.Replay.Enable,
 	})
 
-	if cfg.Web.Enable {
-		log.Printf("web ui enabled listen=%s", cfg.Web.Listen)
-		go func() {
-			err := web.Serve(ctx, cfg.Web.Listen, status, web.SettingsStore{ConfigPath: configPath}, logBuf)
-			if err != nil && ctx.Err() == nil {
-				log.Printf("web ui stopped: %v", err)
-				cancel()
+	log.Printf("web ui enabled listen=%s", cfg.Web.Listen)
+	go func() {
+		err := web.Serve(ctx, cfg.Web.Listen, status, web.SettingsStore{ConfigPath: configPath}, logBuf)
+		if err != nil && ctx.Err() == nil {
+			if errors.Is(err, syscall.EACCES) {
+				log.Printf("web ui bind failed (permission denied) listen=%s: %v", cfg.Web.Listen, err)
+				log.Printf("to use port 80 without running as root, grant CAP_NET_BIND_SERVICE (examples):")
+				log.Printf("  setcap: sudo setcap 'cap_net_bind_service=+ep' $(readlink -f ./stratux-ng)")
+				log.Printf("  systemd: set AmbientCapabilities=CAP_NET_BIND_SERVICE in the service unit")
+				return
 			}
-		}()
-	}
+			log.Printf("web ui stopped: %v", err)
+			cancel()
+		}
+	}()
 
 	broadcaster, err := udp.NewBroadcaster(cfg.GDL90.Dest)
 	if err != nil {

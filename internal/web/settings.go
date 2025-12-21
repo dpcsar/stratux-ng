@@ -24,9 +24,6 @@ type SettingsPayload struct {
 
 	OwnshipEnable bool `json:"ownship_enable"`
 	TrafficEnable bool `json:"traffic_enable"`
-
-	WebEnable bool   `json:"web_enable"`
-	WebListen string `json:"web_listen"`
 }
 
 func configToSettingsPayload(cfg config.Config) SettingsPayload {
@@ -41,9 +38,6 @@ func configToSettingsPayload(cfg config.Config) SettingsPayload {
 
 		OwnshipEnable: cfg.Sim.Ownship.Enable,
 		TrafficEnable: cfg.Sim.Traffic.Enable,
-
-		WebEnable: cfg.Web.Enable,
-		WebListen: cfg.Web.Listen,
 	}
 }
 
@@ -62,9 +56,6 @@ func applySettingsPayload(cfg *config.Config, p SettingsPayload) {
 
 	cfg.Sim.Ownship.Enable = p.OwnshipEnable
 	cfg.Sim.Traffic.Enable = p.TrafficEnable
-
-	cfg.Web.Enable = p.WebEnable
-	cfg.Web.Listen = strings.TrimSpace(p.WebListen)
 }
 
 type SettingsStore struct {

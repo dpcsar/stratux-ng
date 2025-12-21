@@ -77,14 +77,23 @@ Run Stratux-NG (sends framed GDL90 over UDP from simulated ownship + traffic):
 
 - `go run ./cmd/stratux-ng --config ./dev.yaml`
 
-Optional: enable the minimal Web UI/status API:
+Web UI/status API:
 
-- Set `web.enable: true` in `dev.yaml`
-- Browse to `http://<pi-ip>:8080/` (or whatever `web.listen` port you choose)
+- Web UI is enabled by default.
+- Default listen address is `:80`.
+- Browse to `http://<pi-ip>/` (or whatever `web.listen` you choose)
+
+Port 80 note (Linux): binding to ports <1024 usually requires root or capabilities.
+If you see a "permission denied" error when using `:80`, fix it by either:
+
+- Running as root (simple but not ideal), or
+- Granting the binary `CAP_NET_BIND_SERVICE`:
+  - `sudo setcap 'cap_net_bind_service=+ep' $(readlink -f ./stratux-ng)`
+  - (systemd) set `AmbientCapabilities=CAP_NET_BIND_SERVICE` in the unit.
 
 Web UI notes:
 - Mobile-first layout intended for phone/tablet use.
-- Bottom navigation switches between: AHRS, Radar, Map (placeholders for now).
+- Bottom navigation switches between: Attitude, Radar, Map (placeholders for now).
 - The menu button opens a small “More” drawer.
 
 Then:
@@ -224,7 +233,7 @@ Reference subnets used in this repo’s default setup:
 ## Configuration
 Stratux-NG supports both:
 - **Config file** (YAML) for headless provisioning
-- **Web UI** for interactive changes
+- **Web UI** for interactive changes (note: `web.listen` is configured before startup, not via the Web UI)
 
 ## Roadmap (initial milestones)
 - [ ] Core Go service skeleton + config
