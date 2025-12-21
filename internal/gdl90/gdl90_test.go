@@ -205,6 +205,23 @@ func TestOwnshipReportFrame_CallsignAndValidityBits(t *testing.T) {
 	}
 }
 
+func TestEncodeTrack8_TruncatesNearWrap(t *testing.T) {
+	// Stratux uses truncation (not rounding). Values near 360 should map to 255,
+	// not wrap to 0.
+	if got := encodeTrack8(359.9); got != 255 {
+		t.Fatalf("encodeTrack8(359.9)=%d want 255", got)
+	}
+	if got := encodeTrack8(359.999); got != 255 {
+		t.Fatalf("encodeTrack8(359.999)=%d want 255", got)
+	}
+	if got := encodeTrack8(360.0); got != 0 {
+		t.Fatalf("encodeTrack8(360.0)=%d want 0", got)
+	}
+	if got := encodeTrack8(-0.1); got != 255 {
+		t.Fatalf("encodeTrack8(-0.1)=%d want 255", got)
+	}
+}
+
 func TestTrafficReportFrame_IndicatorBitsAndNICNACp(t *testing.T) {
 	msg := unframeAndCheckCRC(t, TrafficReportFrame(Traffic{
 		AddrType:     0x00,

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -93,7 +94,30 @@ func (s SettingsStore) save(cfg config.Config) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.ConfigPath, b, 0o644)
+
+	// Write atomically to avoid corrupting config on crash/power loss.
+	// Use a temp file in the same directory so os.Rename is atomic.
+	dir := filepath.Dir(s.ConfigPath)
+	tmp, err := os.CreateTemp(dir, filepath.Base(s.ConfigPath)+".tmp.*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer func() {
+		_ = os.Remove(tmpPath)
+	}()
+	if _, err := tmp.Write(b); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Chmod(0o644); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, s.ConfigPath)
 }
 
 func (s SettingsStore) Handler() http.Handler {
@@ -124,6 +148,8 @@ func (s SettingsStore) Handler() http.Handler {
 			return
 
 		case http.MethodPost:
+			// Small config payload; cap to prevent unbounded reads.
+			r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
 			var p SettingsPayload
 			dec := json.NewDecoder(r.Body)
 			dec.DisallowUnknownFields()

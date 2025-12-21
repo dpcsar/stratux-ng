@@ -34,15 +34,27 @@
   - Heartbeat (0x00) should be sent at ~1 Hz.
   - When we simulate GPS, set the heartbeat GPS/UTC-valid bits consistently.
   - Prefer emitting Ownship Report (0x0A) + Ownship Geo Altitude (0x0B) when presenting a “GPS valid” device.
+  - Prefer mirroring Stratux quantization quirks (e.g., track/heading fields should truncate rather than round) to avoid wrap-around glitches near 360°.
 - If adding or changing message types, field packing, sentinels, or emission cadence:
   - Add/extend at least one focused unit test in `internal/gdl90`.
   - Add/extend a lightweight “sender emits expected message IDs” test in `cmd/stratux-ng` when main-loop output behavior changes.
 
 ## Code quality / build hygiene
 - Run `go test ./...` after code changes.
+- If feasible, also run `go test -race ./...` on supported platforms. Note: on some Raspberry Pi / arm64 environments, ThreadSanitizer can fail with errors like `ThreadSanitizer: unsupported VMA range`; treat that as an environment limitation unless there’s other evidence of a race.
 - Keep code formatted with `gofmt`.
 - Avoid adding new dependencies unless there is a clear benefit.
 - Prefer tests that do not require network access (unit tests and small integration-ish tests that operate on frames in-memory).
+
+## Determinism / record-replay
+- For deterministic scenario testing, be careful about time bases:
+  - Scenario mode uses a fixed UTC timeline; recording/replay should derive timestamps from the provided frame time (relative to first frame) rather than wall-clock `time.Now()`.
+  - Add/adjust tests when changing record/replay timing semantics.
+
+## Web/API safety
+- Keep the web surface small and robust:
+  - Add reasonable `http.Server` timeouts and header/body size limits.
+  - When persisting YAML config changes, prefer atomic writes (write temp + rename) to avoid partial/corrupt configs on crash/power loss.
 
 ## Networking
 - Default to simple, robust networking:

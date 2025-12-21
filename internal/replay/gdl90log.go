@@ -107,7 +107,9 @@ func CreateWriter(path string) (*Writer, error) {
 		_ = f.Close()
 		return nil, err
 	}
-	return &Writer{f: f, w: bw, start: time.Now()}, nil
+	// start is initialized on first WriteFrame() so callers can provide a
+	// deterministic time base (e.g., scenario scripts with fixed UTC times).
+	return &Writer{f: f, w: bw}, nil
 }
 
 func (ww *Writer) WriteFrame(now time.Time, frame []byte) error {
@@ -116,6 +118,15 @@ func (ww *Writer) WriteFrame(now time.Time, frame []byte) error {
 	}
 	if frame == nil {
 		return errors.New("frame is nil")
+	}
+
+	// Initialize origin on first write.
+	if ww.start.IsZero() {
+		if now.IsZero() {
+			ww.start = time.Now()
+		} else {
+			ww.start = now
+		}
 	}
 
 	// Use monotonic component of time when available.

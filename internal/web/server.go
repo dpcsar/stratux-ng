@@ -104,6 +104,10 @@ func Serve(ctx context.Context, listenAddr string, status *Status, settings Sett
 		Addr:              listenAddr,
 		Handler:           Handler(status, settings),
 		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       30 * time.Second,
+		MaxHeaderBytes:    1 << 20, // 1 MiB
 	}
 
 	errCh := make(chan error, 1)

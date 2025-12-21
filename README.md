@@ -105,6 +105,7 @@ Stratux-NG can record the *framed* GDL90 UDP packets it emits, then replay them 
 Notes:
 - Record and replay are mutually exclusive.
 - Recording and replay are only supported in `gdl90.mode: gdl90` (not `gdl90.mode: test`).
+- When `sim.scenario.enable: true`, recording timestamps are derived from the scenario time base (relative to the first emitted frame), so replays preserve scenario timing.
 
 ### CLI overrides
 
@@ -138,13 +139,14 @@ Stratux-NG is intended to behave like an “appliance” on a Raspberry Pi: you 
 
 To keep networking reliable on Raspberry Pi, **AP configuration is host-managed** initially:
 
-- **Option A:** `systemd` + `hostapd` + `dnsmasq`
-- **Option B:** NetworkManager (if that fits your base image better)
 
 Setup guide + templates:
 
-- [docs/wifi-ap-hostapd-dnsmasq.md](docs/wifi-ap-hostapd-dnsmasq.md)
-- `configs/wifi/hostapd.conf.example`
+## Prebuilt SD image (persistence)
+
+For power-loss resilience and SD-card write minimization strategies for a prebuilt SD image, see:
+
+- [docs/sd-image-persistence.md](docs/sd-image-persistence.md)
 - `configs/wifi/dnsmasq-stratux-ng.conf.example`
 
 Stratux-NG itself focuses on:

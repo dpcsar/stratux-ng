@@ -156,7 +156,9 @@ func encodeTrack8(deg float64) byte {
 		deg = math.Mod(deg, 360) + 360
 	}
 	deg = math.Mod(deg, 360)
-	return byte(math.Floor((deg + trackResolution/2) / trackResolution))
+	// Match Stratux behavior: truncate (do not round). Rounding can cause values
+	// near 360 degrees to wrap to 0 and create a spurious heading jump.
+	return byte(math.Floor(deg / trackResolution))
 }
 
 func sanitizeCallsign(s string) string {

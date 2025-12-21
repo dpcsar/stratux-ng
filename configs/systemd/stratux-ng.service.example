@@ -1,0 +1,52 @@
+# Example systemd unit for running Stratux-NG as an appliance.
+#
+# Suggested companion:
+# - persistent data mount at /data (ext4)
+# - config at /data/stratux-ng/config.yaml
+#
+# Install (example):
+#   sudo install -m 644 configs/systemd/stratux-ng.service.example /etc/systemd/system/stratux-ng.service
+#   sudo mkdir -p /data/stratux-ng
+#   sudo install -m 644 dev.yaml /data/stratux-ng/config.yaml
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now stratux-ng
+
+[Unit]
+Description=Stratux-NG (GDL90 UDP + Web UI)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/stratux-ng --config /data/stratux-ng/config.yaml
+Restart=on-failure
+RestartSec=1
+
+# Run unprivileged if you create a user; otherwise remove these two lines.
+User=stratuxng
+Group=stratuxng
+
+# Hardening: keep the filesystem mostly read-only and explicitly allow /data.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+
+ReadWritePaths=/data/stratux-ng
+
+# Logging goes to journald.
+StandardOutput=journal
+StandardError=journal
+
+# Keep defaults unless you’ve verified tighter networking restrictions.
+# RestrictAddressFamilies=AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target
