@@ -170,6 +170,45 @@ When simulator is enabled, Stratux-NG currently emits these GDL90 message IDs:
 
 Per-app connection steps will be documented once defaults (UDP port/broadcast behavior) are finalized.
 
+## EFB Setup + Testing Loop
+
+### Current defaults (Stratux-NG)
+
+- GDL90 UDP destination is configured via `gdl90.dest` in YAML.
+- `dev.yaml` defaults to broadcast: `192.168.10.255:4000`
+- Message transport: UDP, framed GDL90 (with CRC + byte-stuffing)
+
+Notes:
+- Broadcast is typically the easiest choice on a Wi‑Fi AP subnet.
+- For local testing on one machine, you can use unicast `127.0.0.1:4000`.
+
+### Listen mode (no Wi‑Fi/AP required)
+
+Listen mode binds a local UDP socket and dumps received frames (message ID + CRC status) so you can verify what’s being sent.
+
+Example: local loopback test in two terminals:
+
+- Terminal A (listener):
+  - `go run ./cmd/stratux-ng --listen --listen-addr :4000`
+- Terminal B (sender, unicast to localhost):
+  - Set `gdl90.dest: "127.0.0.1:4000"` in your config
+  - `go run ./cmd/stratux-ng --config ./dev.yaml`
+
+Optional: add `--listen-hex` to print raw packet bytes as hex.
+
+### Per-EFB setup (to be confirmed)
+
+EFB setup guides live in `docs/efb/`:
+
+- General guidance (any EFB): [docs/efb/other-efbs.md](docs/efb/other-efbs.md)
+- ForeFlight: [docs/efb/foreflight.md](docs/efb/foreflight.md)
+- Garmin Pilot: [docs/efb/garmin-pilot.md](docs/efb/garmin-pilot.md)
+
+Reference subnets used in this repo’s default setup:
+
+- Pi AP: `192.168.10.1/24` (broadcast `192.168.10.255`)
+- Home Wi‑Fi: `192.168.0.0/24` (broadcast `192.168.0.255`)
+
 ## Configuration
 Stratux-NG supports both:
 - **Config file** (YAML) for headless provisioning

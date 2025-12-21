@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"strings"
@@ -75,6 +77,9 @@ func main() {
 	var replaySpeed float64
 	var replayLoop bool
 	var logSummaryPath string
+	var listenMode bool
+	var listenAddr string
+	var listenHex bool
 
 	flag.StringVar(&configPath, "config", "./dev.yaml", "Path to YAML config")
 	flag.StringVar(&recordPath, "record", "", "Record framed GDL90 packets to PATH (overrides config)")
@@ -82,11 +87,22 @@ func main() {
 	flag.Float64Var(&replaySpeed, "replay-speed", -1, "Replay speed multiplier (e.g., 2.0 = 2x). -1 uses config")
 	flag.BoolVar(&replayLoop, "replay-loop", false, "Loop replay forever (overrides config when true)")
 	flag.StringVar(&logSummaryPath, "log-summary", "", "Print summary of a record/replay log at PATH and exit")
+	flag.BoolVar(&listenMode, "listen", false, "Listen for UDP GDL90 frames and dump decoded messages (no transmit)")
+	flag.StringVar(&listenAddr, "listen-addr", ":4000", "UDP address to bind in listen mode (e.g. :4000 or 127.0.0.1:4000)")
+	flag.BoolVar(&listenHex, "listen-hex", false, "In listen mode, also print raw frame bytes as hex")
 	flag.Parse()
 
 	if strings.TrimSpace(logSummaryPath) != "" {
 		if err := printLogSummary(logSummaryPath); err != nil {
 			log.Fatalf("log summary failed: %v", err)
+		}
+		return
+	}
+	if listenMode {
+		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer cancel()
+		if err := runListen(ctx, listenAddr, listenHex); err != nil && ctx.Err() == nil {
+			log.Fatalf("listen mode failed: %v", err)
 		}
 		return
 	}
@@ -284,6 +300,53 @@ func main() {
 
 	<-ctx.Done()
 	log.Printf("stratux-ng stopping")
+}
+
+func runListen(ctx context.Context, addr string, dumpHex bool) error {
+	pc, err := net.ListenPacket("udp", addr)
+	if err != nil {
+		return err
+	}
+	defer pc.Close()
+
+	log.Printf("listen mode: udp bind=%s", addr)
+	buf := make([]byte, 64*1024)
+	for {
+		_ = pc.SetReadDeadline(time.Now().Add(1 * time.Second))
+		n, src, err := pc.ReadFrom(buf)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		if err != nil {
+			if ne, ok := err.(net.Error); ok && ne.Timeout() {
+				continue
+			}
+			return err
+		}
+		frame := append([]byte(nil), buf[:n]...)
+
+		msg, crcOK, uerr := gdl90.Unframe(frame)
+		if uerr != nil {
+			log.Printf("rx src=%s bytes=%d unframe_err=%v", src.String(), len(frame), uerr)
+			if dumpHex {
+				log.Printf("rx hex=%s", hex.EncodeToString(frame))
+			}
+			continue
+		}
+
+		id := msg[0]
+		info := fmt.Sprintf("id=0x%02X", id)
+		if id == 0x65 && len(msg) >= 2 {
+			info = fmt.Sprintf("id=0x65 sub=0x%02X", msg[1])
+		}
+
+		log.Printf("rx src=%s bytes=%d crc_ok=%t %s msg_len=%d", src.String(), len(frame), crcOK, info, len(msg))
+		if dumpHex {
+			log.Printf("rx hex=%s", hex.EncodeToString(frame))
+		}
+	}
 }
 
 func buildGDL90Frames(cfg config.Config, now time.Time) [][]byte {

@@ -84,6 +84,21 @@ func TestFrame_RoundTripWithCRC(t *testing.T) {
 	}
 }
 
+func TestUnframe_RoundTripAndCRCOk(t *testing.T) {
+	message := []byte{0x01, 0x02, 0x03, flagByte, escapeByte}
+	f := Frame(message)
+	msg, ok, err := Unframe(f)
+	if err != nil {
+		t.Fatalf("Unframe error: %v", err)
+	}
+	if !ok {
+		t.Fatalf("expected crc ok")
+	}
+	if !bytes.Equal(msg, message) {
+		t.Fatalf("unframe mismatch: got % X want % X", msg, message)
+	}
+}
+
 func TestHeartbeatFrame_Flags(t *testing.T) {
 	msg := unframeAndCheckCRC(t, HeartbeatFrame(true, false))
 	if len(msg) != 7 {
