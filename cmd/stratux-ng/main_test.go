@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"stratux-ng/internal/config"
+	"stratux-ng/internal/sim"
 )
 
 func unframeForMsg(t *testing.T, frame []byte) []byte {
@@ -110,7 +111,21 @@ func TestBuildGDL90Frames_SimOwnshipAndTrafficMessageSet(t *testing.T) {
 	}
 
 	// Traffic targets.
-	if counts[0x14] != cfg.Sim.Traffic.Count {
-		t.Fatalf("expected %d traffic reports (0x14), got %d", cfg.Sim.Traffic.Count, counts[0x14])
+	ts := sim.TrafficSim{
+		CenterLatDeg: cfg.Sim.Ownship.CenterLatDeg,
+		CenterLonDeg: cfg.Sim.Ownship.CenterLonDeg,
+		BaseAltFeet:  cfg.Sim.Ownship.AltFeet,
+		GroundKt:     cfg.Sim.Traffic.GroundKt,
+		RadiusNm:     cfg.Sim.Traffic.RadiusNm,
+		Period:       cfg.Sim.Traffic.Period,
+	}
+	visible := 0
+	for _, tgt := range ts.Targets(now, cfg.Sim.Traffic.Count) {
+		if tgt.Visible {
+			visible++
+		}
+	}
+	if counts[0x14] != visible {
+		t.Fatalf("expected %d visible traffic reports (0x14), got %d", visible, counts[0x14])
 	}
 }

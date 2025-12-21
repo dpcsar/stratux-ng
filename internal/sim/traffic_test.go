@@ -35,7 +35,7 @@ func TestTrafficSim_Targets_CountAndInvariants(t *testing.T) {
 		if tgt.TrackDeg < 0 || tgt.TrackDeg >= 360 {
 			t.Fatalf("tgt[%d] track out of range: %v", i, tgt.TrackDeg)
 		}
-		if tgt.GroundKt <= 0 {
+		if tgt.GroundKt < 0 {
 			t.Fatalf("tgt[%d] ground speed invalid: %d", i, tgt.GroundKt)
 		}
 

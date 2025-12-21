@@ -22,6 +22,9 @@ type Ownship struct {
 	NACp        byte // 0-15 (low nibble in msg[13])
 	GroundKt    int
 	TrackDeg    float64
+	OnGround    bool
+	VvelFpm     int
+	VvelValid   bool
 	Callsign    string
 	Emitter     byte // e.g. 0x01 "Light"
 	Emergency   byte // upper nibble of msg[27]
@@ -55,10 +58,12 @@ func OwnshipReportFrame(o Ownship) []byte {
 	msg[12] = byte((alt & 0x0F) << 4)
 
 	// Misc/flags nibble (lower 4 bits of msg[12]).
-	// Match common Stratux behavior for "valid ownship":
-	// - airborne (bit3)
-	// - true track (bit0)
-	msg[12] |= 0x09
+	// - bit0: track valid (true track)
+	// - bit3: airborne
+	msg[12] |= 0x01
+	if !o.OnGround {
+		msg[12] |= 0x08
+	}
 
 	// Position containment / navigational accuracy (msg[13]):
 	// high nibble = NIC, low nibble = NACp.
@@ -76,8 +81,12 @@ func OwnshipReportFrame(o Ownship) []byte {
 	msg[14] = byte((gs & 0xFF0) >> 4)
 	msg[15] = byte((gs & 0x00F) << 4)
 
-	// Vertical velocity (12-bit, 64 fpm resolution). 0x800 = unknown.
+	// Vertical velocity (12-bit signed, 64 fpm resolution). 0x800 = unknown.
 	vvel := uint16(0x800)
+	if o.VvelValid {
+		vv := int16(math.Round(float64(o.VvelFpm) / 64.0))
+		vvel = uint16(vv) & 0x0FFF
+	}
 	msg[15] |= byte((vvel & 0x0F00) >> 8)
 	msg[16] = byte(vvel & 0x00FF)
 

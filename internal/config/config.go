@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -35,8 +36,20 @@ type ReplayConfig struct {
 }
 
 type SimConfig struct {
-	Ownship OwnshipSimConfig `yaml:"ownship"`
-	Traffic TrafficSimConfig `yaml:"traffic"`
+	Ownship  OwnshipSimConfig  `yaml:"ownship"`
+	Traffic  TrafficSimConfig  `yaml:"traffic"`
+	Scenario ScenarioSimConfig `yaml:"scenario"`
+}
+
+// ScenarioSimConfig enables deterministic, script-driven simulation.
+//
+// When enabled, the normal `sim.ownship` and `sim.traffic` generators are
+// ignored and frames are built from the scenario script.
+type ScenarioSimConfig struct {
+	Enable       bool   `yaml:"enable"`
+	Path         string `yaml:"path"`
+	StartTimeUTC string `yaml:"start_time_utc"`
+	Loop         bool   `yaml:"loop"`
 }
 
 type TrafficSimConfig struct {
@@ -164,6 +177,20 @@ func DefaultAndValidate(cfg *Config) error {
 	}
 	if cfg.Sim.Traffic.GroundKt <= 0 {
 		cfg.Sim.Traffic.GroundKt = 120
+	}
+
+	// Scenario defaults + validation.
+	if cfg.Sim.Scenario.Enable {
+		if cfg.Sim.Scenario.Path == "" {
+			return fmt.Errorf("sim.scenario.path is required when sim.scenario.enable is true")
+		}
+		if strings.TrimSpace(cfg.Sim.Scenario.StartTimeUTC) == "" {
+			// Fixed start time keeps scenario runs reproducible.
+			cfg.Sim.Scenario.StartTimeUTC = "2020-01-01T00:00:00Z"
+		}
+		if _, err := time.Parse(time.RFC3339, cfg.Sim.Scenario.StartTimeUTC); err != nil {
+			return fmt.Errorf("sim.scenario.start_time_utc must be RFC3339 (e.g. 2020-01-01T00:00:00Z): %w", err)
+		}
 	}
 
 	return nil

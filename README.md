@@ -57,6 +57,20 @@ You can develop without SDR/GPS/AHRS hardware using the built-in simulator:
 - Simulated traffic targets
 - GDL90 broadcast over UDP so EFBs can connect and display traffic/position
 
+### Deterministic scenario scripts (repeatable EFB testing)
+
+For precise, repeatable EFB behavior testing (edge cases, regression repros), you can run a deterministic “scenario script” instead of the procedural sim.
+
+- Enable `sim.scenario.enable: true` in your YAML config
+- Set `sim.scenario.path` to a scenario file (see `configs/scenarios/`)
+- Optionally set `sim.scenario.start_time_utc` to a fixed RFC3339 time (defaults to `2020-01-01T00:00:00Z` when scenario is enabled)
+
+Sample scripts:
+
+- `configs/scenarios/edgecases.yaml` (near poles, high/negative altitude, zero ground speed, abrupt heading changes, higher traffic count)
+- `configs/scenarios/heading-wrap.yaml` (isolated track/heading wrap test: 350 → 10 → 350)
+- `configs/scenarios/altitude-invalid.yaml` (isolated altitude invalid/sentinel transitions)
+
 ### Quick start
 
 Run Stratux-NG (sends framed GDL90 over UDP from simulated ownship + traffic):

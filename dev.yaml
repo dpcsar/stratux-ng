@@ -21,10 +21,6 @@ gdl90:
   # Record writes every outgoing framed GDL90 packet to a simple line-based log.
   # Replay reads a previously recorded log and re-sends the raw framed packets.
   #
-  # Log format:
-  # - First line: START
-  # - Then: <t_ns>,<hex> where t_ns is nanoseconds since START.
-  #
   # Note: record and replay are mutually exclusive.
   record:
     enable: false
@@ -41,6 +37,17 @@ gdl90:
   test_payload: "STRATUX-NG TEST"
 
 sim:
+  # Deterministic, script-driven simulation.
+  # When enabled, `sim.ownship` and `sim.traffic` are ignored.
+  scenario:
+    enable: false
+    # Path to a YAML scenario script (see `configs/scenarios/`).
+    path: "./configs/scenarios/edgecases.yaml"
+    # RFC3339 UTC start time. Fixed value makes runs reproducible.
+    start_time_utc: "2020-01-01T00:00:00Z"
+    # If true, wraps time back to the beginning when the script duration ends.
+    loop: true
+
   ownship:
     enable: true
     # Pick a realistic center point for your testing.
@@ -61,7 +68,7 @@ sim:
   # Simulated traffic targets (GDL90 0x14).
   traffic:
     enable: true
-    count: 3
+    count: 6
     radius_nm: 2.0
     period: 90s
     ground_kt: 120

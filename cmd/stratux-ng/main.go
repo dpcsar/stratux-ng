@@ -146,7 +146,9 @@ func main() {
 	if cfg.GDL90.Mode != "test" {
 		log.Printf("output mode=%s", cfg.GDL90.Mode)
 	}
-	if cfg.Sim.Ownship.Enable {
+	if cfg.Sim.Scenario.Enable {
+		log.Printf("sim scenario enabled path=%s start_time_utc=%s loop=%t", cfg.Sim.Scenario.Path, cfg.Sim.Scenario.StartTimeUTC, cfg.Sim.Scenario.Loop)
+	} else if cfg.Sim.Ownship.Enable {
 		log.Printf("sim ownship enabled center=(%.6f,%.6f)", cfg.Sim.Ownship.CenterLatDeg, cfg.Sim.Ownship.CenterLonDeg)
 	}
 
@@ -161,10 +163,71 @@ func main() {
 			return
 		}
 
+		// Scenario scripts are loaded once and then sampled deterministically each tick.
+		// This avoids wall-clock jitter affecting EFB behavior.
+		var scenario *sim.Scenario
+		var scenarioStartUTC time.Time
+		var scenarioOwnshipICAO [3]byte
+		var scenarioTrafficICAO [][3]byte
+		if cfg.Sim.Scenario.Enable {
+			startUTC, err := time.Parse(time.RFC3339, cfg.Sim.Scenario.StartTimeUTC)
+			if err != nil {
+				log.Printf("scenario start_time_utc parse failed: %v", err)
+				cancel()
+				return
+			}
+			scenarioStartUTC = startUTC
+
+			script, err := sim.LoadScenarioScript(cfg.Sim.Scenario.Path)
+			if err != nil {
+				log.Printf("scenario load failed: %v", err)
+				cancel()
+				return
+			}
+			sc, err := sim.NewScenario(script)
+			if err != nil {
+				log.Printf("scenario validate failed: %v", err)
+				cancel()
+				return
+			}
+			scenario = sc
+
+			ownICAO := strings.TrimSpace(script.Ownship.ICAO)
+			if ownICAO == "" {
+				ownICAO = "F00000"
+			}
+			icao, err := gdl90.ParseICAOHex(ownICAO)
+			if err != nil {
+				log.Printf("scenario invalid ownship icao %q: %v", ownICAO, err)
+				cancel()
+				return
+			}
+			scenarioOwnshipICAO = icao
+
+			scenarioTrafficICAO = make([][3]byte, len(script.Traffic))
+			for i := range script.Traffic {
+				icaoStr := strings.TrimSpace(script.Traffic[i].ICAO)
+				if icaoStr == "" {
+					// Deterministic, non-zero ICAO for each target.
+					// Keep it in the "self assigned" range (not necessarily valid ICAO).
+					scenarioTrafficICAO[i] = [3]byte{0xF1, 0x00, byte(i + 1)}
+					continue
+				}
+				p, err := gdl90.ParseICAOHex(icaoStr)
+				if err != nil {
+					log.Printf("scenario invalid traffic[%d] icao %q: %v", i, icaoStr, err)
+					cancel()
+					return
+				}
+				scenarioTrafficICAO[i] = p
+			}
+		}
+
 		ticker := time.NewTicker(cfg.GDL90.Interval)
 		defer ticker.Stop()
 
 		var seq uint64
+		var elapsed time.Duration
 		for {
 			select {
 			case <-ctx.Done():
@@ -181,8 +244,15 @@ func main() {
 						return
 					}
 				default:
-					now := time.Now()
-					frames := buildGDL90Frames(cfg, now.UTC())
+					var now time.Time
+					var frames [][]byte
+					if scenario != nil {
+						now = scenarioStartUTC.Add(elapsed)
+						frames = buildGDL90FramesFromScenario(cfg, now.UTC(), elapsed, scenario, scenarioOwnshipICAO, scenarioTrafficICAO)
+					} else {
+						now = time.Now()
+						frames = buildGDL90Frames(cfg, now.UTC())
+					}
 					for _, frame := range frames {
 						if rec != nil {
 							if err := rec.WriteFrame(now, frame); err != nil {
@@ -204,6 +274,9 @@ func main() {
 							return
 						}
 					}
+					if scenario != nil {
+						elapsed += cfg.GDL90.Interval
+					}
 				}
 			}
 		}
@@ -220,7 +293,7 @@ func buildGDL90Frames(cfg config.Config, now time.Time) [][]byte {
 	ahrsValid := cfg.Sim.Ownship.Enable
 	frames := make([][]byte, 0, 16)
 	frames = append(frames,
-		gdl90.HeartbeatFrame(gpsValid, false),
+		gdl90.HeartbeatFrameAt(now, gpsValid, false),
 		gdl90.StratuxHeartbeatFrame(gpsValid, ahrsValid),
 	)
 
@@ -245,22 +318,25 @@ func buildGDL90Frames(cfg config.Config, now time.Time) [][]byte {
 		RadiusNm:     cfg.Sim.Ownship.RadiusNm,
 		Period:       cfg.Sim.Ownship.Period,
 	}
-	lat, lon, trk := s.Position(now)
+	lat, lon, trk, altFeet, vvelFpm := s.Kinematics(now)
 	nacp := gdl90.NACpFromHorizontalAccuracyMeters(cfg.Sim.Ownship.GPSHorizontalAccuracyM)
 	frames = append(frames, gdl90.OwnshipReportFrame(gdl90.Ownship{
 		ICAO:        icao,
 		LatDeg:      lat,
 		LonDeg:      lon,
-		AltFeet:     cfg.Sim.Ownship.AltFeet,
+		AltFeet:     altFeet,
 		HaveNICNACp: true,
 		NIC:         8,
 		NACp:        nacp,
 		GroundKt:    cfg.Sim.Ownship.GroundKt,
 		TrackDeg:    trk,
+		OnGround:    cfg.Sim.Ownship.GroundKt == 0,
+		VvelFpm:     vvelFpm,
+		VvelValid:   true,
 		Callsign:    cfg.Sim.Ownship.Callsign,
 		Emitter:     0x01,
 	}))
-	frames = append(frames, gdl90.OwnshipGeometricAltitudeFrame(cfg.Sim.Ownship.AltFeet))
+	frames = append(frames, gdl90.OwnshipGeometricAltitudeFrame(altFeet))
 
 	// Stratux-like AHRS messages (sim-driven). Even without a real IMU, some
 	// EFBs expect to see these message types.
@@ -274,9 +350,9 @@ func buildGDL90Frames(cfg config.Config, now time.Time) [][]byte {
 		GLoad:                1.0,
 		IndicatedAirspeedKt:  cfg.Sim.Ownship.GroundKt,
 		TrueAirspeedKt:       cfg.Sim.Ownship.GroundKt,
-		PressureAltitudeFeet: float64(cfg.Sim.Ownship.AltFeet),
+		PressureAltitudeFeet: float64(altFeet),
 		PressureAltValid:     true,
-		VerticalSpeedFpm:     0,
+		VerticalSpeedFpm:     vvelFpm,
 		VerticalSpeedValid:   true,
 	}
 	frames = append(frames,
@@ -298,6 +374,9 @@ func buildGDL90Frames(cfg config.Config, now time.Time) [][]byte {
 	}
 	targets := ts.Targets(now, cfg.Sim.Traffic.Count)
 	for i, tgt := range targets {
+		if !tgt.Visible {
+			continue
+		}
 		// Deterministic, non-zero ICAO for each target.
 		// Keep it in the "self assigned" range (not necessarily valid ICAO).
 		icaoT := [3]byte{0xF1, 0x00, byte(i + 1)}
@@ -311,11 +390,99 @@ func buildGDL90Frames(cfg config.Config, now time.Time) [][]byte {
 			NACp:            8,
 			GroundKt:        tgt.GroundKt,
 			TrackDeg:        tgt.TrackDeg,
-			VvelFpm:         0,
-			OnGround:        false,
-			Extrapolated:    false,
+			VvelFpm:         tgt.VvelFpm,
+			OnGround:        tgt.GroundKt == 0,
+			Extrapolated:    tgt.Extrapolated,
 			EmitterCategory: 0x01,
 			Tail:            fmt.Sprintf("TGT%04d", i+1),
+			PriorityStatus:  0,
+		}))
+	}
+
+	return frames
+}
+
+func buildGDL90FramesFromScenario(cfg config.Config, now time.Time, elapsed time.Duration, scenario *sim.Scenario, ownshipICAO [3]byte, trafficICAO [][3]byte) [][]byte {
+	// Scenario is always deterministic and self-contained, so we advertise GPS/AHRS valid.
+	gpsValid := true
+	ahrsValid := true
+	frames := make([][]byte, 0, 16)
+	frames = append(frames,
+		gdl90.HeartbeatFrameAt(now, gpsValid, false),
+		gdl90.StratuxHeartbeatFrame(gpsValid, ahrsValid),
+	)
+	frames = append(frames, gdl90.ForeFlightIDFrame("Stratux", "Stratux-NG"))
+
+	if scenario == nil {
+		return frames
+	}
+	state := scenario.StateAt(elapsed, cfg.Sim.Scenario.Loop)
+
+	nacp := gdl90.NACpFromHorizontalAccuracyMeters(state.Ownship.GPSHorizontalAccuracyM)
+	call := state.Ownship.Callsign
+	if strings.TrimSpace(call) == "" {
+		call = "STRATUX"
+	}
+	frames = append(frames, gdl90.OwnshipReportFrame(gdl90.Ownship{
+		ICAO:        ownshipICAO,
+		LatDeg:      state.Ownship.LatDeg,
+		LonDeg:      state.Ownship.LonDeg,
+		AltFeet:     state.Ownship.AltFeet,
+		HaveNICNACp: true,
+		NIC:         8,
+		NACp:        nacp,
+		GroundKt:    state.Ownship.GroundKt,
+		TrackDeg:    state.Ownship.TrackDeg,
+		OnGround:    state.Ownship.GroundKt == 0,
+		Callsign:    call,
+		Emitter:     0x01,
+	}))
+	frames = append(frames, gdl90.OwnshipGeometricAltitudeFrame(state.Ownship.AltFeet))
+
+	att := gdl90.Attitude{
+		Valid:                ahrsValid,
+		RollDeg:              0,
+		PitchDeg:             0,
+		HeadingDeg:           state.Ownship.TrackDeg,
+		SlipSkidDeg:          0,
+		YawRateDps:           0,
+		GLoad:                1.0,
+		IndicatedAirspeedKt:  state.Ownship.GroundKt,
+		TrueAirspeedKt:       state.Ownship.GroundKt,
+		PressureAltitudeFeet: float64(state.Ownship.AltFeet),
+		PressureAltValid:     true,
+		VerticalSpeedFpm:     0,
+		VerticalSpeedValid:   true,
+	}
+	frames = append(frames,
+		gdl90.ForeFlightAHRSFrame(att),
+		gdl90.AHRSGDL90LEFrame(att),
+	)
+
+	for i, tgt := range state.Traffic {
+		tail := strings.TrimSpace(tgt.Callsign)
+		if tail == "" {
+			tail = fmt.Sprintf("TGT%04d", i+1)
+		}
+		icao := [3]byte{0xF1, 0x00, byte(i + 1)}
+		if i < len(trafficICAO) {
+			icao = trafficICAO[i]
+		}
+		frames = append(frames, gdl90.TrafficReportFrame(gdl90.Traffic{
+			AddrType:        0x00,
+			ICAO:            icao,
+			LatDeg:          tgt.LatDeg,
+			LonDeg:          tgt.LonDeg,
+			AltFeet:         tgt.AltFeet,
+			NIC:             8,
+			NACp:            8,
+			GroundKt:        tgt.GroundKt,
+			TrackDeg:        tgt.TrackDeg,
+			VvelFpm:         0,
+			OnGround:        tgt.GroundKt == 0,
+			Extrapolated:    false,
+			EmitterCategory: 0x01,
+			Tail:            tail,
 			PriorityStatus:  0,
 		}))
 	}

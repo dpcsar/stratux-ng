@@ -1,0 +1,48 @@
+# Single-purpose scenario: altitude edge cases.
+#
+# Goal: isolate altitude encoding behavior:
+# - valid high altitude near limit
+# - invalid high altitude (>101350 => 0xFFF sentinel)
+# - valid negative altitude (-500)
+# - invalid negative altitude (<-1000 => 0xFFF sentinel)
+
+version: 1
+duration: 20s
+
+ownship:
+  icao: "F00000"
+  callsign: "ALTINV"
+  gps_horizontal_accuracy_m: 50
+  keyframes:
+    - t: 0s
+      lat_deg: 45.0000
+      lon_deg: -122.0000
+      alt_feet: 101000
+      ground_kt: 120
+      track_deg: 90
+    - t: 5s
+      lat_deg: 45.0000
+      lon_deg: -122.0000
+      alt_feet: 105000
+      ground_kt: 120
+      track_deg: 90
+    - t: 10s
+      lat_deg: 45.0000
+      lon_deg: -122.0000
+      alt_feet: -500
+      ground_kt: 120
+      track_deg: 90
+    - t: 15s
+      lat_deg: 45.0000
+      lon_deg: -122.0000
+      alt_feet: -1500
+      ground_kt: 120
+      track_deg: 90
+    - t: 20s
+      lat_deg: 45.0000
+      lon_deg: -122.0000
+      alt_feet: 101000
+      ground_kt: 120
+      track_deg: 90
+
+traffic: []
