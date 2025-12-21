@@ -5,19 +5,33 @@ import (
 	"net"
 )
 
+type udpConn interface {
+	Write(p []byte) (int, error)
+	Close() error
+}
+
+type udpDialer func(network string, laddr, raddr *net.UDPAddr) (udpConn, error)
+type udpResolver func(network, address string) (*net.UDPAddr, error)
+
 type Broadcaster struct {
 	dest string
-	conn *net.UDPConn
+	conn udpConn
 }
 
 func NewBroadcaster(dest string) (*Broadcaster, error) {
-	addr, err := net.ResolveUDPAddr("udp", dest)
+	return newBroadcaster(dest, net.ResolveUDPAddr, func(network string, laddr, raddr *net.UDPAddr) (udpConn, error) {
+		return net.DialUDP(network, laddr, raddr)
+	})
+}
+
+func newBroadcaster(dest string, resolve udpResolver, dial udpDialer) (*Broadcaster, error) {
+	addr, err := resolve("udp", dest)
 	if err != nil {
 		return nil, fmt.Errorf("resolve dest: %w", err)
 	}
 
 	// DialUDP selects a suitable local address automatically.
-	conn, err := net.DialUDP("udp", nil, addr)
+	conn, err := dial("udp", nil, addr)
 	if err != nil {
 		return nil, fmt.Errorf("dial udp: %w", err)
 	}
