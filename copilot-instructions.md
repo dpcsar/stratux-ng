@@ -1,5 +1,15 @@
 # Copilot instructions (Stratux‑NG)
 
+## Target hardware (current)
+- Primary dev target: Raspberry Pi 5 (64-bit / arm64).
+- Must also work on: Raspberry Pi 4 (64-bit / arm64) and Raspberry Pi 3 (64-bit / arm64).
+- AHRS hardware: “Stratux AHRS 2.0” (the same AHRS + fan-control add-on used by upstream Stratux).
+  - Implementation should mirror upstream Stratux’s I2C probing/behavior as closely as practical.
+  - Upstream Stratux supports IMU detection on I2C address `0x68` (e.g., ICM-20948 and MPU-9250 family) and commonly uses an onboard pressure sensor (e.g., BMP280) when present.
+  - Fan-control is in-scope for this project.
+    - Upstream Stratux implements fan control as a separate component (`fancontrol_main/`); mirror that behavior and defaults as closely as practical.
+    - Prefer a robust, Pi-compatible implementation (Pi 3/4/5 on 64-bit) with safe failover (e.g., default fan ON on failure).
+
 ## Ground truth / reference implementation
 - When you need to confirm protocol details, message layouts, bit fields, default values, or ecosystem quirks, **search the upstream Stratux repository first**:
   - Use the GitHub repo search tool against `stratux/stratux`.

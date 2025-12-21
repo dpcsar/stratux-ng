@@ -28,6 +28,12 @@
   const stRecord = document.getElementById('st-record');
   const stReplay = document.getElementById('st-replay');
 
+  const attValid = document.getElementById('att-valid');
+  const attRoll = document.getElementById('att-roll');
+  const attPitch = document.getElementById('att-pitch');
+  const attHeading = document.getElementById('att-heading');
+  const attUpdated = document.getElementById('att-updated');
+
   const settingsForm = document.getElementById('settings-form');
   const saveMsg = document.getElementById('save-msg');
   const setGDL90Dest = document.getElementById('set-gdl90-dest');
@@ -194,6 +200,21 @@
     setChecked(stReplay, !!sim.replay);
   }
 
+  function fmtNum(x, digits = 1) {
+    const n = Number(x);
+    if (!Number.isFinite(n)) return '';
+    return n.toFixed(digits);
+  }
+
+  function setAttitudeText(s) {
+    const a = s?.attitude || {};
+    setInput(attValid, a.valid ? 'true' : 'false');
+    setInput(attRoll, a.roll_deg == null ? '' : fmtNum(a.roll_deg, 1));
+    setInput(attPitch, a.pitch_deg == null ? '' : fmtNum(a.pitch_deg, 1));
+    setInput(attHeading, a.heading_deg == null ? '' : fmtNum(a.heading_deg, 1));
+    setInput(attUpdated, a.last_update_utc || '');
+  }
+
   async function loadSettings() {
     saveMsg.textContent = '';
     try {
@@ -247,6 +268,7 @@
       }
       const s = await resp.json();
       setStatusText(s);
+      setAttitudeText(s);
       if (subtitle) subtitle.textContent = 'Connected';
     } catch {
       if (subtitle) subtitle.textContent = 'Disconnected';

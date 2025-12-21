@@ -23,6 +23,68 @@ import (
 	"stratux-ng/internal/web"
 )
 
+func decodeAttitudeFromFrames(frames [][]byte) web.AttitudeSnapshot {
+	var out web.AttitudeSnapshot
+
+	// Prefer the LE report (it carries heading), but fall back to the ForeFlight AHRS message.
+	var haveLE bool
+	var haveFF bool
+
+	for _, frame := range frames {
+		msg, crcOK, err := gdl90.Unframe(frame)
+		if err != nil || !crcOK || len(msg) == 0 {
+			continue
+		}
+
+		// Stratux heartbeat: bit0 = AHRS valid.
+		if msg[0] == 0xCC && len(msg) >= 2 {
+			out.Valid = (msg[1] & 0x01) != 0
+		}
+
+		// ForeFlight AHRS: 0x65, sub-id 0x01.
+		if msg[0] == 0x65 && len(msg) >= 12 && msg[1] == 0x01 {
+			roll := int16(msg[2])<<8 | int16(msg[3])
+			pitch := int16(msg[4])<<8 | int16(msg[5])
+			if roll != int16(0x7FFF) {
+				v := float64(roll) / 10.0
+				out.RollDeg = &v
+			}
+			if pitch != int16(0x7FFF) {
+				v := float64(pitch) / 10.0
+				out.PitchDeg = &v
+			}
+			haveFF = true
+			continue
+		}
+
+		// Stratux LE AHRS report: starts with 0x4C 0x45 0x01 0x01.
+		if len(msg) >= 24 && msg[0] == 0x4C && msg[1] == 0x45 && msg[2] == 0x01 && msg[3] == 0x01 {
+			roll := int16(msg[4])<<8 | int16(msg[5])
+			pitch := int16(msg[6])<<8 | int16(msg[7])
+			hdg := int16(msg[8])<<8 | int16(msg[9])
+			if roll != int16(0x7FFF) {
+				v := float64(roll) / 10.0
+				out.RollDeg = &v
+			}
+			if pitch != int16(0x7FFF) {
+				v := float64(pitch) / 10.0
+				out.PitchDeg = &v
+			}
+			if hdg != int16(0x7FFF) {
+				v := float64(hdg) / 10.0
+				out.HeadingDeg = &v
+			}
+			haveLE = true
+			continue
+		}
+	}
+
+	// If we only found FF and not LE, Heading will typically be absent; that's ok.
+	_ = haveFF
+	_ = haveLE
+	return out
+}
+
 type ctxSleeper struct{ ctx context.Context }
 
 func (cs ctxSleeper) Sleep(d time.Duration) {
@@ -306,6 +368,7 @@ func main() {
 						now = time.Now()
 						frames = buildGDL90Frames(cfg, now.UTC())
 					}
+					status.SetAttitude(now.UTC(), decodeAttitudeFromFrames(frames))
 					status.MarkTick(now.UTC(), len(frames))
 					for _, frame := range frames {
 						if rec != nil {

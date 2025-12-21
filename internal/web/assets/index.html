@@ -22,7 +22,43 @@
     <main id="content" class="content" role="main">
       <section id="view-attitude" class="view" aria-label="Attitude">
         <h2>Attitude</h2>
-        <p class="muted">Coming soon. This area will show attitude and basic flight instruments.</p>
+        <p class="muted">Debug/verification readout from <a href="/api/status">/api/status</a>. Not a flight instrument.</p>
+        <div class="card">
+          <div class="formrow">
+            <label class="control">
+              <span>AHRS valid</span>
+              <input id="att-valid" type="text" readonly />
+            </label>
+          </div>
+
+          <div class="formrow">
+            <label class="control">
+              <span>Roll (deg)</span>
+              <input id="att-roll" type="text" readonly />
+            </label>
+          </div>
+
+          <div class="formrow">
+            <label class="control">
+              <span>Pitch (deg)</span>
+              <input id="att-pitch" type="text" readonly />
+            </label>
+          </div>
+
+          <div class="formrow">
+            <label class="control">
+              <span>Heading (deg)</span>
+              <input id="att-heading" type="text" readonly />
+            </label>
+          </div>
+
+          <div class="formrow">
+            <label class="control">
+              <span>Last update (UTC)</span>
+              <input id="att-updated" type="text" readonly />
+            </label>
+          </div>
+        </div>
       </section>
 
       <section id="view-radar" class="view" aria-label="Radar">
