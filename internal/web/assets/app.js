@@ -37,6 +37,7 @@
   const settingsForm = document.getElementById('settings-form');
   const saveMsg = document.getElementById('save-msg');
   const setGDL90Dest = document.getElementById('set-gdl90-dest');
+  const setIntervalInput = document.getElementById('set-interval');
   const setOwnshipEnable = document.getElementById('set-ownship-enable');
   const setTrafficEnable = document.getElementById('set-traffic-enable');
   const setScenarioEnable = document.getElementById('set-scenario-enable');
@@ -223,6 +224,7 @@
       const p = await resp.json();
 
       setGDL90Dest.value = p.gdl90_dest || '';
+      if (setIntervalInput) setIntervalInput.value = p.interval || '';
       setOwnshipEnable.checked = !!p.ownship_enable;
       setTrafficEnable.checked = !!p.traffic_enable;
       setScenarioEnable.checked = !!p.scenario_enable;
@@ -238,6 +240,7 @@
     saveMsg.textContent = 'Saving…';
     const payload = {
       gdl90_dest: setGDL90Dest.value,
+      interval: setIntervalInput ? setIntervalInput.value : '',
       ownship_enable: !!setOwnshipEnable.checked,
       traffic_enable: !!setTrafficEnable.checked,
       scenario_enable: !!setScenarioEnable.checked,
@@ -253,7 +256,7 @@
       });
       const text = await resp.text();
       if (!resp.ok) throw new Error(text || `save ${resp.status}`);
-      saveMsg.textContent = 'Saved. Restart required.';
+      saveMsg.textContent = 'Saved and applied.';
     } catch (e) {
       saveMsg.textContent = `Save failed: ${String(e)}`;
     }
@@ -277,8 +280,7 @@
 
   // Initial view.
   const initial = (location.hash || '#map').slice(1);
-  const compat = initial === 'ahrs' ? 'attitude' : initial;
-  setView(['attitude', 'radar', 'map', 'status', 'settings', 'logs', 'about'].includes(compat) ? compat : 'map');
+  setView(['attitude', 'radar', 'map', 'status', 'settings', 'logs', 'about'].includes(initial) ? initial : 'map');
   logsRefresh?.addEventListener('click', loadLogs);
   logsTail?.addEventListener('change', loadLogs);
 

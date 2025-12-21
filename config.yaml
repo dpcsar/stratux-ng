@@ -13,7 +13,7 @@ gdl90:
         loop: false
 sim:
     ownship:
-        enable: false
+        enable: true
         center_lat_deg: 45.5404
         center_lon_deg: -122.9498
         alt_feet: 3000

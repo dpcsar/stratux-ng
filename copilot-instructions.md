@@ -78,6 +78,11 @@
   - `configs/` templates when the recommended config changes.
 - Keep docs consistent with shipped defaults (especially ports, IP ranges, and message types sent).
 
+## Backwards compatibility policy (project-wide)
+- Prefer simple, forward-only behavior across the repo: do not keep backwards-compatibility shims, aliases, or legacy fallbacks in APIs, config, CLI flags, or UI.
+- When changing any external interface (HTTP routes/payloads, config schema, CLI flags, log formats), update callers and docs in lockstep and add/adjust tests.
+- Interoperability goals (e.g., matching Stratux quirks for EFB/GDL90 consumption) are separate from backwards-compatibility shims inside this project.
+
 ## Repo conventions
 - Don’t add license headers unless explicitly requested.
 - Keep documentation changes in `README.md` or `docs/`.

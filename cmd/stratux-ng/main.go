@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -25,10 +26,6 @@ import (
 
 func decodeAttitudeFromFrames(frames [][]byte) web.AttitudeSnapshot {
 	var out web.AttitudeSnapshot
-
-	// Prefer the LE report (it carries heading), but fall back to the ForeFlight AHRS message.
-	var haveLE bool
-	var haveFF bool
 
 	for _, frame := range frames {
 		msg, crcOK, err := gdl90.Unframe(frame)
@@ -53,7 +50,6 @@ func decodeAttitudeFromFrames(frames [][]byte) web.AttitudeSnapshot {
 				v := float64(pitch) / 10.0
 				out.PitchDeg = &v
 			}
-			haveFF = true
 			continue
 		}
 
@@ -74,14 +70,9 @@ func decodeAttitudeFromFrames(frames [][]byte) web.AttitudeSnapshot {
 				v := float64(hdg) / 10.0
 				out.HeadingDeg = &v
 			}
-			haveLE = true
 			continue
 		}
 	}
-
-	// If we only found FF and not LE, Heading will typically be absent; that's ok.
-	_ = haveFF
-	_ = haveLE
 	return out
 }
 
@@ -103,6 +94,115 @@ func (cs ctxSleeper) Sleep(d time.Duration) {
 
 type replayOpener func(path string) (io.ReadCloser, error)
 type frameSender func(frame []byte) error
+
+type applyRequest struct {
+	cfg  config.Config
+	resp chan error
+}
+
+type safeBroadcaster struct {
+	mu sync.Mutex
+	b  *udp.Broadcaster
+}
+
+func (s *safeBroadcaster) Send(payload []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	b := s.b
+	if b == nil {
+		return errors.New("udp broadcaster is nil")
+	}
+	return b.Send(payload)
+}
+
+func (s *safeBroadcaster) Swap(next *udp.Broadcaster) {
+	s.mu.Lock()
+	old := s.b
+	s.b = next
+	if old != nil {
+		_ = old.Close()
+	}
+	s.mu.Unlock()
+}
+
+func (s *safeBroadcaster) Close() {
+	s.mu.Lock()
+	old := s.b
+	s.b = nil
+	if old != nil {
+		_ = old.Close()
+	}
+	s.mu.Unlock()
+}
+
+type scenarioRuntime struct {
+	scenario    *sim.Scenario
+	startUTC    time.Time
+	ownshipICAO [3]byte
+	trafficICAO [][3]byte
+	elapsed     time.Duration
+}
+
+func simInfoSnapshot(resolvedConfigPath string, cfg config.Config) map[string]any {
+	return map[string]any{
+		"config_path": resolvedConfigPath,
+		"scenario":    cfg.Sim.Scenario.Enable,
+		"ownship":     cfg.Sim.Ownship.Enable,
+		"traffic":     cfg.Sim.Traffic.Enable,
+		"record":      cfg.GDL90.Record.Enable,
+		"replay":      cfg.GDL90.Replay.Enable,
+	}
+}
+
+func loadScenarioFromConfig(cfg config.Config) (scenarioRuntime, error) {
+	var rt scenarioRuntime
+	if !cfg.Sim.Scenario.Enable {
+		return rt, nil
+	}
+	startUTC, err := time.Parse(time.RFC3339, cfg.Sim.Scenario.StartTimeUTC)
+	if err != nil {
+		return scenarioRuntime{}, fmt.Errorf("scenario start_time_utc parse failed: %w", err)
+	}
+	script, err := sim.LoadScenarioScript(cfg.Sim.Scenario.Path)
+	if err != nil {
+		return scenarioRuntime{}, fmt.Errorf("scenario load failed: %w", err)
+	}
+	sc, err := sim.NewScenario(script)
+	if err != nil {
+		return scenarioRuntime{}, fmt.Errorf("scenario validate failed: %w", err)
+	}
+
+	rt.scenario = sc
+	rt.startUTC = startUTC
+
+	ownICAO := strings.TrimSpace(script.Ownship.ICAO)
+	if ownICAO == "" {
+		ownICAO = "F00000"
+	}
+	icao, err := gdl90.ParseICAOHex(ownICAO)
+	if err != nil {
+		return scenarioRuntime{}, fmt.Errorf("scenario invalid ownship icao %q: %w", ownICAO, err)
+	}
+	rt.ownshipICAO = icao
+
+	rt.trafficICAO = make([][3]byte, len(script.Traffic))
+	for i := range script.Traffic {
+		icaoStr := strings.TrimSpace(script.Traffic[i].ICAO)
+		if icaoStr == "" {
+			// Deterministic, non-zero ICAO for each target.
+			// Keep it in the "self assigned" range (not necessarily valid ICAO).
+			rt.trafficICAO[i] = [3]byte{0xF1, 0x00, byte(i + 1)}
+			continue
+		}
+		p, err := gdl90.ParseICAOHex(icaoStr)
+		if err != nil {
+			return scenarioRuntime{}, fmt.Errorf("scenario invalid traffic[%d] icao %q: %w", i, icaoStr, err)
+		}
+		rt.trafficICAO[i] = p
+	}
+
+	return rt, nil
+}
 
 func runReplay(ctx context.Context, cfg config.Config, open replayOpener, send frameSender) error {
 	if open == nil {
@@ -212,18 +312,27 @@ func main() {
 	log.SetOutput(io.MultiWriter(os.Stdout, logBuf))
 
 	status := web.NewStatus()
-	status.SetStatic(cfg.GDL90.Mode, cfg.GDL90.Dest, cfg.GDL90.Interval.String(), map[string]any{
-		"config_path": resolvedConfigPath,
-		"scenario":    cfg.Sim.Scenario.Enable,
-		"ownship":     cfg.Sim.Ownship.Enable,
-		"traffic":     cfg.Sim.Traffic.Enable,
-		"record":      cfg.GDL90.Record.Enable,
-		"replay":      cfg.GDL90.Replay.Enable,
-	})
+	status.SetStatic(cfg.GDL90.Mode, cfg.GDL90.Dest, cfg.GDL90.Interval.String(), simInfoSnapshot(resolvedConfigPath, cfg))
+
+	applyCh := make(chan applyRequest)
+	applyFunc := func(nextCfg config.Config) error {
+		req := applyRequest{cfg: nextCfg, resp: make(chan error, 1)}
+		select {
+		case applyCh <- req:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		select {
+		case err := <-req.resp:
+			return err
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 
 	log.Printf("web ui enabled listen=%s", cfg.Web.Listen)
 	go func() {
-		err := web.Serve(ctx, cfg.Web.Listen, status, web.SettingsStore{ConfigPath: resolvedConfigPath}, logBuf)
+		err := web.Serve(ctx, cfg.Web.Listen, status, web.SettingsStore{ConfigPath: resolvedConfigPath, Apply: applyFunc}, logBuf)
 		if err != nil && ctx.Err() == nil {
 			if errors.Is(err, syscall.EACCES) {
 				log.Printf("web ui bind failed (permission denied) listen=%s: %v", cfg.Web.Listen, err)
@@ -236,12 +345,6 @@ func main() {
 			cancel()
 		}
 	}()
-
-	broadcaster, err := udp.NewBroadcaster(cfg.GDL90.Dest)
-	if err != nil {
-		log.Fatalf("udp broadcaster init failed: %v", err)
-	}
-	defer broadcaster.Close()
 
 	var rec *replay.Writer
 	if cfg.GDL90.Record.Enable {
@@ -258,6 +361,13 @@ func main() {
 		log.Printf("recording enabled path=%s", cfg.GDL90.Record.Path)
 	}
 
+	initialBroadcaster, err := udp.NewBroadcaster(cfg.GDL90.Dest)
+	if err != nil {
+		log.Fatalf("udp broadcaster init failed: %v", err)
+	}
+	sender := &safeBroadcaster{b: initialBroadcaster}
+	defer sender.Close()
+
 	log.Printf("stratux-ng starting")
 	log.Printf("udp dest=%s interval=%s", cfg.GDL90.Dest, cfg.GDL90.Interval)
 	if cfg.GDL90.Mode != "test" {
@@ -270,105 +380,61 @@ func main() {
 	}
 
 	go func() {
-		if cfg.GDL90.Replay.Enable {
-			log.Printf("replay enabled path=%s speed=%.3gx loop=%t", cfg.GDL90.Replay.Path, cfg.GDL90.Replay.Speed, cfg.GDL90.Replay.Loop)
-			err := runReplay(ctx, cfg, nil, broadcaster.Send)
-			if err != nil && ctx.Err() == nil {
-				log.Printf("replay stopped: %v", err)
-				cancel()
-			}
+		rt, err := newLiveRuntime(cfg, resolvedConfigPath, status, sender)
+		if err != nil {
+			log.Printf("runtime init failed: %v", err)
+			cancel()
 			return
 		}
+		defer rt.Close()
 
-		// Scenario scripts are loaded once and then sampled deterministically each tick.
-		// This avoids wall-clock jitter affecting EFB behavior.
-		var scenario *sim.Scenario
-		var scenarioStartUTC time.Time
-		var scenarioOwnshipICAO [3]byte
-		var scenarioTrafficICAO [][3]byte
-		if cfg.Sim.Scenario.Enable {
-			startUTC, err := time.Parse(time.RFC3339, cfg.Sim.Scenario.StartTimeUTC)
-			if err != nil {
-				log.Printf("scenario start_time_utc parse failed: %v", err)
-				cancel()
-				return
-			}
-			scenarioStartUTC = startUTC
-
-			script, err := sim.LoadScenarioScript(cfg.Sim.Scenario.Path)
-			if err != nil {
-				log.Printf("scenario load failed: %v", err)
-				cancel()
-				return
-			}
-			sc, err := sim.NewScenario(script)
-			if err != nil {
-				log.Printf("scenario validate failed: %v", err)
-				cancel()
-				return
-			}
-			scenario = sc
-
-			ownICAO := strings.TrimSpace(script.Ownship.ICAO)
-			if ownICAO == "" {
-				ownICAO = "F00000"
-			}
-			icao, err := gdl90.ParseICAOHex(ownICAO)
-			if err != nil {
-				log.Printf("scenario invalid ownship icao %q: %v", ownICAO, err)
-				cancel()
-				return
-			}
-			scenarioOwnshipICAO = icao
-
-			scenarioTrafficICAO = make([][3]byte, len(script.Traffic))
-			for i := range script.Traffic {
-				icaoStr := strings.TrimSpace(script.Traffic[i].ICAO)
-				if icaoStr == "" {
-					// Deterministic, non-zero ICAO for each target.
-					// Keep it in the "self assigned" range (not necessarily valid ICAO).
-					scenarioTrafficICAO[i] = [3]byte{0xF1, 0x00, byte(i + 1)}
-					continue
-				}
-				p, err := gdl90.ParseICAOHex(icaoStr)
-				if err != nil {
-					log.Printf("scenario invalid traffic[%d] icao %q: %v", i, icaoStr, err)
+		// Replay sender runs separately so we can still accept live updates.
+		if rt.Config().GDL90.Replay.Enable {
+			cur := rt.Config()
+			log.Printf("replay enabled path=%s speed=%.3gx loop=%t", cur.GDL90.Replay.Path, cur.GDL90.Replay.Speed, cur.GDL90.Replay.Loop)
+			go func() {
+				err := runReplay(ctx, cur, nil, sender.Send)
+				if err != nil && ctx.Err() == nil {
+					log.Printf("replay stopped: %v", err)
 					cancel()
-					return
 				}
-				scenarioTrafficICAO[i] = p
-			}
+			}()
 		}
 
-		ticker := time.NewTicker(cfg.GDL90.Interval)
-		defer ticker.Stop()
-
 		var seq uint64
-		var elapsed time.Duration
 		for {
+			tickC := rt.TickChan()
 			select {
 			case <-ctx.Done():
 				return
-			case <-ticker.C:
+			case req := <-applyCh:
+				err := rt.Apply(req.cfg)
+				req.resp <- err
+			case <-tickC:
+				curCfg := rt.Config()
+				if curCfg.GDL90.Replay.Enable {
+					// Replay mode doesn't use the tick loop.
+					continue
+				}
 				seq++
-
-				switch cfg.GDL90.Mode {
+				switch curCfg.GDL90.Mode {
 				case "test":
-					p := []byte(fmt.Sprintf("%s seq=%d ts=%s", cfg.GDL90.TestPayload, seq, time.Now().UTC().Format(time.RFC3339Nano)))
-					if err := broadcaster.Send(p); err != nil {
+					p := []byte(fmt.Sprintf("%s seq=%d ts=%s", curCfg.GDL90.TestPayload, seq, time.Now().UTC().Format(time.RFC3339Nano)))
+					if err := sender.Send(p); err != nil {
 						log.Printf("udp send failed: %v", err)
 						cancel()
 						return
 					}
 				default:
+					sc := rt.Scenario()
 					var now time.Time
 					var frames [][]byte
-					if scenario != nil {
-						now = scenarioStartUTC.Add(elapsed)
-						frames = buildGDL90FramesFromScenario(cfg, now.UTC(), elapsed, scenario, scenarioOwnshipICAO, scenarioTrafficICAO)
+					if sc != nil && sc.scenario != nil {
+						now = sc.startUTC.Add(sc.elapsed)
+						frames = buildGDL90FramesFromScenario(curCfg, now.UTC(), sc.elapsed, sc.scenario, sc.ownshipICAO, sc.trafficICAO)
 					} else {
 						now = time.Now()
-						frames = buildGDL90Frames(cfg, now.UTC())
+						frames = buildGDL90Frames(curCfg, now.UTC())
 					}
 					status.SetAttitude(now.UTC(), decodeAttitudeFromFrames(frames))
 					status.MarkTick(now.UTC(), len(frames))
@@ -380,7 +446,7 @@ func main() {
 								return
 							}
 						}
-						if err := broadcaster.Send(frame); err != nil {
+						if err := sender.Send(frame); err != nil {
 							log.Printf("udp send failed: %v", err)
 							cancel()
 							return
@@ -393,8 +459,8 @@ func main() {
 							return
 						}
 					}
-					if scenario != nil {
-						elapsed += cfg.GDL90.Interval
+					if sc != nil && sc.scenario != nil {
+						sc.elapsed += curCfg.GDL90.Interval
 					}
 				}
 			}

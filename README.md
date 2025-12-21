@@ -11,7 +11,7 @@ This is a **new implementation** (new repository) with a modular architecture an
 - **SDR inputs**
   - **1090 MHz ADS‑B / Mode S** via external decoder (e.g., `readsb`)
   - **978 MHz UAT** via external decoder (e.g., `dump978`)
-  - Support for “Nano 2/3” RTL-SDR-class devices and legacy Stratux-compatible hardware
+  - Support for “Nano 2/3” RTL-SDR-class devices and Stratux-compatible hardware
 - **Sensors**
   - **GPS** (USB/serial; NMEA or gpsd-backed)
   - **AHRS/IMU** (Stratux-class sensors; integration planned)

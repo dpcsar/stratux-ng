@@ -40,8 +40,8 @@ func Handler(status *Status, settings SettingsStore, logs *LogBuffer) http.Handl
 		_, _ = w.Write([]byte("\n"))
 	})
 
-	// Settings API (read/write YAML config). Changes require restart to take effect.
-	// Kept intentionally small for the first UI iteration.
+	// Settings API (read/write YAML config). Changes are applied immediately when supported.
+	// Kept intentionally small.
 	mux.Handle("/api/settings", settings.Handler())
 
 	if logs != nil {
