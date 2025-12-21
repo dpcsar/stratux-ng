@@ -117,7 +117,6 @@ Stratux-NG can record the *framed* GDL90 UDP packets it emits, then replay them 
 
 Notes:
 - Record and replay are mutually exclusive.
-- Recording and replay are only supported in `gdl90.mode: gdl90` (not `gdl90.mode: test`).
 - When `sim.scenario.enable: true`, recording timestamps are derived from the scenario time base (relative to the first emitted frame), so replays preserve scenario timing.
 
 ### CLI overrides

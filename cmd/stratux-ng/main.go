@@ -147,7 +147,6 @@ func simInfoSnapshot(resolvedConfigPath string, cfg config.Config) map[string]an
 	return map[string]any{
 		"config_path": resolvedConfigPath,
 		"scenario":    cfg.Sim.Scenario.Enable,
-		"ownship":     cfg.Sim.Ownship.Enable,
 		"traffic":     cfg.Sim.Traffic.Enable,
 		"record":      cfg.GDL90.Record.Enable,
 		"replay":      cfg.GDL90.Replay.Enable,
@@ -312,7 +311,7 @@ func main() {
 	log.SetOutput(io.MultiWriter(os.Stdout, logBuf))
 
 	status := web.NewStatus()
-	status.SetStatic(cfg.GDL90.Mode, cfg.GDL90.Dest, cfg.GDL90.Interval.String(), simInfoSnapshot(resolvedConfigPath, cfg))
+	status.SetStatic(cfg.GDL90.Dest, cfg.GDL90.Interval.String(), simInfoSnapshot(resolvedConfigPath, cfg))
 
 	applyCh := make(chan applyRequest)
 	applyFunc := func(nextCfg config.Config) error {
@@ -370,12 +369,9 @@ func main() {
 
 	log.Printf("stratux-ng starting")
 	log.Printf("udp dest=%s interval=%s", cfg.GDL90.Dest, cfg.GDL90.Interval)
-	if cfg.GDL90.Mode != "test" {
-		log.Printf("output mode=%s", cfg.GDL90.Mode)
-	}
 	if cfg.Sim.Scenario.Enable {
 		log.Printf("sim scenario enabled path=%s start_time_utc=%s loop=%t", cfg.Sim.Scenario.Path, cfg.Sim.Scenario.StartTimeUTC, cfg.Sim.Scenario.Loop)
-	} else if cfg.Sim.Ownship.Enable {
+	} else {
 		log.Printf("sim ownship enabled center=(%.6f,%.6f)", cfg.Sim.Ownship.CenterLatDeg, cfg.Sim.Ownship.CenterLonDeg)
 	}
 
@@ -417,51 +413,41 @@ func main() {
 					continue
 				}
 				seq++
-				switch curCfg.GDL90.Mode {
-				case "test":
-					p := []byte(fmt.Sprintf("%s seq=%d ts=%s", curCfg.GDL90.TestPayload, seq, time.Now().UTC().Format(time.RFC3339Nano)))
-					if err := sender.Send(p); err != nil {
+				sc := rt.Scenario()
+				var now time.Time
+				var frames [][]byte
+				if sc != nil && sc.scenario != nil {
+					now = sc.startUTC.Add(sc.elapsed)
+					frames = buildGDL90FramesFromScenario(curCfg, now.UTC(), sc.elapsed, sc.scenario, sc.ownshipICAO, sc.trafficICAO)
+				} else {
+					now = time.Now()
+					frames = buildGDL90Frames(curCfg, now.UTC())
+				}
+				status.SetAttitude(now.UTC(), decodeAttitudeFromFrames(frames))
+				status.MarkTick(now.UTC(), len(frames))
+				for _, frame := range frames {
+					if rec != nil {
+						if err := rec.WriteFrame(now, frame); err != nil {
+							log.Printf("record write failed: %v", err)
+							cancel()
+							return
+						}
+					}
+					if err := sender.Send(frame); err != nil {
 						log.Printf("udp send failed: %v", err)
 						cancel()
 						return
 					}
-				default:
-					sc := rt.Scenario()
-					var now time.Time
-					var frames [][]byte
-					if sc != nil && sc.scenario != nil {
-						now = sc.startUTC.Add(sc.elapsed)
-						frames = buildGDL90FramesFromScenario(curCfg, now.UTC(), sc.elapsed, sc.scenario, sc.ownshipICAO, sc.trafficICAO)
-					} else {
-						now = time.Now()
-						frames = buildGDL90Frames(curCfg, now.UTC())
+				}
+				if rec != nil {
+					if err := rec.Flush(); err != nil {
+						log.Printf("record flush failed: %v", err)
+						cancel()
+						return
 					}
-					status.SetAttitude(now.UTC(), decodeAttitudeFromFrames(frames))
-					status.MarkTick(now.UTC(), len(frames))
-					for _, frame := range frames {
-						if rec != nil {
-							if err := rec.WriteFrame(now, frame); err != nil {
-								log.Printf("record write failed: %v", err)
-								cancel()
-								return
-							}
-						}
-						if err := sender.Send(frame); err != nil {
-							log.Printf("udp send failed: %v", err)
-							cancel()
-							return
-						}
-					}
-					if rec != nil {
-						if err := rec.Flush(); err != nil {
-							log.Printf("record flush failed: %v", err)
-							cancel()
-							return
-						}
-					}
-					if sc != nil && sc.scenario != nil {
-						sc.elapsed += curCfg.GDL90.Interval
-					}
+				}
+				if sc != nil && sc.scenario != nil {
+					sc.elapsed += curCfg.GDL90.Interval
 				}
 			}
 		}
@@ -519,10 +505,10 @@ func runListen(ctx context.Context, addr string, dumpHex bool) error {
 }
 
 func buildGDL90Frames(cfg config.Config, now time.Time) [][]byte {
-	// If the ownship simulator is enabled, we advertise GPS as valid so EFBs
-	// don't show "No GPS reception".
-	gpsValid := cfg.Sim.Ownship.Enable
-	ahrsValid := cfg.Sim.Ownship.Enable
+	// Ownship sim is always enabled (unless scenario mode is driving frames).
+	// Advertise GPS/AHRS as valid so EFBs don't show "No GPS reception".
+	gpsValid := true
+	ahrsValid := true
 	frames := make([][]byte, 0, 16)
 	frames = append(frames,
 		gdl90.HeartbeatFrameAt(now, gpsValid, false),
@@ -532,13 +518,9 @@ func buildGDL90Frames(cfg config.Config, now time.Time) [][]byte {
 	// Identify as a Stratux-like device for apps that key off 0x65.
 	frames = append(frames, gdl90.ForeFlightIDFrame("Stratux", "Stratux-NG"))
 
-	if !cfg.Sim.Ownship.Enable {
-		return frames
-	}
-
 	icao, err := gdl90.ParseICAOHex(cfg.Sim.Ownship.ICAO)
 	if err != nil {
-		log.Printf("sim ownship disabled: invalid sim.ownship.icao: %v", err)
+		log.Printf("sim ownship invalid sim.ownship.icao: %v", err)
 		return frames
 	}
 

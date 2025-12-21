@@ -1,8 +1,6 @@
 gdl90:
     dest: 192.168.10.255:4000
     interval: 1s
-    mode: gdl90
-    test_payload: STRATUX-NG TEST
     record:
         enable: false
         path: ./gdl90-record.log
@@ -13,7 +11,6 @@ gdl90:
         loop: false
 sim:
     ownship:
-        enable: true
         center_lat_deg: 45.5404
         center_lon_deg: -122.9498
         alt_feet: 3000

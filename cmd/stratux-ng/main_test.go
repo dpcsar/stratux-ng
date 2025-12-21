@@ -48,11 +48,9 @@ func TestBuildGDL90Frames_SimOwnshipAndTrafficMessageSet(t *testing.T) {
 		GDL90: config.GDL90Config{
 			Dest:     "127.0.0.1:4000",
 			Interval: 1 * time.Second,
-			Mode:     "gdl90",
 		},
 		Sim: config.SimConfig{
 			Ownship: config.OwnshipSimConfig{
-				Enable:       true,
 				CenterLatDeg: 45.541,
 				CenterLonDeg: -122.949,
 				AltFeet:      3500,

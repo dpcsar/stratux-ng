@@ -47,7 +47,6 @@ func TestSettingsPOST_AppliesAndSaves(t *testing.T) {
 	scenarioPath := ""
 	scenarioStart := ""
 	scenarioLoop := false
-	ownshipEnable := true
 	trafficEnable := false
 	payload := SettingsPayloadIn{
 		GDL90Dest:            &dest,
@@ -56,7 +55,6 @@ func TestSettingsPOST_AppliesAndSaves(t *testing.T) {
 		ScenarioPath:         &scenarioPath,
 		ScenarioStartTimeUTC: &scenarioStart,
 		ScenarioLoop:         &scenarioLoop,
-		OwnshipEnable:        &ownshipEnable,
 		TrafficEnable:        &trafficEnable,
 	}
 	b, _ := json.Marshal(payload)
@@ -78,9 +76,6 @@ func TestSettingsPOST_AppliesAndSaves(t *testing.T) {
 		}
 		if got.GDL90.Interval != 250*time.Millisecond {
 			t.Fatalf("applied interval=%s", got.GDL90.Interval)
-		}
-		if !got.Sim.Ownship.Enable {
-			t.Fatalf("expected ownship enabled")
 		}
 		if got.Sim.Traffic.Enable {
 			t.Fatalf("expected traffic disabled")
@@ -123,7 +118,6 @@ func TestSettingsPOST_ApplyFailureDoesNotSave(t *testing.T) {
 	scenarioPath := ""
 	scenarioStart := ""
 	scenarioLoop := false
-	ownshipEnable := false
 	trafficEnable := false
 	payload := SettingsPayloadIn{
 		GDL90Dest:            &dest,
@@ -132,7 +126,6 @@ func TestSettingsPOST_ApplyFailureDoesNotSave(t *testing.T) {
 		ScenarioPath:         &scenarioPath,
 		ScenarioStartTimeUTC: &scenarioStart,
 		ScenarioLoop:         &scenarioLoop,
-		OwnshipEnable:        &ownshipEnable,
 		TrafficEnable:        &trafficEnable,
 	}
 	b, _ := json.Marshal(payload)
@@ -173,7 +166,6 @@ func TestSettingsPOST_MissingIntervalRejected(t *testing.T) {
 	scenarioPath := ""
 	scenarioStart := ""
 	scenarioLoop := false
-	ownshipEnable := false
 	trafficEnable := false
 	payload := SettingsPayloadIn{
 		GDL90Dest:            &dest,
@@ -182,7 +174,6 @@ func TestSettingsPOST_MissingIntervalRejected(t *testing.T) {
 		ScenarioPath:         &scenarioPath,
 		ScenarioStartTimeUTC: &scenarioStart,
 		ScenarioLoop:         &scenarioLoop,
-		OwnshipEnable:        &ownshipEnable,
 		TrafficEnable:        &trafficEnable,
 	}
 	b, _ := json.Marshal(payload)
@@ -225,7 +216,6 @@ func TestSettingsPOST_DuplicateKeysRejected(t *testing.T) {
   "scenario_path": "",
   "scenario_start_time_utc": "",
   "scenario_loop": false,
-  "ownship_enable": false,
   "traffic_enable": false
 }`)
 

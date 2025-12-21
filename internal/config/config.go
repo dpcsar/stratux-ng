@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"net"
 	"os"
@@ -22,12 +23,10 @@ type WebConfig struct {
 }
 
 type GDL90Config struct {
-	Dest        string        `yaml:"dest"`
-	Interval    time.Duration `yaml:"interval"`
-	Mode        string        `yaml:"mode"`
-	TestPayload string        `yaml:"test_payload"`
-	Record      RecordConfig  `yaml:"record"`
-	Replay      ReplayConfig  `yaml:"replay"`
+	Dest     string        `yaml:"dest"`
+	Interval time.Duration `yaml:"interval"`
+	Record   RecordConfig  `yaml:"record"`
+	Replay   ReplayConfig  `yaml:"replay"`
 }
 
 type RecordConfig struct {
@@ -68,7 +67,6 @@ type TrafficSimConfig struct {
 }
 
 type OwnshipSimConfig struct {
-	Enable                 bool          `yaml:"enable"`
 	CenterLatDeg           float64       `yaml:"center_lat_deg"`
 	CenterLonDeg           float64       `yaml:"center_lon_deg"`
 	AltFeet                int           `yaml:"alt_feet"`
@@ -124,8 +122,32 @@ func Load(path string) (Config, error) {
 	}
 
 	var cfg Config
-	if err := yaml.Unmarshal(b, &cfg); err != nil {
+	dec := yaml.NewDecoder(bytes.NewReader(b))
+	dec.KnownFields(true)
+	if err := dec.Decode(&cfg); err != nil {
+		if te, ok := err.(*yaml.TypeError); ok {
+			norm := make([]string, 0, len(te.Errors))
+			for _, e := range te.Errors {
+				e = strings.TrimSpace(e)
+				if strings.HasPrefix(e, "line ") {
+					if idx := strings.Index(e, ": "); idx != -1 {
+						e = strings.TrimSpace(e[idx+2:])
+					}
+				}
+				if e != "" {
+					norm = append(norm, e)
+				}
+			}
+			if len(norm) > 0 {
+				return Config{}, fmt.Errorf("config contains unknown fields: %s", strings.Join(norm, "; "))
+			}
+		}
 		return Config{}, err
+	}
+	// Reject multiple YAML documents; they tend to hide mistakes.
+	var extra any
+	if err := dec.Decode(&extra); err == nil {
+		return Config{}, fmt.Errorf("config must contain a single YAML document")
 	}
 	if err := DefaultAndValidate(&cfg); err != nil {
 		return Config{}, err
@@ -150,26 +172,14 @@ func DefaultAndValidate(cfg *Config) error {
 	if cfg.GDL90.Interval <= 0 {
 		cfg.GDL90.Interval = 1 * time.Second
 	}
-	if cfg.GDL90.Mode == "" {
-		cfg.GDL90.Mode = "gdl90"
-	}
-	if cfg.GDL90.TestPayload == "" {
-		cfg.GDL90.TestPayload = "STRATUX-NG TEST"
-	}
 
 	if cfg.GDL90.Record.Enable {
-		if cfg.GDL90.Mode == "test" {
-			return fmt.Errorf("gdl90.record cannot be used with gdl90.mode=test")
-		}
 		if cfg.GDL90.Record.Path == "" {
 			return fmt.Errorf("gdl90.record.path is required when gdl90.record.enable is true")
 		}
 	}
 
 	if cfg.GDL90.Replay.Enable {
-		if cfg.GDL90.Mode == "test" {
-			return fmt.Errorf("gdl90.replay cannot be used with gdl90.mode=test")
-		}
 		if cfg.GDL90.Replay.Path == "" {
 			return fmt.Errorf("gdl90.replay.path is required when gdl90.replay.enable is true")
 		}

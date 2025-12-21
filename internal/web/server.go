@@ -7,7 +7,11 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+	"os"
 	"path"
+	"path/filepath"
+	"sort"
+	"strings"
 	"time"
 )
 
@@ -31,6 +35,53 @@ func Handler(status *Status, settings SettingsStore, logs *LogBuffer) http.Handl
 		}
 		snap := status.Snapshot(time.Now().UTC())
 		b, err := json.MarshalIndent(snap, "", "  ")
+		if err != nil {
+			http.Error(w, "marshal failed", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(b)
+		_, _ = w.Write([]byte("\n"))
+	})
+
+	// Scenario list API (used by the Settings UI).
+	// Returns paths like "./configs/scenarios/edgecases.yaml".
+	mux.HandleFunc("/api/scenarios", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", http.MethodGet)
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		base := filepath.FromSlash("configs/scenarios")
+		entries, err := os.ReadDir(base)
+		if err != nil {
+			// If the directory isn't present (e.g., minimal appliance build), return an empty list.
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte("{\"paths\":[]}\n"))
+			return
+		}
+
+		paths := make([]string, 0, len(entries))
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			name := e.Name()
+			lower := strings.ToLower(name)
+			if !(strings.HasSuffix(lower, ".yaml") || strings.HasSuffix(lower, ".yml")) {
+				continue
+			}
+			// Keep the returned value stable across platforms and consistent with config examples.
+			paths = append(paths, "./configs/scenarios/"+name)
+		}
+		sort.Strings(paths)
+
+		resp := struct {
+			Paths []string `json:"paths"`
+		}{Paths: paths}
+
+		b, err := json.MarshalIndent(resp, "", "  ")
 		if err != nil {
 			http.Error(w, "marshal failed", http.StatusInternalServerError)
 			return
@@ -82,8 +133,8 @@ func Handler(status *Status, settings SettingsStore, logs *LogBuffer) http.Handl
 			_, _ = fmt.Fprintf(w, "<!doctype html><html><head><meta charset=\"utf-8\"><title>Stratux-NG</title></head><body>")
 			_, _ = fmt.Fprintf(w, "<h1>Stratux-NG</h1>")
 			_, _ = fmt.Fprintf(w, "<p>Web UI is unavailable. Use <a href=\"/api/status\">/api/status</a>.</p>")
-			_, _ = fmt.Fprintf(w, "<pre>mode=%s\ngdl90_dest=%s\ninterval=%s\nframes_sent_total=%d\nlast_tick_utc=%s</pre>",
-				snap.Mode, snap.GDL90Dest, snap.Interval, snap.FramesSentTotal, snap.LastTickUTC,
+			_, _ = fmt.Fprintf(w, "<pre>gdl90_dest=%s\ninterval=%s\nframes_sent_total=%d\nlast_tick_utc=%s</pre>",
+				snap.GDL90Dest, snap.Interval, snap.FramesSentTotal, snap.LastTickUTC,
 			)
 			_, _ = fmt.Fprintf(w, "</body></html>")
 			return

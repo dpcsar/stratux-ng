@@ -18,12 +18,10 @@
   const stUptime = document.getElementById('st-uptime');
   const stNow = document.getElementById('st-now');
   const stLastTick = document.getElementById('st-last-tick');
-  const stMode = document.getElementById('st-mode');
   const stGDL90Dest = document.getElementById('st-gdl90-dest');
   const stInterval = document.getElementById('st-interval');
   const stFrames = document.getElementById('st-frames');
   const stScenario = document.getElementById('st-sim-scenario');
-  const stOwnship = document.getElementById('st-sim-ownship');
   const stTraffic = document.getElementById('st-sim-traffic');
   const stRecord = document.getElementById('st-record');
   const stReplay = document.getElementById('st-replay');
@@ -38,7 +36,6 @@
   const saveMsg = document.getElementById('save-msg');
   const setGDL90Dest = document.getElementById('set-gdl90-dest');
   const setIntervalInput = document.getElementById('set-interval');
-  const setOwnshipEnable = document.getElementById('set-ownship-enable');
   const setTrafficEnable = document.getElementById('set-traffic-enable');
   const setScenarioEnable = document.getElementById('set-scenario-enable');
   const setScenarioPath = document.getElementById('set-scenario-path');
@@ -180,7 +177,6 @@
   }
 
   function setStatusText(s) {
-    const mode = s?.mode || '';
     const dest = s?.gdl90_dest || '';
     const interval = s?.interval || '';
     const frames = s?.frames_sent_total ?? 0;
@@ -188,14 +184,12 @@
     setInput(stUptime, formatUptime(s?.uptime_sec));
     setInput(stNow, s?.now_utc || '');
     setInput(stLastTick, s?.last_tick_utc || '');
-    setInput(stMode, mode);
     setInput(stGDL90Dest, dest);
     setInput(stInterval, interval);
     setInput(stFrames, frames);
 
     const sim = s?.sim || {};
     setChecked(stScenario, !!sim.scenario);
-    setChecked(stOwnship, !!sim.ownship);
     setChecked(stTraffic, !!sim.traffic);
     setChecked(stRecord, !!sim.record);
     setChecked(stReplay, !!sim.replay);
@@ -223,12 +217,54 @@
       if (!resp.ok) throw new Error(`settings ${resp.status}`);
       const p = await resp.json();
 
+      // Populate scenario list (best-effort).
+      try {
+        const sresp = await fetch('/api/scenarios', { cache: 'no-store' });
+        if (sresp.ok) {
+          const sj = await sresp.json();
+          const paths = Array.isArray(sj?.paths) ? sj.paths : [];
+
+          if (setScenarioPath) {
+            const current = p.scenario_path || '';
+
+            // Preserve the placeholder option.
+            const placeholder = setScenarioPath.querySelector('option[value=""]');
+            setScenarioPath.innerHTML = '';
+            if (placeholder) {
+              setScenarioPath.appendChild(placeholder);
+            } else {
+              const opt = document.createElement('option');
+              opt.value = '';
+              opt.textContent = '(select a scenario)';
+              setScenarioPath.appendChild(opt);
+            }
+
+            for (const path of paths) {
+              const opt = document.createElement('option');
+              opt.value = String(path);
+              const parts = String(path).split('/');
+              opt.textContent = parts[parts.length - 1] || String(path);
+              setScenarioPath.appendChild(opt);
+            }
+
+            // If config points at a path not in the list, keep it selectable.
+            if (current && !paths.includes(current)) {
+              const opt = document.createElement('option');
+              opt.value = current;
+              opt.textContent = current;
+              setScenarioPath.appendChild(opt);
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+
       setGDL90Dest.value = p.gdl90_dest || '';
       if (setIntervalInput) setIntervalInput.value = p.interval || '';
-      setOwnshipEnable.checked = !!p.ownship_enable;
       setTrafficEnable.checked = !!p.traffic_enable;
       setScenarioEnable.checked = !!p.scenario_enable;
-      setScenarioPath.value = p.scenario_path || '';
+      if (setScenarioPath) setScenarioPath.value = p.scenario_path || '';
       setScenarioStart.value = p.scenario_start_time_utc || '';
       setScenarioLoop.checked = !!p.scenario_loop;
     } catch (e) {
@@ -241,7 +277,6 @@
     const payload = {
       gdl90_dest: setGDL90Dest.value,
       interval: setIntervalInput ? setIntervalInput.value : '',
-      ownship_enable: !!setOwnshipEnable.checked,
       traffic_enable: !!setTrafficEnable.checked,
       scenario_enable: !!setScenarioEnable.checked,
       scenario_path: setScenarioPath.value,

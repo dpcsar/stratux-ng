@@ -9,7 +9,6 @@ type Status struct {
 	startUnixNano int64
 	framesSent    uint64
 	lastTickNano  int64
-	mode          atomic.Value // string
 	gdl90Dest     atomic.Value // string
 	interval      atomic.Value // string
 	simInfo       atomic.Value // map[string]any
@@ -21,7 +20,6 @@ func NewStatus() *Status {
 	now := time.Now().UTC()
 	atomic.StoreInt64(&s.startUnixNano, now.UnixNano())
 	atomic.StoreInt64(&s.lastTickNano, 0)
-	s.mode.Store("")
 	s.gdl90Dest.Store("")
 	s.interval.Store("")
 	s.simInfo.Store(map[string]any{})
@@ -49,10 +47,7 @@ func (s *Status) SetAttitude(nowUTC time.Time, att AttitudeSnapshot) {
 	s.attitude.Store(att)
 }
 
-func (s *Status) SetStatic(mode string, gdl90Dest string, interval string, simInfo map[string]any) {
-	if mode != "" {
-		s.mode.Store(mode)
-	}
+func (s *Status) SetStatic(gdl90Dest string, interval string, simInfo map[string]any) {
 	if gdl90Dest != "" {
 		s.gdl90Dest.Store(gdl90Dest)
 	}
@@ -78,7 +73,6 @@ type StatusSnapshot struct {
 	Service         string           `json:"service"`
 	NowUTC          string           `json:"now_utc"`
 	UptimeSec       int64            `json:"uptime_sec"`
-	Mode            string           `json:"mode"`
 	GDL90Dest       string           `json:"gdl90_dest"`
 	Interval        string           `json:"interval"`
 	FramesSentTotal uint64           `json:"frames_sent_total"`
@@ -99,7 +93,6 @@ func (s *Status) Snapshot(nowUTC time.Time) StatusSnapshot {
 		Service:         "stratux-ng",
 		NowUTC:          nowUTC.UTC().Format(time.RFC3339Nano),
 		UptimeSec:       int64(uptime.Seconds()),
-		Mode:            s.mode.Load().(string),
 		GDL90Dest:       s.gdl90Dest.Load().(string),
 		Interval:        s.interval.Load().(string),
 		FramesSentTotal: atomic.LoadUint64(&s.framesSent),

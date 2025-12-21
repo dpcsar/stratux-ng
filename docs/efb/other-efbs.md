@@ -18,7 +18,6 @@ This is a generic checklist for any EFB that supports **GDL90** or **Stratux-sty
 
 ## 2) Configure Stratux-NG
 
-- `gdl90.mode: gdl90`
 - `gdl90.interval: 1s`
 - `gdl90.dest` set per above
 

@@ -144,6 +144,6 @@ func (r *liveRuntime) Apply(next config.Config) error {
 	}
 
 	r.cfg = c
-	r.status.SetStatic(r.cfg.GDL90.Mode, r.cfg.GDL90.Dest, r.cfg.GDL90.Interval.String(), simInfoSnapshot(r.resolvedConfigPath, r.cfg))
+	r.status.SetStatic(r.cfg.GDL90.Dest, r.cfg.GDL90.Interval.String(), simInfoSnapshot(r.resolvedConfigPath, r.cfg))
 	return nil
 }

@@ -15,7 +15,6 @@ func minimalCfg(t *testing.T, dest string, interval time.Duration) config.Config
 		GDL90: config.GDL90Config{
 			Dest:     dest,
 			Interval: interval,
-			Mode:     "gdl90",
 		},
 	}
 	if err := config.DefaultAndValidate(&cfg); err != nil {

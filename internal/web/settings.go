@@ -26,7 +26,6 @@ type SettingsPayload struct {
 	ScenarioStartTimeUTC string `json:"scenario_start_time_utc"`
 	ScenarioLoop         bool   `json:"scenario_loop"`
 
-	OwnshipEnable bool `json:"ownship_enable"`
 	TrafficEnable bool `json:"traffic_enable"`
 }
 
@@ -43,7 +42,6 @@ type SettingsPayloadIn struct {
 	ScenarioStartTimeUTC *string `json:"scenario_start_time_utc"`
 	ScenarioLoop         *bool   `json:"scenario_loop"`
 
-	OwnshipEnable *bool `json:"ownship_enable"`
 	TrafficEnable *bool `json:"traffic_enable"`
 }
 
@@ -54,7 +52,6 @@ var settingsPostKeys = []string{
 	"scenario_path",
 	"scenario_start_time_utc",
 	"scenario_loop",
-	"ownship_enable",
 	"traffic_enable",
 }
 
@@ -146,7 +143,6 @@ func configToSettingsPayload(cfg config.Config) SettingsPayload {
 		ScenarioStartTimeUTC: cfg.Sim.Scenario.StartTimeUTC,
 		ScenarioLoop:         cfg.Sim.Scenario.Loop,
 
-		OwnshipEnable: cfg.Sim.Ownship.Enable,
 		TrafficEnable: cfg.Sim.Traffic.Enable,
 	}
 }
@@ -175,9 +171,6 @@ func validateSettingsPayloadIn(p SettingsPayloadIn) error {
 	}
 	if p.ScenarioLoop == nil {
 		return errors.New("scenario_loop is required")
-	}
-	if p.OwnshipEnable == nil {
-		return errors.New("ownship_enable is required")
 	}
 	if p.TrafficEnable == nil {
 		return errors.New("traffic_enable is required")
@@ -215,7 +208,6 @@ func applySettingsPayload(cfg *config.Config, p SettingsPayloadIn) error {
 		}
 	}
 
-	cfg.Sim.Ownship.Enable = *p.OwnshipEnable
 	cfg.Sim.Traffic.Enable = *p.TrafficEnable
 	return nil
 }
@@ -229,18 +221,7 @@ type SettingsStore struct {
 }
 
 func (s SettingsStore) load() (config.Config, error) {
-	b, err := os.ReadFile(s.ConfigPath)
-	if err != nil {
-		return config.Config{}, err
-	}
-	var cfg config.Config
-	if err := yaml.Unmarshal(b, &cfg); err != nil {
-		return config.Config{}, err
-	}
-	if err := config.DefaultAndValidate(&cfg); err != nil {
-		return config.Config{}, err
-	}
-	return cfg, nil
+	return config.Load(s.ConfigPath)
 }
 
 func (s SettingsStore) save(cfg config.Config) error {

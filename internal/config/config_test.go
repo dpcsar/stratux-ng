@@ -42,12 +42,7 @@ func TestLoad_DefaultsApplied(t *testing.T) {
 	if cfg.GDL90.Interval != 1*time.Second {
 		t.Fatalf("interval=%s want 1s", cfg.GDL90.Interval)
 	}
-	if cfg.GDL90.Mode != "gdl90" {
-		t.Fatalf("mode=%q want %q", cfg.GDL90.Mode, "gdl90")
-	}
-	if cfg.GDL90.TestPayload == "" {
-		t.Fatalf("expected non-empty test payload")
-	}
+	// Output is always framed GDL90.
 
 	// Simulator defaults should be populated even if sim is absent.
 	if cfg.Sim.Ownship.Period <= 0 || cfg.Sim.Ownship.RadiusNm <= 0 || cfg.Sim.Ownship.GroundKt <= 0 {
@@ -65,9 +60,11 @@ func TestLoad_RecordRequiresPath(t *testing.T) {
 }
 
 func TestLoad_RecordDisallowedInTestMode(t *testing.T) {
-	path := writeTempConfig(t, "gdl90:\n  dest: '127.0.0.1:4000'\n  mode: test\n  record:\n    enable: true\n    path: './x.log'\n")
+	path := writeTempConfig(t, "gdl90:\n  dest: '127.0.0.1:4000'\n  record:\n    enable: true\n    path: './x.log'\n")
 	_, err := Load(path)
-	requireErrEq(t, err, "gdl90.record cannot be used with gdl90.mode=test")
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
 }
 
 func TestLoad_ReplayRequiresPath(t *testing.T) {
@@ -77,9 +74,11 @@ func TestLoad_ReplayRequiresPath(t *testing.T) {
 }
 
 func TestLoad_ReplayDisallowedInTestMode(t *testing.T) {
-	path := writeTempConfig(t, "gdl90:\n  dest: '127.0.0.1:4000'\n  mode: test\n  replay:\n    enable: true\n    path: './x.log'\n")
+	path := writeTempConfig(t, "gdl90:\n  dest: '127.0.0.1:4000'\n  replay:\n    enable: true\n    path: './x.log'\n")
 	_, err := Load(path)
-	requireErrEq(t, err, "gdl90.replay cannot be used with gdl90.mode=test")
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
 }
 
 func TestLoad_ReplaySpeedDefaultsToOne(t *testing.T) {
@@ -103,4 +102,10 @@ func TestLoad_RecordAndReplayMutuallyExclusive(t *testing.T) {
 	path := writeTempConfig(t, "gdl90:\n  dest: '127.0.0.1:4000'\n  record:\n    enable: true\n    path: './a.log'\n  replay:\n    enable: true\n    path: './b.log'\n")
 	_, err := Load(path)
 	requireErrEq(t, err, "gdl90.record and gdl90.replay cannot both be enabled")
+}
+
+func TestLoad_RejectsUnknownField(t *testing.T) {
+	path := writeTempConfig(t, "gdl90:\n  dest: '127.0.0.1:4000'\n  mode: gdl90\n")
+	_, err := Load(path)
+	requireErrEq(t, err, "config contains unknown fields: field mode not found in type config.GDL90Config")
 }

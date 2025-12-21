@@ -99,13 +99,6 @@
 
           <div class="formrow">
             <label class="control">
-              <span>Mode</span>
-              <input id="st-mode" type="text" readonly />
-            </label>
-          </div>
-
-          <div class="formrow">
-            <label class="control">
               <span>GDL90 destination</span>
               <input id="st-gdl90-dest" type="text" readonly />
             </label>
@@ -131,12 +124,6 @@
             <label class="control">
               <input id="st-sim-scenario" type="checkbox" disabled />
               <span>Scenario enabled</span>
-            </label>
-          </div>
-          <div class="formrow">
-            <label class="control">
-              <input id="st-sim-ownship" type="checkbox" disabled />
-              <span>Sim ownship enabled</span>
             </label>
           </div>
           <div class="formrow">
@@ -183,13 +170,6 @@
 
           <div class="formrow">
             <label class="control">
-              <input id="set-ownship-enable" type="checkbox" />
-              <span>Sim ownship enabled</span>
-            </label>
-          </div>
-
-          <div class="formrow">
-            <label class="control">
               <input id="set-traffic-enable" type="checkbox" />
               <span>Sim traffic enabled</span>
             </label>
@@ -207,7 +187,9 @@
           <div class="formrow">
             <label class="control">
               <span>Scenario path</span>
-              <input id="set-scenario-path" type="text" placeholder="./configs/scenarios/edgecases.yaml" />
+              <select id="set-scenario-path">
+                <option value="">(select a scenario)</option>
+              </select>
             </label>
           </div>
 
