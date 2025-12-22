@@ -1,18 +1,29 @@
 {
-    "github.copilot.chat.codeGeneration.instructions": [
-        {
-            "file": "copilot-instructions.md"
-        }
-    ],
     "cSpell.words": [
         "AHRS",
+        "Avare",
+        "baro",
         "bootable",
+        "cdetect",
         "dnsmasq",
+        "dtoverlay",
+        "dtparam",
+        "edgecases",
+        "efbs",
+        "flashable",
+        "foreflight",
         "gpsd",
         "hostapd",
         "NMEA",
+        "npwm",
         "ownship",
+        "pwmchip",
+        "raspi",
+        "readlink",
         "readsb",
-        "Stratux"
+        "repros",
+        "setcap",
+        "Stratux",
+        "sysfs"
     ]
 }
