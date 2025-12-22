@@ -80,6 +80,8 @@ type Service struct {
 	imu  *icm20948.Device
 	baro *bmp280.Device
 
+	baroAddr uint16
+
 	stopOnce sync.Once
 	stopCh   chan struct{}
 }
@@ -158,21 +160,62 @@ func (s *Service) Start(ctx context.Context) error {
 		_ = s.applyOrientationFromGravity([3]float64{s.cfg.OrientationGravity[0], s.cfg.OrientationGravity[1], s.cfg.OrientationGravity[2]})
 	}
 
-	baro, err := bmp280.New(bus.Dev(s.cfg.BaroAddr))
-	if err != nil {
-		s.setBaroErr(fmt.Sprintf("baro init: %v", err))
-		_ = bus.Close()
-		s.bus = nil
-		return err
+	// Baro is optional. Mirror Stratux behavior: attempt init, but keep AHRS running
+	// if the baro is absent/misconfigured.
+	if baro, addr, bErr := s.initBaro(); bErr == nil {
+		s.baro = baro
+		s.baroAddr = addr
+		s.mu.Lock()
+		s.snap.BaroDetected = true
+		s.mu.Unlock()
+	} else {
+		s.setBaroErr(fmt.Sprintf("baro init: %v", bErr))
+		s.mu.Lock()
+		s.snap.BaroDetected = false
+		s.mu.Unlock()
+		// Continue: IMU-only AHRS.
 	}
-	s.baro = baro
-	s.mu.Lock()
-	s.snap.BaroDetected = true
-	s.mu.Unlock()
 
 	go s.run(ctx)
 	go s.startupCal(ctx)
 	return nil
+}
+
+func (s *Service) initBaro() (*bmp280.Device, uint16, error) {
+	if s == nil {
+		return nil, 0, fmt.Errorf("ahrs: service is nil")
+	}
+	if s.bus == nil {
+		return nil, 0, fmt.Errorf("ahrs: i2c bus is nil")
+	}
+
+	addr := s.cfg.BaroAddr
+	if addr == 0 {
+		addr = bmp280.DefaultAddress()
+	}
+
+	addrs := []uint16{addr}
+	// Upstream Stratux probes both common BMP I2C addresses.
+	if addr == 0x76 {
+		addrs = append(addrs, 0x77)
+	}
+	if addr == 0x77 {
+		addrs = append(addrs, 0x76)
+	}
+
+	var lastErr error
+	for _, a := range addrs {
+		b, err := bmp280.New(s.bus.Dev(a))
+		if err == nil {
+			s.cfg.BaroAddr = a
+			return b, a, nil
+		}
+		lastErr = err
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("unknown error")
+	}
+	return nil, 0, lastErr
 }
 
 // Orientation returns the current persisted-or-pending orientation state.
@@ -518,6 +561,28 @@ func (s *Service) run(ctx context.Context) {
 			s.mu.Unlock()
 
 		case <-baroTick.C:
+			// If baro isn't present yet, periodically attempt to (re)discover it.
+			if s.baro == nil {
+				if time.Since(baroLastReinitAt) >= 2*time.Second {
+					if b, addr, reErr := s.initBaro(); reErr == nil {
+						s.baro = b
+						s.baroAddr = addr
+						baroConsecutiveFailures = 0
+						baroLastReinitAt = time.Now().UTC()
+						s.mu.Lock()
+						s.snap.BaroDetected = true
+						s.mu.Unlock()
+					} else {
+						baroLastReinitAt = time.Now().UTC()
+						s.mu.Lock()
+						s.snap.BaroDetected = false
+						s.mu.Unlock()
+						s.setBaroErr(fmt.Sprintf("baro init: %v", reErr))
+					}
+				}
+				continue
+			}
+
 			tc, p, err := s.baro.Read()
 			_ = tc
 			if err != nil {
@@ -525,15 +590,20 @@ func (s *Service) run(ctx context.Context) {
 				s.setBaroErr(err.Error())
 				// Best-effort recovery: periodically re-init the baro if we keep failing.
 				if baroConsecutiveFailures >= 10 && time.Since(baroLastReinitAt) >= 2*time.Second {
-					if s.bus != nil {
-						if b, reErr := bmp280.New(s.bus.Dev(s.cfg.BaroAddr)); reErr == nil {
-							s.baro = b
-							baroConsecutiveFailures = 0
-							baroLastReinitAt = time.Now().UTC()
-						} else {
-							baroLastReinitAt = time.Now().UTC()
-							s.setBaroErr(fmt.Sprintf("baro reinit: %v", reErr))
-						}
+					if b, addr, reErr := s.initBaro(); reErr == nil {
+						s.baro = b
+						s.baroAddr = addr
+						baroConsecutiveFailures = 0
+						baroLastReinitAt = time.Now().UTC()
+						s.mu.Lock()
+						s.snap.BaroDetected = true
+						s.mu.Unlock()
+					} else {
+						baroLastReinitAt = time.Now().UTC()
+						s.mu.Lock()
+						s.snap.BaroDetected = false
+						s.mu.Unlock()
+						s.setBaroErr(fmt.Sprintf("baro reinit: %v", reErr))
 					}
 				}
 				continue
@@ -542,15 +612,20 @@ func (s *Service) run(ctx context.Context) {
 				baroConsecutiveFailures++
 				s.setBaroErr("baro pressure invalid")
 				if baroConsecutiveFailures >= 10 && time.Since(baroLastReinitAt) >= 2*time.Second {
-					if s.bus != nil {
-						if b, reErr := bmp280.New(s.bus.Dev(s.cfg.BaroAddr)); reErr == nil {
-							s.baro = b
-							baroConsecutiveFailures = 0
-							baroLastReinitAt = time.Now().UTC()
-						} else {
-							baroLastReinitAt = time.Now().UTC()
-							s.setBaroErr(fmt.Sprintf("baro reinit: %v", reErr))
-						}
+					if b, addr, reErr := s.initBaro(); reErr == nil {
+						s.baro = b
+						s.baroAddr = addr
+						baroConsecutiveFailures = 0
+						baroLastReinitAt = time.Now().UTC()
+						s.mu.Lock()
+						s.snap.BaroDetected = true
+						s.mu.Unlock()
+					} else {
+						baroLastReinitAt = time.Now().UTC()
+						s.mu.Lock()
+						s.snap.BaroDetected = false
+						s.mu.Unlock()
+						s.setBaroErr(fmt.Sprintf("baro reinit: %v", reErr))
 					}
 				}
 				continue
@@ -578,6 +653,7 @@ func (s *Service) run(ctx context.Context) {
 			s.snap.VerticalSpeedValid = true
 			s.snap.UpdatedAt = now
 			s.snap.BaroLastUpdateAt = now
+			s.snap.BaroDetected = true
 			// Clear baro error on success, but keep IMU errors visible.
 			s.baroErr = ""
 			if s.imuErr == "" {

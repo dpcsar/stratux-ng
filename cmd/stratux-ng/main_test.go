@@ -128,3 +128,64 @@ func TestBuildGDL90Frames_SimOwnshipAndTrafficMessageSet(t *testing.T) {
 		t.Fatalf("expected %d visible traffic reports (0x14), got %d", visible, counts[0x14])
 	}
 }
+
+func TestBuildGDL90Frames_OwnshipAltitudePrefersBaroPressureAltitude(t *testing.T) {
+	cfg := config.Config{
+		GDL90: config.GDL90Config{
+			Dest:     "127.0.0.1:4000",
+			Interval: 1 * time.Second,
+		},
+		AHRS: config.AHRSConfig{Enable: true},
+		Sim: config.SimConfig{
+			Ownship: config.OwnshipSimConfig{
+				CenterLatDeg: 45.541,
+				CenterLonDeg: -122.949,
+				AltFeet:      3500,
+				GroundKt:     90,
+				RadiusNm:     0.5,
+				Period:       120 * time.Second,
+				ICAO:         "F00001",
+				Callsign:     "STRATUX",
+			},
+		},
+	}
+
+	now := time.Date(2025, 12, 20, 19, 0, 0, 0, time.UTC)
+
+	// Provide a baro pressure altitude that differs from the sim GPS altitude.
+	// Use a 25-ft-aligned value to avoid GDL90 quantization ambiguity.
+	baroAltFeet := 4150.0
+	frames := buildGDL90Frames(cfg, now, true, ahrs.Snapshot{
+		Valid:           true,
+		IMUDetected:     true,
+		BaroDetected:    true,
+		PressureAltFeet: baroAltFeet,
+		PressureAltValid: true,
+	})
+
+	var ownshipMsg []byte
+	for _, f := range frames {
+		msg := unframeForMsg(t, f)
+		if msg[0] == 0x0A {
+			ownshipMsg = msg
+			break
+		}
+	}
+	if ownshipMsg == nil {
+		t.Fatalf("expected ownship report (0x0A)")
+	}
+	if len(ownshipMsg) < 13 {
+		t.Fatalf("ownship msg too short: %d", len(ownshipMsg))
+	}
+
+	// Decode the 12-bit altitude field (25 ft resolution with +1000 ft offset).
+	enc := (uint16(ownshipMsg[11]) << 4) | (uint16(ownshipMsg[12]) >> 4)
+	if enc == 0x0FFF {
+		t.Fatalf("expected valid altitude encoding")
+	}
+	decodedAltFeet := int(enc)*25 - 1000
+
+	if decodedAltFeet != int(baroAltFeet) {
+		t.Fatalf("expected ownship altitude=%d (baro), got %d", int(baroAltFeet), decodedAltFeet)
+	}
+}

@@ -157,8 +157,15 @@ Stratux-NG can read a Stratux AHRS 2.0–class board over I2C (typically `0x68` 
   - `ahrs.baro_addr: 0x77`
 
 Notes:
-- If `ahrs.enable` is true and the sensors cannot be initialized, Stratux-NG continues running but marks AHRS invalid.
+- IMU is required for attitude; baro is optional.
+- If `ahrs.enable` is true and the IMU cannot be initialized, Stratux-NG continues running but marks AHRS invalid.
+- If the baro (BMP280) is missing or not responding at startup, Stratux-NG continues running (IMU-only) and periodically re-attempts baro detection.
+- Baro address: Stratux AHRS 2.0 boards commonly use `0x77` (and sometimes `0x76`). Stratux-NG will probe both `0x77` and `0x76` even if `ahrs.baro_addr` is set to just one.
 - Initial bring-up computes roll/pitch from accelerometer (gravity vector). Heading remains derived from the simulator until GPS/magnetometer integration is added.
+
+GDL90 altitude semantics (Stratux-compatible):
+- Ownship Report (0x0A) altitude is treated as **pressure altitude** when available.
+- Ownship Geometric Altitude (0x0B) remains **geometric altitude (MSL)**.
 
 Calibration + orientation (Stratux AHRS 2.0 style):
 - **Set Level**: cages roll/pitch so the current attitude becomes (0,0).

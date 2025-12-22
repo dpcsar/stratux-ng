@@ -641,11 +641,18 @@ func buildGDL90Frames(cfg config.Config, now time.Time, haveAHRS bool, ahrsSnap 
 	}
 	lat, lon, trk, altFeet, vvelFpm := s.Kinematics(now)
 	nacp := gdl90.NACpFromHorizontalAccuracyMeters(cfg.Sim.Ownship.GPSHorizontalAccuracyM)
+
+	// GDL90 Ownship Report (0x0A) altitude is pressure altitude when available.
+	// Mirror upstream Stratux behavior by preferring baro-derived pressure altitude.
+	ownshipAltFeet := altFeet
+	if cfg.AHRS.Enable && haveAHRS && ahrsSnap.PressureAltValid {
+		ownshipAltFeet = int(ahrsSnap.PressureAltFeet)
+	}
 	frames = append(frames, gdl90.OwnshipReportFrame(gdl90.Ownship{
 		ICAO:        icao,
 		LatDeg:      lat,
 		LonDeg:      lon,
-		AltFeet:     altFeet,
+		AltFeet:     ownshipAltFeet,
 		HaveNICNACp: true,
 		NIC:         8,
 		NACp:        nacp,

@@ -18,6 +18,11 @@ This folder contains **practical setup notes** for using Stratux-NG with Electro
   - Broadcast example (Pi AP): `192.168.10.255:4000`
   - Unicast example (tablet/phone): `<EFB_IP>:4000`
 
+## Altitude semantics (Stratux-compatible)
+
+- Ownship Report (0x0A) altitude is **pressure altitude** when baro is available.
+- Ownship Geometric Altitude (0x0B) is **geometric altitude (MSL)**.
+
 ## Guides
 
 - ForeFlight: [foreflight.md](foreflight.md)

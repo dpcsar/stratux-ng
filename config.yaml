@@ -34,7 +34,10 @@ sim:
 ahrs:
     enable: true
     i2c_bus: 1
+    # IMU I2C address (ICM-20948): typically 0x68 (decimal 104)
     imu_addr: 104
+    # Baro I2C address (BMP280): commonly 0x77 (decimal 119), sometimes 0x76 (decimal 118).
+    # Stratux-NG will probe both 0x77 and 0x76.
     baro_addr: 119
     orientation:
         forward_axis: -2
