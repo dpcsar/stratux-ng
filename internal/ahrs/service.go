@@ -35,6 +35,7 @@ type Snapshot struct {
 
 	RollDeg  float64
 	PitchDeg float64
+	YawRateDps float64
 
 	PressureAltFeet    float64
 	PressureAltValid   bool
@@ -467,14 +468,16 @@ func (s *Service) run(ctx context.Context) {
 			// Integrate gyro (deg/s) -> rad.
 			gxRad := gx * math.Pi / 180.0
 			gyRad := gy * math.Pi / 180.0
-			// gz is currently unused for roll/pitch.
+			// gz is used as yaw-rate for downstream consumers (EFB heading fusion).
 			// Apply bias in deg/s (stored) converted to rad/s.
 			s.mu.RLock()
 			biasX := s.gyroBiasXDegPerSec * math.Pi / 180.0
 			biasY := s.gyroBiasYDegPerSec * math.Pi / 180.0
+			biasZDegPerSec := s.gyroBiasZDegPerSec
 			s.mu.RUnlock()
 			gxRad -= biasX
 			gyRad -= biasY
+			yawRateDps := gz - biasZDegPerSec
 
 			if !haveEst {
 				estRollRad = accRollRad
@@ -549,6 +552,7 @@ func (s *Service) run(ctx context.Context) {
 			s.snap.Valid = true
 			s.snap.RollDeg = roll + s.rollOffsetDeg
 			s.snap.PitchDeg = pitch + s.pitchOffsetDeg
+			s.snap.YawRateDps = yawRateDps
 			s.snap.UpdatedAt = now
 			s.snap.IMULastUpdateAt = now
 			s.snap.OrientationForwardAxis = s.forwardAxis

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net"
 	"os"
 	"os/signal"
@@ -472,6 +473,7 @@ func main() {
 		}
 
 		var seq uint64
+		hf := &headingFuser{}
 		for {
 			tickC := rt.TickChan()
 			select {
@@ -551,7 +553,7 @@ func main() {
 						status.SetAHRSSensors(now.UTC(), web.AHRSSensorsSnapshot{Enabled: false})
 					}
 					if curCfg.GPS.Enable {
-						frames = buildGDL90FramesWithGPS(curCfg, now.UTC(), haveAHRS, snap, haveGPS, gpsSnap)
+						frames = buildGDL90FramesWithGPS(curCfg, now.UTC(), haveAHRS, snap, haveGPS, gpsSnap, hf)
 					} else {
 						frames = buildGDL90Frames(curCfg, now.UTC(), haveAHRS, snap)
 					}
@@ -790,7 +792,81 @@ func buildGDL90Frames(cfg config.Config, now time.Time, haveAHRS bool, ahrsSnap 
 	return frames
 }
 
-func buildGDL90FramesWithGPS(cfg config.Config, now time.Time, haveAHRS bool, ahrsSnap ahrs.Snapshot, haveGPS bool, gpsSnap gps.Snapshot) [][]byte {
+type headingFuser struct {
+	have     bool
+	heading  float64
+	lastAt   time.Time
+}
+
+func (h *headingFuser) Reset() {
+	h.have = false
+	h.heading = 0
+	h.lastAt = time.Time{}
+}
+
+func (h *headingFuser) Update(now time.Time, gpsTrackDeg *float64, gpsTrackValid bool, groundKt int, yawRateDps *float64) float64 {
+	// Initialize from GPS track when available.
+	if !h.have {
+		if gpsTrackDeg != nil {
+			h.have = true
+			h.heading = wrap360(*gpsTrackDeg)
+			h.lastAt = now
+			return h.heading
+		}
+		h.lastAt = now
+		return 0
+	}
+
+	// If time jumped (or we were paused), re-seed from GPS if we can.
+	if h.lastAt.IsZero() || now.Before(h.lastAt) || now.Sub(h.lastAt) > 2*time.Second {
+		h.have = false
+		return h.Update(now, gpsTrackDeg, gpsTrackValid, groundKt, yawRateDps)
+	}
+
+	dt := now.Sub(h.lastAt).Seconds()
+	h.lastAt = now
+	if dt <= 0 || dt > 1.0 {
+		return h.heading
+	}
+
+	// Short-term: integrate yaw rate.
+	if yawRateDps != nil {
+		h.heading = wrap360(h.heading + (*yawRateDps)*dt)
+	}
+
+	// Long-term: converge slowly to GPS track for accuracy.
+	// Gate on GPS track validity (fresh + meaningful ground speed) because COG gets noisy.
+	if gpsTrackValid && gpsTrackDeg != nil {
+		tau := 3.0 // seconds (larger = trust yaw more, smaller = hug GPS more)
+		k := 1 - math.Exp(-dt/tau)
+		diff := shortestAngleDiffDeg(*gpsTrackDeg, h.heading)
+		h.heading = wrap360(h.heading + diff*k)
+	}
+
+	return h.heading
+}
+
+func wrap360(deg float64) float64 {
+	deg = math.Mod(deg, 360)
+	if deg < 0 {
+		deg += 360
+	}
+	return deg
+}
+
+func shortestAngleDiffDeg(targetDeg float64, currentDeg float64) float64 {
+	// Return signed delta in [-180, 180].
+	d := wrap360(targetDeg) - wrap360(currentDeg)
+	if d > 180 {
+		d -= 360
+	}
+	if d < -180 {
+		d += 360
+	}
+	return d
+}
+
+func buildGDL90FramesWithGPS(cfg config.Config, now time.Time, haveAHRS bool, ahrsSnap ahrs.Snapshot, haveGPS bool, gpsSnap gps.Snapshot, hf *headingFuser) [][]byte {
 	// GPS mode: emit ownship from live GPS when we have a recent fix.
 	icao, err := gdl90.ParseICAOHex(cfg.Sim.Ownship.ICAO)
 	ownshipOK := err == nil
@@ -824,6 +900,9 @@ func buildGDL90FramesWithGPS(cfg config.Config, now time.Time, haveAHRS bool, ah
 	// Identify as a Stratux-like device for apps that key off 0x65.
 	frames = append(frames, gdl90.ForeFlightIDFrame("Stratux", "Stratux-NG"))
 	if !gpsValid {
+		if hf != nil {
+			hf.Reset()
+		}
 		return frames
 	}
 
@@ -848,6 +927,29 @@ func buildGDL90FramesWithGPS(cfg config.Config, now time.Time, haveAHRS bool, ah
 	trackDeg := 0.0
 	if gpsSnap.TrackDeg != nil {
 		trackDeg = *gpsSnap.TrackDeg
+	}
+	// GPS track is only considered valid for correction when moving fast enough.
+	gpsTrackValid := fixOK && gpsSnap.TrackDeg != nil && gpsSnap.GroundKt != nil && *gpsSnap.GroundKt >= 5
+	// When GPS fix quality/mode is available, require at least a 2D fix.
+	if gpsTrackValid {
+		if gpsSnap.FixMode != nil && *gpsSnap.FixMode < 2 {
+			gpsTrackValid = false
+		}
+		if gpsSnap.FixQuality != nil && *gpsSnap.FixQuality <= 0 {
+			gpsTrackValid = false
+		}
+	}
+
+	// Fuse heading for EFB: yaw-rate for short turns, GPS track for long-term accuracy.
+	// Only do this when we actually have AHRS (gyro). Otherwise use GPS track.
+	headingDeg := trackDeg
+	if hf != nil && cfg.AHRS.Enable && haveAHRS && ahrsSnap.Valid {
+		trkPtr := (*float64)(nil)
+		if gpsSnap.TrackDeg != nil {
+			trkPtr = gpsSnap.TrackDeg
+		}
+		yawPtr := &ahrsSnap.YawRateDps
+		headingDeg = hf.Update(now, trkPtr, gpsTrackValid, groundKt, yawPtr)
 	}
 
 	vvelFpm := 0
@@ -897,7 +999,7 @@ func buildGDL90FramesWithGPS(cfg config.Config, now time.Time, haveAHRS bool, ah
 		Valid:                ahrsValid,
 		RollDeg:              roll,
 		PitchDeg:             pitch,
-		HeadingDeg:           trackDeg,
+		HeadingDeg:           headingDeg,
 		SlipSkidDeg:          0,
 		YawRateDps:           0,
 		GLoad:                1.0,
@@ -907,6 +1009,9 @@ func buildGDL90FramesWithGPS(cfg config.Config, now time.Time, haveAHRS bool, ah
 		PressureAltValid:     pressureAltValid,
 		VerticalSpeedFpm:     vvelFpm,
 		VerticalSpeedValid:   vvelValid,
+	}
+	if cfg.AHRS.Enable && haveAHRS && ahrsSnap.Valid {
+		att.YawRateDps = ahrsSnap.YawRateDps
 	}
 	if cfg.AHRS.Enable && haveAHRS && ahrsSnap.VerticalSpeedValid {
 		att.VerticalSpeedFpm = ahrsSnap.VerticalSpeedFpm

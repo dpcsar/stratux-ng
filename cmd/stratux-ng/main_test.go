@@ -6,6 +6,7 @@ import (
 
 	"stratux-ng/internal/ahrs"
 	"stratux-ng/internal/config"
+	"stratux-ng/internal/gdl90"
 	"stratux-ng/internal/gps"
 	"stratux-ng/internal/sim"
 )
@@ -289,7 +290,7 @@ func TestBuildGDL90FramesWithGPS_OwnshipVerticalSpeedFromGPS(t *testing.T) {
 		LastFixUTC:   now.UTC().Format(time.RFC3339Nano),
 	}
 
-	frames := buildGDL90FramesWithGPS(cfg, now, false, ahrs.Snapshot{}, true, gpsSnap)
+	frames := buildGDL90FramesWithGPS(cfg, now, false, ahrs.Snapshot{}, true, gpsSnap, &headingFuser{})
 	var ownshipMsg []byte
 	for _, f := range frames {
 		msg := unframeForMsg(t, f)
@@ -347,7 +348,7 @@ func TestBuildGDL90FramesWithGPS_OwnshipVerticalSpeedNegativeFromGPS(t *testing.
 		LastFixUTC:   now.UTC().Format(time.RFC3339Nano),
 	}
 
-	frames := buildGDL90FramesWithGPS(cfg, now, false, ahrs.Snapshot{}, true, gpsSnap)
+	frames := buildGDL90FramesWithGPS(cfg, now, false, ahrs.Snapshot{}, true, gpsSnap, &headingFuser{})
 	var ownshipMsg []byte
 	for _, f := range frames {
 		msg := unframeForMsg(t, f)
@@ -403,7 +404,7 @@ func TestBuildGDL90FramesWithGPS_OwnshipVerticalSpeedUnknownWhenAbsent(t *testin
 		LastFixUTC: now.UTC().Format(time.RFC3339Nano),
 	}
 
-	frames := buildGDL90FramesWithGPS(cfg, now, false, ahrs.Snapshot{}, true, gpsSnap)
+	frames := buildGDL90FramesWithGPS(cfg, now, false, ahrs.Snapshot{}, true, gpsSnap, &headingFuser{})
 	var ownshipMsg []byte
 	for _, f := range frames {
 		msg := unframeForMsg(t, f)
@@ -462,7 +463,7 @@ func TestBuildGDL90FramesWithGPS_AHRSLEVerticalSpeedFromGPS(t *testing.T) {
 		LastFixUTC:   now.UTC().Format(time.RFC3339Nano),
 	}
 
-	frames := buildGDL90FramesWithGPS(cfg, now, false, ahrs.Snapshot{}, true, gpsSnap)
+	frames := buildGDL90FramesWithGPS(cfg, now, false, ahrs.Snapshot{}, true, gpsSnap, &headingFuser{})
 	var leMsg []byte
 	for _, f := range frames {
 		msg := unframeForMsg(t, f)
@@ -478,5 +479,220 @@ func TestBuildGDL90FramesWithGPS_AHRSLEVerticalSpeedFromGPS(t *testing.T) {
 	vs := int16(leMsg[20])<<8 | int16(leMsg[21])
 	if vs != 640 {
 		t.Fatalf("unexpected LE vertical speed: got %d want 640", vs)
+	}
+}
+
+func findAHRSLERaw(t *testing.T, frames [][]byte) []byte {
+	t.Helper()
+	for _, f := range frames {
+		msg := unframeForMsg(t, f)
+		if len(msg) >= 10 && msg[0] == 0x4C {
+			return msg
+		}
+	}
+	return nil
+}
+
+func leHeadingDeg(t *testing.T, leMsg []byte) float64 {
+	t.Helper()
+	if leMsg == nil || len(leMsg) < 10 {
+		t.Fatalf("LE msg too short")
+	}
+	h10 := int16(leMsg[8])<<8 | int16(leMsg[9])
+	if h10 == 0x7FFF {
+		t.Fatalf("LE heading invalid")
+	}
+	return float64(h10) / 10.0
+}
+
+func TestBuildGDL90FramesWithGPS_HeadingUsesYawForShortTurnsAndGPSForAccuracy(t *testing.T) {
+	cfg := config.Config{
+		GDL90: config.GDL90Config{Dest: "127.0.0.1:4000", Interval: 200 * time.Millisecond},
+		GPS:   config.GPSConfig{Enable: true, HorizontalAccuracyM: 10},
+		AHRS:  config.AHRSConfig{Enable: true},
+		Sim: config.SimConfig{
+			Ownship: config.OwnshipSimConfig{
+				CenterLatDeg: 45.541,
+				CenterLonDeg: -122.949,
+				AltFeet:      3500,
+				GroundKt:     90,
+				RadiusNm:     0.5,
+				Period:       120 * time.Second,
+				ICAO:         "F00001",
+				Callsign:     "STRATUX",
+			},
+			Traffic: config.TrafficSimConfig{Enable: false},
+		},
+	}
+
+	t0 := time.Date(2025, 12, 22, 12, 0, 0, 0, time.UTC)
+	alt := 5000
+	gs := 100
+	trk := 90.0
+	gpsSnap := gps.Snapshot{
+		Enabled:    true,
+		Valid:      true,
+		LatDeg:     45.5,
+		LonDeg:     -122.9,
+		AltFeet:    &alt,
+		GroundKt:   &gs,
+		TrackDeg:   &trk,
+		LastFixUTC: t0.UTC().Format(time.RFC3339Nano),
+	}
+
+	hf := &headingFuser{}
+	if _, err := gdl90.ParseICAOHex(cfg.Sim.Ownship.ICAO); err != nil {
+		t.Fatalf("test config ICAO=%q invalid: %v", cfg.Sim.Ownship.ICAO, err)
+	}
+	if gpsSnap.LastFixUTC == "" {
+		t.Fatalf("test gpsSnap.LastFixUTC empty")
+	}
+	if tFix, err := time.Parse(time.RFC3339Nano, gpsSnap.LastFixUTC); err != nil {
+		t.Fatalf("test gpsSnap.LastFixUTC=%q parse failed: %v", gpsSnap.LastFixUTC, err)
+	} else if t0.UTC().Sub(tFix.UTC()) > 3*time.Second {
+		t.Fatalf("test gps fix stale: now=%s fix=%s", t0.UTC().Format(time.RFC3339Nano), tFix.UTC().Format(time.RFC3339Nano))
+	}
+
+
+	// Seed: heading should start at GPS track.
+	frames0 := buildGDL90FramesWithGPS(cfg, t0, true, ahrs.Snapshot{Valid: true, YawRateDps: 0}, true, gpsSnap, hf)
+	le0 := findAHRSLERaw(t, frames0)
+	h0 := leHeadingDeg(t, le0)
+	if h0 < 89.9 || h0 > 90.1 {
+		t.Fatalf("seed heading=%v want ~90", h0)
+	}
+
+	// Short turn: yaw-rate should advance heading quickly even if GPS track is unchanged.
+	t1 := t0.Add(200 * time.Millisecond)
+	gpsSnap.LastFixUTC = t1.UTC().Format(time.RFC3339Nano)
+	frames1 := buildGDL90FramesWithGPS(cfg, t1, true, ahrs.Snapshot{Valid: true, YawRateDps: 30}, true, gpsSnap, hf)
+	le1 := findAHRSLERaw(t, frames1)
+	h1 := leHeadingDeg(t, le1)
+	if h1 <= 92 {
+		t.Fatalf("turn heading=%v want >92", h1)
+	}
+
+	// Accuracy: with no yaw-rate, heading should converge back toward GPS track over several ticks.
+	now := t1
+	for i := 0; i < 10; i++ {
+		now = now.Add(500 * time.Millisecond)
+		gpsSnap.LastFixUTC = now.UTC().Format(time.RFC3339Nano)
+		frames := buildGDL90FramesWithGPS(cfg, now, true, ahrs.Snapshot{Valid: true, YawRateDps: 0}, true, gpsSnap, hf)
+		_ = findAHRSLERaw(t, frames)
+	}
+	now = now.Add(500 * time.Millisecond)
+	gpsSnap.LastFixUTC = now.UTC().Format(time.RFC3339Nano)
+	framesF := buildGDL90FramesWithGPS(cfg, now, true, ahrs.Snapshot{Valid: true, YawRateDps: 0}, true, gpsSnap, hf)
+	leF := findAHRSLERaw(t, framesF)
+	hF := leHeadingDeg(t, leF)
+	if hF < 88 || hF > 92 {
+		t.Fatalf("final heading=%v want near 90", hF)
+	}
+}
+
+func TestBuildGDL90FramesWithGPS_DoesNotCorrectWhenFixModeInvalid(t *testing.T) {
+	cfg := config.Config{
+		GDL90: config.GDL90Config{Dest: "127.0.0.1:4000", Interval: 200 * time.Millisecond},
+		GPS:   config.GPSConfig{Enable: true, HorizontalAccuracyM: 10},
+		AHRS:  config.AHRSConfig{Enable: true},
+		Sim: config.SimConfig{
+			Ownship: config.OwnshipSimConfig{
+				CenterLatDeg: 45.541,
+				CenterLonDeg: -122.949,
+				AltFeet:      3500,
+				GroundKt:     90,
+				RadiusNm:     0.5,
+				Period:       120 * time.Second,
+				ICAO:         "F00001",
+				Callsign:     "STRATUX",
+			},
+			Traffic: config.TrafficSimConfig{Enable: false},
+		},
+	}
+
+	t0 := time.Date(2025, 12, 22, 12, 0, 0, 0, time.UTC)
+	alt := 5000
+	gs := 100
+	trk := 90.0
+	fixMode := 1 // <2 => treat track as invalid for correction
+	gpsSnap := gps.Snapshot{
+		Enabled:    true,
+		Valid:      true,
+		LatDeg:     45.5,
+		LonDeg:     -122.9,
+		AltFeet:    &alt,
+		GroundKt:   &gs,
+		TrackDeg:   &trk,
+		FixMode:    &fixMode,
+		LastFixUTC: t0.UTC().Format(time.RFC3339Nano),
+	}
+
+	hf := &headingFuser{}
+	frames0 := buildGDL90FramesWithGPS(cfg, t0, true, ahrs.Snapshot{Valid: true, YawRateDps: 0}, true, gpsSnap, hf)
+	h0 := leHeadingDeg(t, findAHRSLERaw(t, frames0))
+	if h0 < 89.9 || h0 > 90.1 {
+		t.Fatalf("seed heading=%v want ~90", h0)
+	}
+
+	// Turn: yaw moves heading away from GPS track.
+	t1 := t0.Add(200 * time.Millisecond)
+	gpsSnap.LastFixUTC = t1.UTC().Format(time.RFC3339Nano)
+	frames1 := buildGDL90FramesWithGPS(cfg, t1, true, ahrs.Snapshot{Valid: true, YawRateDps: 30}, true, gpsSnap, hf)
+	h1 := leHeadingDeg(t, findAHRSLERaw(t, frames1))
+	if h1 <= 92 {
+		t.Fatalf("turn heading=%v want >92", h1)
+	}
+
+	// With GPS track invalid-for-correction, heading should not converge back toward 90.
+	now := t1
+	for i := 0; i < 12; i++ {
+		now = now.Add(500 * time.Millisecond)
+		gpsSnap.LastFixUTC = now.UTC().Format(time.RFC3339Nano)
+		frames := buildGDL90FramesWithGPS(cfg, now, true, ahrs.Snapshot{Valid: true, YawRateDps: 0}, true, gpsSnap, hf)
+		_ = findAHRSLERaw(t, frames)
+	}
+	framesF := buildGDL90FramesWithGPS(cfg, now, true, ahrs.Snapshot{Valid: true, YawRateDps: 0}, true, gpsSnap, hf)
+	hF := leHeadingDeg(t, findAHRSLERaw(t, framesF))
+	if hF < 92 {
+		t.Fatalf("final heading=%v unexpectedly converged toward GPS track", hF)
+	}
+}
+
+func TestHeadingFuser_WrapAround(t *testing.T) {
+	hf := &headingFuser{}
+	t0 := time.Date(2025, 12, 22, 12, 0, 0, 0, time.UTC)
+	trk := 350.0
+	gs := 100
+	// Seed.
+	_ = hf.Update(t0, &trk, true, gs, nil)
+	// Turn right 60 dps for 0.5s => +30 deg => wraps to ~20.
+	t1 := t0.Add(500 * time.Millisecond)
+	yaw := 60.0
+	h := hf.Update(t1, &trk, true, gs, &yaw)
+	if h < 5 || h > 40 {
+		t.Fatalf("wrapped heading=%v want around 20", h)
+	}
+}
+
+func TestHeadingFuser_DoesNotCorrectWhenGPSTrackInvalid(t *testing.T) {
+	hf := &headingFuser{}
+	t0 := time.Date(2025, 12, 22, 12, 0, 0, 0, time.UTC)
+	trk := 90.0
+	gs := 100
+	_ = hf.Update(t0, &trk, true, gs, nil)
+
+	// Turn: integrate yaw to move away from GPS track.
+	t1 := t0.Add(200 * time.Millisecond)
+	yaw := 30.0
+	h1 := hf.Update(t1, &trk, false, gs, &yaw) // gpsTrackValid=false => no correction
+	if h1 <= 92 {
+		t.Fatalf("heading after turn=%v want >92", h1)
+	}
+
+	// With no yaw and GPS still invalid, it should *not* converge back quickly.
+	t2 := t1.Add(2 * time.Second)
+	h2 := hf.Update(t2, &trk, false, gs, nil)
+	if h2 < h1-0.5 {
+		t.Fatalf("heading corrected unexpectedly: before=%v after=%v", h1, h2)
 	}
 }
