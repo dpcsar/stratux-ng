@@ -22,41 +22,38 @@
     <main id="content" class="content" role="main">
       <section id="view-attitude" class="view" aria-label="Attitude">
         <h2>Attitude</h2>
-        <p class="muted">Debug/verification readout from <a href="/api/status">/api/status</a>. Not a flight instrument.</p>
         <div class="card">
-          <div class="formrow">
-            <label class="control">
-              <span>AHRS valid</span>
-              <input id="att-valid" type="text" readonly />
-            </label>
+          <div class="attitude-instrument">
+            <div class="attitude-row">
+              <canvas id="att-tape-left" class="attitude-side-tape left" aria-label="Ground speed tape" role="img"></canvas>
+              <div class="attitude-core">
+                <div class="attitude-overlay" aria-hidden="true">
+                  <div class="attitude-overlay-col">
+                    <div class="attitude-overlay-kv"><span class="muted">PIT</span> <span id="att-pitch"></span></div>
+                    <div class="attitude-overlay-kv"><span class="muted">ROL</span> <span id="att-roll"></span></div>
+                  </div>
+                  <div class="attitude-overlay-col right">
+                    <div class="attitude-overlay-kv"><span class="muted">HDG</span> <span id="att-heading"></span></div>
+                    <div class="attitude-overlay-kv"><span class="muted">PALT</span> <span id="att-palt"></span></div>
+                  </div>
+                </div>
+
+                <div class="attitude-overlay-bottom-right" aria-hidden="true">
+                  <div class="attitude-overlay-kv"><span class="muted">AHRS</span> <span id="att-valid"></span></div>
+                  <div class="attitude-overlay-kv"><span class="muted">GPS</span> <span id="att-gps"></span></div>
+                </div>
+                <canvas id="att-canvas" class="attitude-canvas" aria-label="Attitude indicator" role="img"></canvas>
+              </div>
+              <canvas id="att-tape-right" class="attitude-side-tape right" aria-label="GPS altitude tape" role="img"></canvas>
+            </div>
           </div>
 
-          <div class="formrow">
-            <label class="control">
-              <span>Roll (deg)</span>
-              <input id="att-roll" type="text" readonly />
-            </label>
-          </div>
+          <canvas id="att-hdg-tape" class="attitude-tape" aria-label="Heading tape" role="img"></canvas>
 
-          <div class="formrow">
-            <label class="control">
-              <span>Pitch (deg)</span>
-              <input id="att-pitch" type="text" readonly />
-            </label>
-          </div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>Heading (deg)</span>
-              <input id="att-heading" type="text" readonly />
-            </label>
-          </div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>Last update (UTC)</span>
-              <input id="att-updated" type="text" readonly />
-            </label>
+          <div class="attitude-controls">
+            <button id="btn-att-ahrs-level" type="button" class="secondary">Set Level</button>
+            <button id="btn-att-ahrs-zero-drift" type="button" class="secondary">Zero Drift</button>
+            <span id="att-ahrs-msg" class="muted"></span>
           </div>
         </div>
       </section>
@@ -404,14 +401,6 @@
             </label>
           </div>
 
-          <div class="formactions">
-            <button id="btn-ahrs-level" type="button">Set Level</button>
-            <button id="btn-ahrs-zero-drift" type="button">Zero Drift</button>
-            <button id="btn-ahrs-orient-forward" type="button">Set Forward (point nose-end up)</button>
-            <button id="btn-ahrs-orient-done" type="button">Finish Orientation (place level)</button>
-            <span id="ahrs-msg" class="muted"></span>
-          </div>
-
         </div>
       </section>
 
@@ -473,11 +462,26 @@
             </label>
           </div>
 
-          <div class="divider"></div>
-
           <div class="formactions">
             <button id="btn-save" type="submit" class="primary">Save</button>
             <span id="save-msg" class="muted"></span>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="formrow">
+            <div class="muted">AHRS calibration</div>
+          </div>
+
+          <div class="formactions">
+            <button id="btn-ahrs-level" type="button">Set Level</button>
+            <button id="btn-ahrs-zero-drift" type="button">Zero Drift</button>
+            <button id="btn-ahrs-orient-forward" type="button">Set Forward (hold so nose-end points up)</button>
+            <button id="btn-ahrs-orient-done" type="button">Finish Orientation (hold level, mounted)</button>
+          </div>
+
+          <div class="formrow">
+            <span id="ahrs-msg" class="muted"></span>
           </div>
         </form>
       </section>

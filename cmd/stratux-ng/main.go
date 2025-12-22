@@ -130,6 +130,7 @@ func decodeAttitudeFromFrames(frames [][]byte) web.AttitudeSnapshot {
 			roll := int16(msg[4])<<8 | int16(msg[5])
 			pitch := int16(msg[6])<<8 | int16(msg[7])
 			hdg := int16(msg[8])<<8 | int16(msg[9])
+			palt := uint16(msg[18])<<8 | uint16(msg[19])
 			if roll != int16(0x7FFF) {
 				v := float64(roll) / 10.0
 				out.RollDeg = &v
@@ -141,6 +142,10 @@ func decodeAttitudeFromFrames(frames [][]byte) web.AttitudeSnapshot {
 			if hdg != int16(0x7FFF) {
 				v := float64(hdg) / 10.0
 				out.HeadingDeg = &v
+			}
+			if palt != uint16(0xFFFF) {
+				v := float64(palt) - 5000.5
+				out.PressureAltFt = &v
 			}
 			continue
 		}

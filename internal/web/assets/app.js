@@ -69,11 +69,26 @@
   const btnAhrsOrientDone = document.getElementById('btn-ahrs-orient-done');
   const ahrsMsg = document.getElementById('ahrs-msg');
 
+  const btnAttAhrsLevel = document.getElementById('btn-att-ahrs-level');
+  const btnAttAhrsZeroDrift = document.getElementById('btn-att-ahrs-zero-drift');
+  const attAhrsMsg = document.getElementById('att-ahrs-msg');
+
   const attValid = document.getElementById('att-valid');
   const attRoll = document.getElementById('att-roll');
   const attPitch = document.getElementById('att-pitch');
   const attHeading = document.getElementById('att-heading');
-  const attUpdated = document.getElementById('att-updated');
+  const attPalt = document.getElementById('att-palt');
+  const attGps = document.getElementById('att-gps');
+  const attCanvas = document.getElementById('att-canvas');
+  const attCtx = attCanvas ? attCanvas.getContext('2d') : null;
+
+  const attTape = document.getElementById('att-hdg-tape');
+  const attTapeCtx = attTape ? attTape.getContext('2d') : null;
+
+  const attLeftTape = document.getElementById('att-tape-left');
+  const attLeftTapeCtx = attLeftTape ? attLeftTape.getContext('2d') : null;
+  const attRightTape = document.getElementById('att-tape-right');
+  const attRightTapeCtx = attRightTape ? attRightTape.getContext('2d') : null;
 
   const settingsForm = document.getElementById('settings-form');
   const saveMsg = document.getElementById('save-msg');
@@ -102,7 +117,13 @@
 
   function setInput(el, value) {
     if (!el) return;
-    el.value = value == null ? '' : String(value);
+    const s = value == null ? '' : String(value);
+    // Support both <input> and text elements (<span>/<div>).
+    if ('value' in el) {
+      el.value = s;
+    } else {
+      el.textContent = s;
+    }
   }
 
   function setChecked(el, value) {
@@ -301,17 +322,45 @@
     if (btnAhrsZeroDrift) btnAhrsZeroDrift.disabled = !enabled;
     if (btnAhrsOrientForward) btnAhrsOrientForward.disabled = !enabled;
     if (btnAhrsOrientDone) btnAhrsOrientDone.disabled = !enabled;
+
+    if (btnAttAhrsLevel) btnAttAhrsLevel.disabled = !enabled;
+    if (btnAttAhrsZeroDrift) btnAttAhrsZeroDrift.disabled = !enabled;
   }
 
-  async function postAhrs(path) {
-    if (ahrsMsg) ahrsMsg.textContent = 'Working…';
+  let attAhrsBusyCount = 0;
+
+  function setAttAhrsBusy(isBusy) {
+    if (isBusy) {
+      attAhrsBusyCount++;
+    } else {
+      attAhrsBusyCount = Math.max(0, attAhrsBusyCount - 1);
+    }
+    drawAttitude();
+  }
+
+  async function postAhrs(path, msgEl = ahrsMsg) {
+    const isAttitudeUi = msgEl === attAhrsMsg;
+    if (isAttitudeUi) {
+      if (msgEl) msgEl.textContent = '';
+      setAttAhrsBusy(true);
+    } else {
+      if (msgEl) msgEl.textContent = 'Working…';
+    }
     try {
       const resp = await fetch(path, { method: 'POST' });
       const text = await resp.text();
       if (!resp.ok) throw new Error(text || `HTTP ${resp.status}`);
-      if (ahrsMsg) ahrsMsg.textContent = 'OK.';
+      if (!isAttitudeUi) {
+        if (msgEl) msgEl.textContent = 'OK.';
+      } else {
+        if (msgEl) msgEl.textContent = '';
+      }
     } catch (e) {
-      if (ahrsMsg) ahrsMsg.textContent = `Failed: ${String(e)}`;
+      if (msgEl) msgEl.textContent = `Failed: ${String(e)}`;
+    } finally {
+      if (isAttitudeUi) {
+        setAttAhrsBusy(false);
+      }
     }
   }
 
@@ -321,13 +370,563 @@
     return n.toFixed(digits);
   }
 
+  function clamp(x, lo, hi) {
+    const n = Number(x);
+    if (!Number.isFinite(n)) return lo;
+    return Math.min(hi, Math.max(lo, n));
+  }
+
+  function hexToRgb(hex) {
+    const s = String(hex || '').trim();
+    if (!s.startsWith('#')) return null;
+    const h = s.slice(1);
+    if (h.length === 3) {
+      const r = parseInt(h[0] + h[0], 16);
+      const g = parseInt(h[1] + h[1], 16);
+      const b = parseInt(h[2] + h[2], 16);
+      if ([r, g, b].some((v) => Number.isNaN(v))) return null;
+      return { r, g, b };
+    }
+    if (h.length === 6) {
+      const r = parseInt(h.slice(0, 2), 16);
+      const g = parseInt(h.slice(2, 4), 16);
+      const b = parseInt(h.slice(4, 6), 16);
+      if ([r, g, b].some((v) => Number.isNaN(v))) return null;
+      return { r, g, b };
+    }
+    return null;
+  }
+
+  function cssVar(name) {
+    try {
+      return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    } catch {
+      return '';
+    }
+  }
+
+  function cssVarRGBA(name, alpha) {
+    const v = cssVar(name);
+    const rgb = hexToRgb(v);
+    if (!rgb) return v || '';
+    return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${String(alpha)})`;
+  }
+
+  let lastAttitude = null;
+  let lastGps = null;
+
+  function fitSideTapeCanvas(canvas, ctx) {
+    if (!canvas || !ctx) return null;
+    const rect = canvas.getBoundingClientRect();
+    const cssW = Math.max(1, Math.floor(rect.width || 0));
+    const cssH = Math.max(1, Math.floor(rect.height || 0));
+    const dpr = Math.max(1, Math.floor((window.devicePixelRatio || 1) * 100) / 100);
+    const pxW = Math.max(1, Math.floor(cssW * dpr));
+    const pxH = Math.max(1, Math.floor(cssH * dpr));
+    if (canvas.width !== pxW || canvas.height !== pxH) {
+      canvas.width = pxW;
+      canvas.height = pxH;
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { w: cssW, h: cssH };
+  }
+
+  function fmtInt(n) {
+    const x = Number(n);
+    if (!Number.isFinite(x)) return '';
+    const v = Math.round(x);
+    try {
+      return v.toLocaleString(undefined);
+    } catch {
+      return String(v);
+    }
+  }
+
+  function isMultiple(value, step) {
+    const v = Number(value);
+    const s = Number(step);
+    if (!Number.isFinite(v) || !Number.isFinite(s) || s === 0) return false;
+    return Math.abs(v / s - Math.round(v / s)) < 1e-9;
+  }
+
+  function drawVerticalTape(canvas, ctx, opts) {
+    if (!canvas || !ctx) return;
+    const size = fitSideTapeCanvas(canvas, ctx);
+    if (!size) return;
+    const w = size.w;
+    const h = size.h;
+
+    const title = String(opts?.title || '');
+    const side = (opts?.side === 'right') ? 'right' : 'left';
+    const value = Number(opts?.value);
+    const hasValue = Number.isFinite(value);
+    const range = Number(opts?.range || 0);
+    const halfRange = Number.isFinite(range) && range > 0 ? range / 2 : 0;
+    const minorStep = Number(opts?.minorStep || 1);
+    const majorStep = Number(opts?.majorStep || minorStep);
+    const labelStep = Number(opts?.labelStep || majorStep);
+
+    const surface = cssVar('--surface') || '#111111';
+    const surface2 = cssVar('--surface2') || '#222222';
+    const text = cssVar('--text') || '#ffffff';
+    const muted = cssVar('--muted') || text;
+    const accent = cssVar('--accent') || text;
+
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = surface2;
+    ctx.fillRect(0, 0, w, h);
+
+    const pad = 6;
+    const titlePx = Math.max(10, Math.floor(w * 0.22));
+    const titleH = titlePx + 10;
+
+    const top = pad + titleH;
+    const bottom = h - pad;
+    const tapeH = Math.max(1, bottom - top);
+    const centerY = top + tapeH / 2;
+
+    // Title.
+    ctx.fillStyle = muted;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.font = `${titlePx}px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif`;
+    ctx.fillText(title, w / 2, pad);
+
+    // Rolling scale.
+    if (hasValue && halfRange > 0 && Number.isFinite(minorStep) && minorStep > 0) {
+      const pxPerUnit = tapeH / (halfRange * 2);
+
+      const startVal = Math.floor((value - halfRange) / minorStep) * minorStep;
+      const endVal = Math.ceil((value + halfRange) / minorStep) * minorStep;
+
+      const tickX0 = side === 'left' ? w - pad : pad;
+      const tickDir = side === 'left' ? -1 : 1;
+
+      const minorLen = Math.max(8, Math.floor(w * 0.20));
+      const majorLen = Math.max(12, Math.floor(w * 0.36));
+      const labelPx = Math.max(11, Math.floor(w * 0.22));
+
+      // Clip to tape area so labels/ticks don't overlap title.
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, top, w, tapeH);
+      ctx.clip();
+
+      for (let v = startVal; v <= endVal + 1e-9; v += minorStep) {
+        const y = centerY - (v - value) * pxPerUnit;
+        if (y < top - 20 || y > bottom + 20) continue;
+
+        const major = isMultiple(v, majorStep);
+        const label = major && isMultiple(v, labelStep);
+        const len = major ? majorLen : minorLen;
+
+        ctx.strokeStyle = major ? text : muted;
+        ctx.lineWidth = Math.max(1, w * 0.03);
+        ctx.beginPath();
+        ctx.moveTo(tickX0, y);
+        ctx.lineTo(tickX0 + tickDir * len, y);
+        ctx.stroke();
+
+        if (label) {
+          ctx.fillStyle = text;
+          ctx.font = `${labelPx}px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif`;
+          ctx.textBaseline = 'middle';
+          if (side === 'left') {
+            ctx.textAlign = 'right';
+            ctx.fillText(fmtInt(v), tickX0 + tickDir * (len + 6), y);
+          } else {
+            ctx.textAlign = 'left';
+            ctx.fillText(fmtInt(v), tickX0 + tickDir * (len + 6), y);
+          }
+        }
+      }
+
+      ctx.restore();
+    }
+
+    // Value window.
+    const winH = clamp(Math.floor(tapeH * 0.20), 38, 72);
+    const winW = Math.max(1, w - pad * 2);
+    const winX = pad;
+    const winY = centerY - winH / 2;
+
+    ctx.fillStyle = cssVarRGBA('--surface', 0.92) || surface;
+    ctx.fillRect(winX, winY, winW, winH);
+
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = Math.max(1, w * 0.035);
+    ctx.strokeRect(winX + 0.5, winY + 0.5, winW - 1, winH - 1);
+
+    // Pointer triangle.
+    const tri = Math.max(8, Math.floor(w * 0.18));
+    ctx.fillStyle = accent;
+    ctx.beginPath();
+    if (side === 'left') {
+      ctx.moveTo(w - 1, centerY);
+      ctx.lineTo(w - 1 - tri, centerY - tri * 0.6);
+      ctx.lineTo(w - 1 - tri, centerY + tri * 0.6);
+    } else {
+      ctx.moveTo(1, centerY);
+      ctx.lineTo(1 + tri, centerY - tri * 0.6);
+      ctx.lineTo(1 + tri, centerY + tri * 0.6);
+    }
+    ctx.closePath();
+    ctx.fill();
+
+    // Value text.
+    ctx.fillStyle = text;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const valPx = Math.max(16, Math.floor(w * 0.40));
+    ctx.font = `${valPx}px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif`;
+    ctx.fillText(hasValue ? fmtInt(value) : '---', w / 2, centerY);
+  }
+
+  function fitTapeCanvas() {
+    if (!attTape || !attTapeCtx) return null;
+
+    const rect = attTape.getBoundingClientRect();
+    const cssW = Math.max(1, Math.floor(rect.width || 0));
+    const cssH = Math.max(1, Math.floor(rect.height || 0));
+    const dpr = Math.max(1, Math.floor((window.devicePixelRatio || 1) * 100) / 100);
+
+    const pxW = Math.max(1, Math.floor(cssW * dpr));
+    const pxH = Math.max(1, Math.floor(cssH * dpr));
+    if (attTape.width !== pxW || attTape.height !== pxH) {
+      attTape.width = pxW;
+      attTape.height = pxH;
+    }
+    attTapeCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { w: cssW, h: cssH };
+  }
+
+  function wrap360(deg) {
+    let x = Number(deg);
+    if (!Number.isFinite(x)) return 0;
+    x = x % 360;
+    if (x < 0) x += 360;
+    return x;
+  }
+
+  function headingLabel(deg) {
+    const d = wrap360(deg);
+    const n = Math.round(d / 10) * 10;
+    const v = wrap360(n);
+    if (v === 0) return 'N';
+    if (v === 90) return 'E';
+    if (v === 180) return 'S';
+    if (v === 270) return 'W';
+    return String(Math.round(v));
+  }
+
+  function drawHeadingTape() {
+    if (!attTape || !attTapeCtx) return;
+    const size = fitTapeCanvas();
+    if (!size) return;
+
+    const w = size.w;
+    const h = size.h;
+    const ctx = attTapeCtx;
+
+    const surface2 = cssVar('--surface2') || '#222222';
+    const text = cssVar('--text') || '#ffffff';
+    const muted = cssVar('--muted') || text;
+    const accent = cssVar('--accent') || text;
+
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = surface2;
+    ctx.fillRect(0, 0, w, h);
+
+    const a = lastAttitude || {};
+    const valid = !!a.valid;
+    const hdg = valid && a.heading_deg != null ? wrap360(a.heading_deg) : null;
+
+    const mid = w / 2;
+    const pxPerDeg = w / 120; // show ~120° window
+    const tickBase = h * 0.70;
+    const longTick = h * 0.32;
+    const shortTick = h * 0.20;
+    const fontPx = Math.max(11, Math.floor(h * 0.26));
+    ctx.font = `${fontPx}px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Center marker.
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = Math.max(2, h * 0.06);
+    ctx.beginPath();
+    ctx.moveTo(mid, 0);
+    ctx.lineTo(mid, h);
+    ctx.stroke();
+
+    if (hdg == null) {
+      ctx.fillStyle = text;
+      ctx.fillText('HDG ---', mid, h * 0.45);
+      return;
+    }
+
+    // Ticks +/- 60 degrees.
+    ctx.strokeStyle = muted;
+    ctx.lineWidth = Math.max(1, h * 0.04);
+    for (let d = -60; d <= 60; d += 5) {
+      const x = mid + d * pxPerDeg;
+      const abs = Math.abs(d);
+      const isMajor = abs % 10 === 0;
+      const isLabel = abs % 30 === 0;
+      const len = isMajor ? longTick : shortTick;
+      ctx.beginPath();
+      ctx.moveTo(x, tickBase);
+      ctx.lineTo(x, tickBase - len);
+      ctx.stroke();
+      if (isLabel) {
+        ctx.fillStyle = text;
+        ctx.fillText(headingLabel(hdg + d), x, h * 0.28);
+      }
+    }
+
+    // Center numeric heading.
+    ctx.fillStyle = text;
+    const hdgStr = String(Math.round(hdg)).padStart(3, '0');
+    ctx.fillText(hdgStr, mid, h * 0.88);
+  }
+
+  function fitAttitudeCanvas() {
+    if (!attCanvas || !attCtx) return null;
+
+    const rect = attCanvas.getBoundingClientRect();
+    const cssW = Math.max(1, Math.floor(rect.width || 0));
+    const cssH = Math.max(1, Math.floor(rect.height || 0));
+    const dpr = Math.max(1, Math.floor((window.devicePixelRatio || 1) * 100) / 100);
+
+    const pxW = Math.max(1, Math.floor(cssW * dpr));
+    const pxH = Math.max(1, Math.floor(cssH * dpr));
+    if (attCanvas.width !== pxW || attCanvas.height !== pxH) {
+      attCanvas.width = pxW;
+      attCanvas.height = pxH;
+    }
+    attCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { w: cssW, h: cssH };
+  }
+
+  function drawAttitude() {
+    if (!attCanvas || !attCtx) return;
+    const size = fitAttitudeCanvas();
+    if (!size) return;
+
+    const w = size.w;
+    const h = size.h;
+    const ctx = attCtx;
+    ctx.clearRect(0, 0, w, h);
+
+    const bg = cssVar('--bg') || '#000000';
+    const surface = cssVar('--surface') || '#111111';
+    const surface2 = cssVar('--surface2') || '#222222';
+    const text = cssVar('--text') || '#ffffff';
+    const muted = cssVar('--muted') || text;
+    const sky = cssVarRGBA('--accent', 0.22) || surface2;
+
+    // Frame background (outside bezel).
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, w, h);
+
+    const cx = w / 2;
+    const cy = h / 2;
+    const r = Math.max(10, Math.min(w, h) * 0.46);
+
+    // Bezel.
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.beginPath();
+    ctx.arc(0, 0, r + 6, 0, Math.PI * 2);
+    ctx.fillStyle = surface;
+    ctx.fill();
+    ctx.restore();
+
+    // Instrument face.
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.clip();
+
+    const a = lastAttitude || {};
+    const valid = !!a.valid;
+    const roll = valid && a.roll_deg != null ? clamp(a.roll_deg, -90, 90) : 0;
+    const pitch = valid && a.pitch_deg != null ? clamp(a.pitch_deg, -45, 45) : 0;
+
+    // Background rotates opposite aircraft roll.
+    const rollRad = (-roll * Math.PI) / 180;
+    const pxPerDeg = r / 40;
+
+    ctx.save();
+    ctx.rotate(rollRad);
+    ctx.translate(0, pitch * pxPerDeg);
+
+    // Sky / ground.
+    ctx.fillStyle = sky;
+    ctx.fillRect(-r * 2, -r * 2, r * 4, r * 2);
+    ctx.fillStyle = surface2;
+    ctx.fillRect(-r * 2, 0, r * 4, r * 2);
+
+    // Horizon line.
+    ctx.strokeStyle = text;
+    ctx.lineWidth = Math.max(2, r * 0.012);
+    ctx.beginPath();
+    ctx.moveTo(-r * 2, 0);
+    ctx.lineTo(r * 2, 0);
+    ctx.stroke();
+
+    // Pitch ladder.
+    ctx.lineWidth = Math.max(1, r * 0.008);
+    ctx.strokeStyle = text;
+    ctx.fillStyle = text;
+    const fontPx = Math.max(10, Math.floor(r * 0.10));
+    ctx.font = `${fontPx}px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif`;
+    ctx.textBaseline = 'middle';
+
+    for (let deg = -30; deg <= 30; deg += 5) {
+      if (deg === 0) continue;
+      const y = -deg * pxPerDeg;
+      const major = deg % 10 === 0;
+      const halfLen = major ? r * 0.45 : r * 0.28;
+      ctx.beginPath();
+      ctx.moveTo(-halfLen, y);
+      ctx.lineTo(halfLen, y);
+      ctx.stroke();
+
+      if (major) {
+        const label = String(Math.abs(deg));
+        ctx.fillText(label, halfLen + 8, y);
+        const m = ctx.measureText(label);
+        ctx.fillText(label, -halfLen - 8 - m.width, y);
+      }
+    }
+
+    ctx.restore();
+
+    // Center aircraft symbol.
+    ctx.strokeStyle = text;
+    ctx.lineWidth = Math.max(2, r * 0.014);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.42, 0);
+    ctx.lineTo(-r * 0.12, 0);
+    ctx.moveTo(r * 0.12, 0);
+    ctx.lineTo(r * 0.42, 0);
+    ctx.moveTo(0, 0);
+    ctx.lineTo(0, r * 0.10);
+    ctx.stroke();
+
+    // Roll scale (ticks at top arc).
+    ctx.save();
+    ctx.strokeStyle = muted;
+    ctx.lineWidth = Math.max(1, r * 0.010);
+    for (let deg = -60; deg <= 60; deg += 10) {
+      const ang = (-Math.PI / 2) + (deg * Math.PI) / 180;
+      const outer = r * 0.98;
+      const inner = outer - (deg % 30 === 0 ? r * 0.10 : r * 0.06);
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(ang) * inner, Math.sin(ang) * inner);
+      ctx.lineTo(Math.cos(ang) * outer, Math.sin(ang) * outer);
+      ctx.stroke();
+    }
+
+    // Bank pointer.
+    ctx.fillStyle = text;
+    ctx.beginPath();
+    ctx.moveTo(0, -r * 1.02);
+    ctx.lineTo(-r * 0.05, -r * 0.92);
+    ctx.lineTo(r * 0.05, -r * 0.92);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    // If AHRS not valid, overlay a clear message.
+    if (!valid) {
+      ctx.fillStyle = cssVarRGBA('--surface', 0.85) || surface;
+      ctx.fillRect(-r, -fontPx * 1.4, r * 2, fontPx * 2.0);
+      ctx.fillStyle = text;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = `${Math.max(12, Math.floor(r * 0.12))}px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif`;
+      ctx.fillText('AHRS UNAVAILABLE', 0, 0);
+      ctx.textAlign = 'start';
+      ctx.textBaseline = 'alphabetic';
+    }
+
+    // Bezel border.
+    ctx.restore();
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.strokeStyle = muted;
+    ctx.lineWidth = Math.max(1, r * 0.010);
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // AHRS action running (Set Level / Zero Drift): draw a big X.
+    if (attAhrsBusyCount > 0) {
+      const danger = cssVar('--danger') || text;
+      ctx.strokeStyle = danger;
+      ctx.lineWidth = Math.max(3, r * 0.025);
+      ctx.lineCap = 'round';
+      const x = r * 0.70;
+      const y = r * 0.70;
+      ctx.beginPath();
+      ctx.moveTo(-x, -y);
+      ctx.lineTo(x, y);
+      ctx.moveTo(-x, y);
+      ctx.lineTo(x, -y);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // Separate bottom heading tape.
+    drawHeadingTape();
+
+    // Side tapes.
+    const gps = lastGps || {};
+    drawVerticalTape(attLeftTape, attLeftTapeCtx, {
+      side: 'left',
+      title: 'GS',
+      value: gps.ground_kt,
+      range: 40,     // +/- 20 kt window
+      minorStep: 1,
+      majorStep: 5,
+      labelStep: 10,
+    });
+
+    drawVerticalTape(attRightTape, attRightTapeCtx, {
+      side: 'right',
+      title: 'GALT',
+      value: gps.alt_feet,
+      range: 1000,   // +/- 500 ft window
+      minorStep: 20,
+      majorStep: 100,
+      labelStep: 500,
+    });
+  }
+
   function setAttitudeText(s) {
     const a = s?.attitude || {};
-    setInput(attValid, a.valid ? 'true' : 'false');
-    setInput(attRoll, a.roll_deg == null ? '' : fmtNum(a.roll_deg, 1));
-    setInput(attPitch, a.pitch_deg == null ? '' : fmtNum(a.pitch_deg, 1));
-    setInput(attHeading, a.heading_deg == null ? '' : fmtNum(a.heading_deg, 1));
-    setInput(attUpdated, a.last_update_utc || '');
+    const g = s?.gps || {};
+    setInput(attValid, a.valid ? 'OK' : '--');
+    setInput(attRoll, a.roll_deg == null ? '' : `${fmtNum(a.roll_deg, 1)}°`);
+    setInput(attPitch, a.pitch_deg == null ? '' : `${fmtNum(a.pitch_deg, 1)}°`);
+    setInput(attHeading, a.heading_deg == null ? '' : String(Math.round(Number(a.heading_deg))).padStart(3, '0'));
+    setInput(attPalt, a.pressure_alt_ft == null ? '' : String(Math.round(Number(a.pressure_alt_ft))));
+
+    let gpsStatus = '--';
+    if (g.enabled) {
+      if (!g.valid) {
+        gpsStatus = 'NO FIX';
+      } else if (g.fix_stale) {
+        gpsStatus = 'STALE';
+      } else {
+        gpsStatus = 'OK';
+      }
+    }
+    setInput(attGps, gpsStatus);
   }
 
   async function loadSettings() {
@@ -427,6 +1026,9 @@
       const s = await resp.json();
       setStatusText(s);
       setAttitudeText(s);
+      lastAttitude = s?.attitude || null;
+      lastGps = s?.gps || null;
+      drawAttitude();
       if (subtitle) subtitle.textContent = 'Connected';
     } catch {
       if (subtitle) subtitle.textContent = 'Disconnected';
@@ -447,9 +1049,15 @@
 
   poll();
   setInterval(poll, 1000);
+  // Redraw the instrument a bit faster than the status poll so it stays crisp on resize/theme changes.
+  setInterval(drawAttitude, 100);
+  window.addEventListener('resize', drawAttitude);
 
-  btnAhrsLevel?.addEventListener('click', () => postAhrs('/api/ahrs/level'));
-  btnAhrsZeroDrift?.addEventListener('click', () => postAhrs('/api/ahrs/zero-drift'));
-  btnAhrsOrientForward?.addEventListener('click', () => postAhrs('/api/ahrs/orient/forward'));
-  btnAhrsOrientDone?.addEventListener('click', () => postAhrs('/api/ahrs/orient/done'));
+  btnAhrsLevel?.addEventListener('click', () => postAhrs('/api/ahrs/level', ahrsMsg));
+  btnAhrsZeroDrift?.addEventListener('click', () => postAhrs('/api/ahrs/zero-drift', ahrsMsg));
+  btnAhrsOrientForward?.addEventListener('click', () => postAhrs('/api/ahrs/orient/forward', ahrsMsg));
+  btnAhrsOrientDone?.addEventListener('click', () => postAhrs('/api/ahrs/orient/done', ahrsMsg));
+
+  btnAttAhrsLevel?.addEventListener('click', () => postAhrs('/api/ahrs/level', attAhrsMsg));
+  btnAttAhrsZeroDrift?.addEventListener('click', () => postAhrs('/api/ahrs/zero-drift', attAhrsMsg));
 })();

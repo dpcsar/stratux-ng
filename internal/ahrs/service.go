@@ -506,7 +506,10 @@ func (s *Service) run(ctx context.Context) {
 			}
 
 			roll := estRollRad * 180 / math.Pi
-			pitch := estPitchRad * 180 / math.Pi
+			// Pitch sign convention: positive pitch = nose up.
+			// Our fused estimate currently uses the opposite sign for the downstream
+			// GDL90/EFB consumers, so invert it here.
+			pitch := -estPitchRad * 180 / math.Pi
 
 			// Update zero-drift calibration if requested.
 			if calActive {

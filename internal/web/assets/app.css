@@ -100,6 +100,124 @@ h2 { margin: 6px 0 6px; font-size: 18px; }
   overflow: auto;
 }
 
+.attitude-instrument {
+  width: 100%;
+  max-width: 680px;
+  margin: 0 auto;
+}
+
+.attitude-row {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) 64px;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.attitude-core {
+  position: relative;
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+.attitude-side-tape {
+  position: relative;
+  width: 64px;
+  border-radius: 12px;
+  background: var(--surface2);
+  border: 1px solid rgba(127,127,140,0.25);
+  align-self: stretch;
+}
+
+.attitude-side-tape.left { justify-self: end; }
+.attitude-side-tape.right { justify-self: start; }
+
+.attitude-canvas {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  display: block;
+  border-radius: calc(var(--radius) - 2px);
+}
+
+.attitude-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 10px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.attitude-overlay-bottom-right {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: grid;
+  gap: 6px;
+  text-align: right;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.attitude-overlay-col {
+  display: grid;
+  gap: 6px;
+}
+
+.attitude-overlay-col.right {
+  text-align: right;
+}
+
+.attitude-overlay-kv {
+  font-size: 13px;
+  letter-spacing: 0.2px;
+}
+
+/* Make the on-horizon values larger (Stratux-like). */
+.attitude-overlay-kv > span:not(.muted) {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.attitude-overlay-kv > span.muted {
+  font-size: 12px;
+}
+
+.attitude-tape {
+  width: 100%;
+  height: auto;
+  display: block;
+  margin: 10px auto 0;
+  max-width: 520px;
+  aspect-ratio: 520 / 70;
+  border-radius: calc(var(--radius) - 2px);
+  background: var(--surface2);
+  border: 1px solid rgba(127,127,140,0.25);
+}
+
+.attitude-controls {
+  margin-top: 10px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.attitude-meta {
+  margin-top: 8px;
+  font-size: 12px;
+  text-align: center;
+}
+
+.att-debug {
+  margin-top: 12px;
+}
+
 .controls {
   margin-bottom: 10px;
 }
@@ -146,6 +264,23 @@ input[type="checkbox"] {
   grid-template-columns: auto 1fr;
   align-items: center;
   gap: 12px;
+}
+
+button.secondary {
+  border-radius: 999px;
+  padding: 10px 14px;
+  font-weight: 650;
+  background: var(--surface2);
+  border: 1px solid rgba(127,127,140,0.35);
+  color: var(--text);
+  cursor: pointer;
+}
+
+button.secondary:hover { background: rgba(127,127,140,0.18); }
+
+button.secondary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 button.primary {

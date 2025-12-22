@@ -9,21 +9,13 @@ gdl90:
         path: ./gdl90-record.log
         speed: 1
         loop: false
-
-# Optional: live GPS via USB serial (e.g. Stratux GPYes 2.0 u-blox8).
-# When enabled, Stratux-NG will use GPS fixes for GDL90 ownship position.
 gps:
     enable: true
-    # Source can be:
-    # - nmea: read NMEA directly from a serial device (default)
-    # - gpsd: read fixes from gpsd (recommended for “any random USB GPS” appliance images)
     source: gpsd
     gpsd_addr: 127.0.0.1:2947
-    # Recommended for appliance images: create a stable symlink via udev (see configs/udev/99-stratux-gps.rules.example)
     device: /dev/stratux-gps
     baud: 9600
     horizontal_accuracy_m: 10
-
 sim:
     ownship:
         center_lat_deg: 45.5404
@@ -49,20 +41,14 @@ sim:
 ahrs:
     enable: true
     i2c_bus: 1
-    # IMU I2C address (ICM-20948): typically 0x68 (decimal 104)
     imu_addr: 104
-    # Baro I2C address (BMP280): commonly 0x77 (decimal 119), sometimes 0x76 (decimal 118).
-    # Stratux-NG will probe both 0x77 and 0x76.
     baro_addr: 119
     orientation:
         forward_axis: -2
         gravity_in_sensor:
-            - -0.05416225642137543
-            - -0.1240663918653775
-            - -0.9907946206903081
-web:
-    listen: :8080
-
+            - -0.020923741830921962
+            - -0.11055439047436445
+            - -0.9936497993632539
 fan:
     enable: true
     pwm_pin: 18
@@ -70,3 +56,5 @@ fan:
     temp_target_c: 50
     pwm_duty_min: 0
     update_interval: 5s
+web:
+    listen: :8080

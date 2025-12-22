@@ -80,6 +80,7 @@ type AttitudeSnapshot struct {
 	RollDeg       *float64 `json:"roll_deg,omitempty"`
 	PitchDeg      *float64 `json:"pitch_deg,omitempty"`
 	HeadingDeg    *float64 `json:"heading_deg,omitempty"`
+	PressureAltFt *float64 `json:"pressure_alt_ft,omitempty"`
 	LastUpdateUTC string   `json:"last_update_utc,omitempty"`
 }
 
