@@ -3,12 +3,14 @@
 package fancontrol
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -131,7 +133,7 @@ func (d *sysfsPWM) ensureExported() error {
 	}
 	// Export channel.
 	exportPath := filepath.Join(d.chipPath, "export")
-	if err := os.WriteFile(exportPath, []byte(strconv.Itoa(d.channel)), 0o644); err != nil {
+	if err := writeSysfs(exportPath, strconv.Itoa(d.channel)); err != nil {
 		// If already exported by someone else, ignore.
 		if _, statErr := os.Stat(d.pwmPath); statErr == nil {
 			return nil
@@ -221,7 +223,7 @@ func (d *sysfsPWM) SetDutyPercent(p float64) error {
 
 func (d *sysfsPWM) writeUint(name string, v uint64) error {
 	p := filepath.Join(d.pwmPath, name)
-	return os.WriteFile(p, []byte(strconv.FormatUint(v, 10)), 0o644)
+	return writeSysfs(p, strconv.FormatUint(v, 10))
 }
 
 func (d *sysfsPWM) writeBool(name string, v bool) error {
@@ -230,7 +232,55 @@ func (d *sysfsPWM) writeBool(name string, v bool) error {
 	if v {
 		val = "1"
 	}
-	return os.WriteFile(p, []byte(val), 0o644)
+	return writeSysfs(p, val)
+}
+
+func writeSysfs(path string, value string) error {
+	// Use O_WRONLY without O_TRUNC/O_CREATE.
+	// Some sysfs attributes reject truncation flags even when mode bits allow writes,
+	// resulting in confusing EACCES/EPERM at open() time.
+	// Additionally: immediately after exporting a PWM channel, the kernel creates
+	// new sysfs files and udev may adjust permissions asynchronously. On some
+	// systems there's a short window where open() returns EACCES or ENOENT even
+	// though the steady-state permissions are correct.
+	deadline := time.Now().Add(2 * time.Second)
+	var lastErr error
+	for {
+		f, err := os.OpenFile(path, os.O_WRONLY, 0)
+		if err != nil {
+			lastErr = err
+			if time.Now().Before(deadline) && isRetryableSysfsErr(err) {
+				time.Sleep(25 * time.Millisecond)
+				continue
+			}
+			return err
+		}
+		_, werr := f.WriteString(value)
+		cerr := f.Close()
+		if werr == nil && cerr == nil {
+			return nil
+		}
+		if werr != nil {
+			lastErr = werr
+		} else {
+			lastErr = cerr
+		}
+		if time.Now().Before(deadline) && isRetryableSysfsErr(lastErr) {
+			time.Sleep(25 * time.Millisecond)
+			continue
+		}
+		if werr != nil && cerr != nil {
+			return errors.Join(werr, cerr)
+		}
+		if werr != nil {
+			return werr
+		}
+		return cerr
+	}
+}
+
+func isRetryableSysfsErr(err error) bool {
+	return os.IsPermission(err) || os.IsNotExist(err) || errors.Is(err, syscall.EACCES) || errors.Is(err, syscall.EPERM) || errors.Is(err, syscall.ENOENT)
 }
 
 func readInt(path string) (int, error) {
