@@ -89,11 +89,11 @@ func newLiveRuntime(ctx context.Context, cfg config.Config, resolvedConfigPath s
 	// Optional: real GPS bring-up (USB serial NMEA).
 	if c.GPS.Enable {
 		svc := gps.New(gps.Config{
-			Enable:    c.GPS.Enable,
-			Source:    c.GPS.Source,
-			GPSDAddr:  c.GPS.GPSDAddr,
-			Device:    c.GPS.Device,
-			Baud:      c.GPS.Baud,
+			Enable:   c.GPS.Enable,
+			Source:   c.GPS.Source,
+			GPSDAddr: c.GPS.GPSDAddr,
+			Device:   c.GPS.Device,
+			Baud:     c.GPS.Baud,
 		})
 		if err := svc.Start(ctx); err != nil {
 			// Keep Stratux-NG running even if GPS fails to init.

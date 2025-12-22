@@ -553,7 +553,6 @@ func TestBuildGDL90FramesWithGPS_HeadingUsesYawForShortTurnsAndGPSForAccuracy(t 
 		t.Fatalf("test gps fix stale: now=%s fix=%s", t0.UTC().Format(time.RFC3339Nano), tFix.UTC().Format(time.RFC3339Nano))
 	}
 
-
 	// Seed: heading should start at GPS track.
 	frames0 := buildGDL90FramesWithGPS(cfg, t0, true, ahrs.Snapshot{Valid: true, YawRateDps: 0}, true, gpsSnap, hf)
 	le0 := findAHRSLERaw(t, frames0)

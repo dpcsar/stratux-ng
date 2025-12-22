@@ -162,6 +162,17 @@ h2 { margin: 6px 0 6px; font-size: 18px; }
   z-index: 2;
 }
 
+.attitude-overlay-bottom-left {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  display: grid;
+  gap: 6px;
+  text-align: left;
+  pointer-events: none;
+  z-index: 2;
+}
+
 .attitude-overlay-col {
   display: grid;
   gap: 6px;

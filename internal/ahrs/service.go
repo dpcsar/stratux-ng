@@ -12,6 +12,13 @@ import (
 	"stratux-ng/internal/sensors/icm20948"
 )
 
+const (
+	startupWarmup   = 10 * time.Second
+	postZeroWait    = 2 * time.Second
+	startupMaxWait  = 45 * time.Second
+	setLevelMaxWait = 10 * time.Second
+)
+
 type Config struct {
 	Enable   bool
 	I2CBus   int
@@ -29,13 +36,19 @@ type Snapshot struct {
 	BaroDetected     bool
 	IMULastUpdateAt  time.Time
 	BaroLastUpdateAt time.Time
+	StartupReady     bool
 
 	OrientationSet         bool
 	OrientationForwardAxis int
 
-	RollDeg  float64
-	PitchDeg float64
+	RollDeg    float64
+	PitchDeg   float64
 	YawRateDps float64
+
+	GLoadValid bool
+	GLoadG     float64
+	GLoadMinG  float64
+	GLoadMaxG  float64
 
 	PressureAltFeet    float64
 	PressureAltValid   bool
@@ -51,6 +64,8 @@ type Service struct {
 
 	imuErr  string
 	baroErr string
+
+	imuFirstSampleAt time.Time
 
 	rollOffsetDeg  float64
 	pitchOffsetDeg float64
@@ -372,6 +387,11 @@ func (s *Service) run(ctx context.Context) {
 	var baroConsecutiveFailures int
 	var baroLastReinitAt time.Time
 
+	// G-meter stats warmup: ignore the first couple seconds of samples so startup
+	// transients don't get captured as MIN/MAX.
+	var gLoadWarmupUntil time.Time
+
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -387,7 +407,12 @@ func (s *Service) run(ctx context.Context) {
 			calSumX, calSumY, calSumZ = 0, 0, 0
 			calN = 0
 		case req := <-s.orientCh:
-			// Start an orientation request (handled using current/next IMU samples).
+			// Reset g-meter stats when re-orienting.
+			// Also re-arm the warmup window so MIN/MAX doesn't capture transients.
+			s.mu.Lock()
+			s.snap.GLoadValid = false
+			s.mu.Unlock()
+			gLoadWarmupUntil = time.Now().UTC().Add(10 * time.Second)
 			if req.done == nil {
 				continue
 			}
@@ -447,6 +472,12 @@ func (s *Service) run(ctx context.Context) {
 				dt = 0
 			}
 
+			s.mu.Lock()
+			if s.imuFirstSampleAt.IsZero() {
+				s.imuFirstSampleAt = now
+			}
+			s.mu.Unlock()
+
 			// Map sensor vectors into body frame if an orientation has been set.
 			ax, ay, az := sample.Ax, sample.Ay, sample.Az
 			gx, gy, gz := sample.Gx, sample.Gy, sample.Gz
@@ -464,6 +495,13 @@ func (s *Service) run(ctx context.Context) {
 			// Compute roll/pitch from accel only (gravity vector).
 			accRollRad := math.Atan2(ay, az)
 			accPitchRad := math.Atan2(-ax, math.Sqrt(ay*ay+az*az))
+			// G-meter: signed load factor along body Z (normal axis).
+			// With our body frame convention (Z positive down), level flight is ~+1G.
+			// This can go negative during inverted/negative-G maneuvers.
+			gLoad := az
+			if gLoadWarmupUntil.IsZero() {
+				gLoadWarmupUntil = now.Add(10 * time.Second)
+			}
 
 			// Integrate gyro (deg/s) -> rad.
 			gxRad := gx * math.Pi / 180.0
@@ -556,6 +594,24 @@ func (s *Service) run(ctx context.Context) {
 			s.snap.RollDeg = roll + s.rollOffsetDeg
 			s.snap.PitchDeg = pitch + s.pitchOffsetDeg
 			s.snap.YawRateDps = yawRateDps
+			// G-meter (load factor): signed normal-axis accel in G.
+			s.snap.GLoadG = gLoad
+			if now.Before(gLoadWarmupUntil) {
+				// During warmup, keep g-meter invalid so the UI shows "--".
+				s.snap.GLoadValid = false
+			} else if !s.snap.GLoadValid {
+				// First sample after warmup seeds MIN/MAX.
+				s.snap.GLoadValid = true
+				s.snap.GLoadMinG = gLoad
+				s.snap.GLoadMaxG = gLoad
+			} else {
+				if gLoad < s.snap.GLoadMinG {
+					s.snap.GLoadMinG = gLoad
+				}
+				if gLoad > s.snap.GLoadMaxG {
+					s.snap.GLoadMaxG = gLoad
+				}
+			}
 			s.snap.UpdatedAt = now
 			s.snap.IMULastUpdateAt = now
 			s.snap.OrientationForwardAxis = s.forwardAxis
@@ -809,47 +865,87 @@ func (s *Service) applyOrientationFromGravity(avgAccel [3]float64) error {
 
 func (s *Service) startupCal(ctx context.Context) {
 	// Best-effort: do this once per process start.
-	// We wait a bit to allow the IMU filter to settle, then perform SetLevel and ZeroDrift.
+	// Sequence:
+	// 1) warm up
+	// 2) run ZeroDrift until complete
+	// 3) wait briefly
+	// 4) run SetLevel
+	// 5) mark StartupReady so consumers can start trusting the output
 	s.startupOnce.Do(func() {
 		if s == nil {
 			return
 		}
-		settle := time.NewTimer(3 * time.Second)
-		defer settle.Stop()
-		select {
-		case <-ctx.Done():
-			return
-		case <-s.stopCh:
-			return
-		case <-settle.C:
+		markReady := func() {
+			s.mu.Lock()
+			s.snap.StartupReady = true
+			s.mu.Unlock()
 		}
 
-		// Try SetLevel (requires valid).
-		deadline := time.NewTimer(5 * time.Second)
-		defer deadline.Stop()
+		// Wait for first IMU sample + warmup.
+		totalDeadline := time.NewTimer(startupMaxWait)
+		defer totalDeadline.Stop()
+		tick := time.NewTicker(100 * time.Millisecond)
+		defer tick.Stop()
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-s.stopCh:
 				return
-			case <-deadline.C:
-				goto ZERO
-			default:
+			case <-totalDeadline.C:
+				markReady()
+				return
+			case <-tick.C:
 			}
-			snap := s.Snapshot()
-			if snap.Valid {
-				_ = s.SetLevel()
-				break
+			s.mu.RLock()
+			first := s.imuFirstSampleAt
+			valid := s.snap.Valid
+			s.mu.RUnlock()
+			if first.IsZero() {
+				continue
 			}
-			time.Sleep(100 * time.Millisecond)
+			if time.Since(first) < startupWarmup {
+				continue
+			}
+			if !valid {
+				continue
+			}
+			break
 		}
 
-	ZERO:
-		// Try ZeroDrift (non-fatal if it fails).
-		zdCtx, cancel := context.WithTimeout(ctx, 6*time.Second)
-		defer cancel()
-		_ = s.ZeroDrift(zdCtx)
+		// Run ZeroDrift until complete.
+		_ = s.ZeroDrift(ctx)
+
+		// Wait a bit after zero drift.
+		pause := time.NewTimer(postZeroWait)
+		defer pause.Stop()
+		select {
+		case <-ctx.Done():
+			return
+		case <-s.stopCh:
+			return
+		case <-pause.C:
+		}
+
+		// Run SetLevel (requires valid). Retry briefly if needed.
+		setDeadline := time.NewTimer(setLevelMaxWait)
+		defer setDeadline.Stop()
+		for {
+			if err := s.SetLevel(); err == nil {
+				break
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-s.stopCh:
+				return
+			case <-setDeadline.C:
+				break
+			case <-time.After(100 * time.Millisecond):
+			}
+		}
+
+		markReady()
 	})
 }
 

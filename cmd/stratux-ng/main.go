@@ -497,6 +497,8 @@ func main() {
 				sc := rt.Scenario()
 				var now time.Time
 				var frames [][]byte
+				var snap ahrs.Snapshot
+				var haveAHRS bool
 				if sc != nil && sc.scenario != nil {
 					now = sc.startUTC.Add(sc.elapsed)
 					// Scenario mode is deterministic and currently does not use live GPS.
@@ -504,8 +506,6 @@ func main() {
 					frames = buildGDL90FramesFromScenario(curCfg, now.UTC(), sc.elapsed, sc.scenario, sc.ownshipICAO, sc.trafficICAO)
 				} else {
 					now = time.Now()
-					var snap ahrs.Snapshot
-					var haveAHRS bool
 					var gpsSnap gps.Snapshot
 					var haveGPS bool
 					if fanSnap, haveFan := rt.FanSnapshot(); haveFan {
@@ -563,7 +563,26 @@ func main() {
 						frames = buildGDL90Frames(curCfg, now.UTC(), haveAHRS, snap)
 					}
 				}
-				status.SetAttitude(now.UTC(), decodeAttitudeFromFrames(frames))
+				att := decodeAttitudeFromFrames(frames)
+				if haveAHRS && snap.IMUDetected && !snap.StartupReady {
+					att.Valid = false
+					att.RollDeg = nil
+					att.PitchDeg = nil
+					att.HeadingDeg = nil
+					att.PressureAltFt = nil
+					att.GLoad = nil
+					att.GMin = nil
+					att.GMax = nil
+				}
+				if haveAHRS && snap.StartupReady && snap.Valid && snap.GLoadValid {
+					g := snap.GLoadG
+					gmin := snap.GLoadMinG
+					gmax := snap.GLoadMaxG
+					att.GLoad = &g
+					att.GMin = &gmin
+					att.GMax = &gmax
+				}
+				status.SetAttitude(now.UTC(), att)
 				status.MarkTick(now.UTC(), len(frames))
 				for _, frame := range frames {
 					if rec != nil {
@@ -798,9 +817,9 @@ func buildGDL90Frames(cfg config.Config, now time.Time, haveAHRS bool, ahrsSnap 
 }
 
 type headingFuser struct {
-	have     bool
-	heading  float64
-	lastAt   time.Time
+	have    bool
+	heading float64
+	lastAt  time.Time
 }
 
 func (h *headingFuser) Reset() {

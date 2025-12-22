@@ -79,6 +79,9 @@
   const attHeading = document.getElementById('att-heading');
   const attPalt = document.getElementById('att-palt');
   const attGps = document.getElementById('att-gps');
+  const attG = document.getElementById('att-g');
+  const attGMin = document.getElementById('att-gmin');
+  const attGMax = document.getElementById('att-gmax');
   const attCanvas = document.getElementById('att-canvas');
   const attCtx = attCanvas ? attCanvas.getContext('2d') : null;
 
@@ -849,7 +852,7 @@
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.font = `${Math.max(12, Math.floor(r * 0.12))}px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif`;
-      ctx.fillText('AHRS UNAVAILABLE', 0, 0);
+      ctx.fillText('WARMING UP / CALIBRATING', 0, 0);
       ctx.textAlign = 'start';
       ctx.textBaseline = 'alphabetic';
     }
@@ -915,6 +918,10 @@
     setInput(attPitch, a.pitch_deg == null ? '' : `${fmtNum(a.pitch_deg, 1)}°`);
     setInput(attHeading, a.heading_deg == null ? '' : String(Math.round(Number(a.heading_deg))).padStart(3, '0'));
     setInput(attPalt, a.pressure_alt_ft == null ? '' : String(Math.round(Number(a.pressure_alt_ft))));
+
+    setInput(attG, a.g_load == null ? '--' : fmtNum(a.g_load, 2));
+    setInput(attGMin, a.g_min == null ? '--' : fmtNum(a.g_min, 2));
+    setInput(attGMax, a.g_max == null ? '--' : fmtNum(a.g_max, 2));
 
     let gpsStatus = '--';
     if (g.enabled) {
