@@ -93,6 +93,30 @@
   const attRightTape = document.getElementById('att-tape-right');
   const attRightTapeCtx = attRightTape ? attRightTape.getContext('2d') : null;
 
+  // Map UI.
+  const mapLeafletEl = document.getElementById('map-leaflet');
+  const mapMsg = document.getElementById('map-msg');
+  const mapInfo = document.getElementById('map-info');
+
+  let leafletMap = null;
+  let ownshipMarker = null;
+  let ownshipTrack = null;
+  let followOwnship = true;
+  let lastGoodLatLng = null;
+  let trackPoints = [];
+  let hasAutoCentered = false;
+  const defaultOwnshipZoom = 12;
+
+  function centerOnOwnship() {
+    followOwnship = true;
+    if (!leafletMap || !lastGoodLatLng) return;
+    try {
+      leafletMap.setView(lastGoodLatLng, defaultOwnshipZoom, { animate: false });
+    } catch {
+      // ignore
+    }
+  }
+
   const settingsForm = document.getElementById('settings-form');
   const saveMsg = document.getElementById('save-msg');
   const setGDL90Dest = document.getElementById('set-gdl90-dest');
@@ -191,6 +215,8 @@
       v.el.classList.toggle('active', v.key === key);
     }
 
+    document.body.classList.toggle('map-active', key === 'map');
+
     // Bottom-nav selection only applies to the primary three tabs.
     for (const btn of document.querySelectorAll('.navbtn')) {
       const isSelected = btn.dataset.view === key;
@@ -204,6 +230,189 @@
 
     if (key === 'logs') loadLogs();
     if (key === 'settings') loadSettings();
+    if (key === 'map') {
+      initMapIfNeeded();
+      // If the map was initialized while hidden, force Leaflet to compute sizes.
+      try {
+        leafletMap?.invalidateSize?.();
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  function setMapMessage(s) {
+    if (!mapMsg) return;
+    mapMsg.textContent = String(s || '');
+  }
+
+  function fmtDeg(x, digits) {
+    const n = Number(x);
+    if (!Number.isFinite(n)) return '--';
+    return n.toFixed(digits);
+  }
+
+  function setMapHud(gps) {
+    if (!mapInfo) return;
+    if (!gps) {
+      mapInfo.textContent = '--';
+      return;
+    }
+
+    let gpsStatus = '--';
+    if (gps.enabled) {
+      if (!gps.valid) {
+        gpsStatus = 'NO FIX';
+      } else if (gps.fix_stale) {
+        gpsStatus = 'STALE';
+      } else {
+        gpsStatus = 'OK';
+      }
+    }
+
+    const lat = (gps.enabled && gps.valid) ? fmtDeg(gps.lat_deg, 5) : '--';
+    const lon = (gps.enabled && gps.valid) ? fmtDeg(gps.lon_deg, 5) : '--';
+    const alt = gps.alt_feet == null ? '--' : `${String(gps.alt_feet)}ft`;
+    const gs = gps.ground_kt == null ? '--' : `${String(gps.ground_kt)}kt`;
+    const trk = gps.track_deg == null ? '--' : `${fmtNum(gps.track_deg, 0)}°`;
+
+    mapInfo.textContent = `GPS ${gpsStatus} | LAT ${lat} | LON ${lon} | ALT ${alt} | GS ${gs} | TRK ${trk}`;
+  }
+
+  function initMapIfNeeded() {
+    if (leafletMap || !mapLeafletEl) return;
+
+    if (!window.L || typeof window.L.map !== 'function') {
+      setMapMessage('Map unavailable (Leaflet failed to load).');
+      return;
+    }
+
+    setMapMessage('');
+
+    leafletMap = window.L.map(mapLeafletEl, {
+      zoomControl: true,
+      attributionControl: true,
+      preferCanvas: true,
+    });
+
+    // Start at a sensible world view.
+    leafletMap.setView([0, 0], 2);
+
+    // Stratux-style: keep it simple with OSM tiles.
+    window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      crossOrigin: true,
+      attribution: '&copy; OpenStreetMap contributors',
+    }).addTo(leafletMap);
+
+    const accent = cssVar('--accent') || '#7dd3fc';
+
+    ownshipMarker = window.L.circleMarker([0, 0], {
+      radius: 7,
+      color: accent,
+      weight: 2,
+      fillColor: accent,
+      fillOpacity: 0.35,
+    }).addTo(leafletMap);
+
+    ownshipTrack = window.L.polyline([], {
+      color: accent,
+      weight: 2,
+      opacity: 0.75,
+    }).addTo(leafletMap);
+
+    // Add a Center control under Leaflet's +/- zoom control.
+    try {
+      const CenterControl = window.L.Control.extend({
+        options: { position: 'topleft' },
+        onAdd: function () {
+          const container = window.L.DomUtil.create('div', 'leaflet-control map-center-control');
+          const a = window.L.DomUtil.create('a', '', container);
+          a.href = '#';
+          a.title = 'Center';
+          a.setAttribute('aria-label', 'Center on ownship');
+          a.setAttribute('role', 'button');
+          a.textContent = '⦿';
+
+          window.L.DomEvent.disableClickPropagation(container);
+          window.L.DomEvent.on(a, 'click', (e) => {
+            window.L.DomEvent.preventDefault(e);
+            centerOnOwnship();
+          });
+          return container;
+        },
+      });
+      leafletMap.addControl(new CenterControl());
+    } catch {
+      // ignore
+    }
+
+    // If user pans/zooms, stop auto-follow until Center is pressed.
+    leafletMap.on('dragstart', () => { followOwnship = false; });
+    leafletMap.on('zoomstart', () => { followOwnship = false; });
+  }
+
+  function updateMapFromGPS(gps) {
+    setMapHud(gps);
+    if (!leafletMap || !ownshipMarker || !ownshipTrack) return;
+
+    if (!gps || !gps.enabled) {
+      setMapMessage('GPS disabled.');
+      return;
+    }
+    if (!gps.valid) {
+      setMapMessage('Waiting for GPS fix…');
+      return;
+    }
+
+    const lat = Number(gps.lat_deg);
+    const lon = Number(gps.lon_deg);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      setMapMessage('Waiting for valid position…');
+      return;
+    }
+
+    setMapMessage('');
+    lastGoodLatLng = [lat, lon];
+
+    try {
+      ownshipMarker.setLatLng(lastGoodLatLng);
+    } catch {
+      // ignore
+    }
+
+    // Track: keep a small rolling buffer.
+    const maxTrack = 600;
+    const last = trackPoints.length ? trackPoints[trackPoints.length - 1] : null;
+    const moved = !last || Math.abs(last[0] - lat) > 1e-6 || Math.abs(last[1] - lon) > 1e-6;
+    if (moved) {
+      trackPoints.push([lat, lon]);
+      if (trackPoints.length > maxTrack) trackPoints = trackPoints.slice(trackPoints.length - maxTrack);
+      try {
+        ownshipTrack.setLatLngs(trackPoints);
+      } catch {
+        // ignore
+      }
+    }
+
+    // Initial: center on ownship at the default zoom.
+    if (!hasAutoCentered) {
+      hasAutoCentered = true;
+      try {
+        centerOnOwnship();
+      } catch {
+        // ignore
+      }
+    }
+
+    if (followOwnship) {
+      try {
+        const z = leafletMap.getZoom?.();
+        leafletMap.setView(lastGoodLatLng, Number.isFinite(z) ? z : 12, { animate: false });
+      } catch {
+        // ignore
+      }
+    }
   }
 
   function openDrawer() {
@@ -1036,6 +1245,9 @@
       lastAttitude = s?.attitude || null;
       lastGps = s?.gps || null;
       drawAttitude();
+      // Map updates are driven off the same poll.
+      initMapIfNeeded();
+      updateMapFromGPS(lastGps);
       if (subtitle) subtitle.textContent = 'Connected';
     } catch {
       if (subtitle) subtitle.textContent = 'Disconnected';
