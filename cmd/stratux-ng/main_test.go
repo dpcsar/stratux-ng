@@ -189,3 +189,65 @@ func TestBuildGDL90Frames_OwnshipAltitudePrefersBaroPressureAltitude(t *testing.
 		t.Fatalf("expected ownship altitude=%d (baro), got %d", int(baroAltFeet), decodedAltFeet)
 	}
 }
+
+func TestBuildGDL90Frames_DoesNotAdvertiseGPSValidWithoutOwnship(t *testing.T) {
+	cfg := config.Config{
+		GDL90: config.GDL90Config{
+			Dest:     "127.0.0.1:4000",
+			Interval: 1 * time.Second,
+		},
+		Sim: config.SimConfig{
+			Ownship: config.OwnshipSimConfig{
+				CenterLatDeg: 45.541,
+				CenterLonDeg: -122.949,
+				AltFeet:      3500,
+				GroundKt:     90,
+				RadiusNm:     0.5,
+				Period:       120 * time.Second,
+				ICAO:         "BADICAO",
+				Callsign:     "STRATUX",
+			},
+		},
+	}
+
+	now := time.Date(2025, 12, 20, 19, 0, 0, 0, time.UTC)
+	frames := buildGDL90Frames(cfg, now, false, ahrs.Snapshot{})
+	if len(frames) == 0 {
+		t.Fatalf("expected frames")
+	}
+
+	var hb00 []byte
+	var hbCC []byte
+	for _, f := range frames {
+		msg := unframeForMsg(t, f)
+		switch msg[0] {
+		case 0x00:
+			hb00 = msg
+		case 0xCC:
+			hbCC = msg
+		case 0x0A:
+			t.Fatalf("did not expect ownship report (0x0A) when ICAO is invalid")
+		}
+	}
+	if hb00 == nil {
+		t.Fatalf("expected heartbeat (0x00)")
+	}
+	if len(hb00) < 2 {
+		t.Fatalf("heartbeat too short: %d", len(hb00))
+	}
+	// In our heartbeat implementation, msg[1] bit7 indicates UTC/GPS OK.
+	if (hb00[1] & 0x80) != 0 {
+		t.Fatalf("expected heartbeat gpsValid=false")
+	}
+
+	if hbCC == nil {
+		t.Fatalf("expected stratux heartbeat (0xCC)")
+	}
+	if len(hbCC) < 2 {
+		t.Fatalf("stratux heartbeat too short: %d", len(hbCC))
+	}
+	// In stratux heartbeat, msg[1] bit1 indicates GPS valid.
+	if (hbCC[1] & 0x02) != 0 {
+		t.Fatalf("expected stratux heartbeat gpsValid=false")
+	}
+}

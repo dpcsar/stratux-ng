@@ -167,6 +167,11 @@ GDL90 altitude semantics (Stratux-compatible):
 - Ownship Report (0x0A) altitude is treated as **pressure altitude** when available.
 - Ownship Geometric Altitude (0x0B) remains **geometric altitude (MSL)**.
 
+Heading/yaw note (Stratux-like):
+- The AHRS board can measure **yaw rate** (gyro Z), but a stable absolute **yaw/heading angle** generally requires an external reference.
+- Upstream Stratux behavior is effectively “gyro for short-term dynamics (turns), GPS track as a heading reference when valid”; magnetometer heading is typically left invalid until calibration/fusion is implemented.
+- Next planned work for Stratux-NG: bring up **GPS ingestion** so we can provide real track/groundspeed and use that as a heading reference (and later improve turn/heading behavior).
+
 Calibration + orientation (Stratux AHRS 2.0 style):
 - **Set Level**: cages roll/pitch so the current attitude becomes (0,0).
 - **Zero Drift**: estimates stationary gyro bias over ~2 seconds.

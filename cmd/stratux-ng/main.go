@@ -610,12 +610,20 @@ func runListen(ctx context.Context, addr string, dumpHex bool) error {
 
 func buildGDL90Frames(cfg config.Config, now time.Time, haveAHRS bool, ahrsSnap ahrs.Snapshot) [][]byte {
 	// Ownship sim is always enabled (unless scenario mode is driving frames).
-	// Advertise GPS/AHRS as valid so EFBs don't show "No GPS reception".
-	gpsValid := true
+	// Some EFBs will error if we claim GPS-valid but never send ownship (0x0A),
+	// so only advertise GPS-valid when we can actually emit ownship.
+	icao, err := gdl90.ParseICAOHex(cfg.Sim.Ownship.ICAO)
+	ownshipOK := err == nil
+	if err != nil {
+		log.Printf("sim ownship invalid sim.ownship.icao: %v", err)
+	}
+
+	gpsValid := ownshipOK
 	ahrsValid := true
 	if cfg.AHRS.Enable {
 		ahrsValid = haveAHRS && ahrsSnap.Valid
 	}
+
 	frames := make([][]byte, 0, 16)
 	frames = append(frames,
 		gdl90.HeartbeatFrameAt(now, gpsValid, false),
@@ -624,10 +632,8 @@ func buildGDL90Frames(cfg config.Config, now time.Time, haveAHRS bool, ahrsSnap 
 
 	// Identify as a Stratux-like device for apps that key off 0x65.
 	frames = append(frames, gdl90.ForeFlightIDFrame("Stratux", "Stratux-NG"))
-
-	icao, err := gdl90.ParseICAOHex(cfg.Sim.Ownship.ICAO)
-	if err != nil {
-		log.Printf("sim ownship invalid sim.ownship.icao: %v", err)
+	if !ownshipOK {
+		// Without ownship, skip geo-alt and traffic to avoid confusing clients.
 		return frames
 	}
 
