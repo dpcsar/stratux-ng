@@ -3,6 +3,8 @@ package web
 import (
 	"sync/atomic"
 	"time"
+
+	"stratux-ng/internal/fancontrol"
 )
 
 type Status struct {
@@ -13,6 +15,8 @@ type Status struct {
 	interval      atomic.Value // string
 	simInfo       atomic.Value // map[string]any
 	attitude      atomic.Value // AttitudeSnapshot
+	ahrsSensors   atomic.Value // AHRSSensorsSnapshot
+	fan          atomic.Value // fancontrol.Snapshot
 }
 
 func NewStatus() *Status {
@@ -24,7 +28,35 @@ func NewStatus() *Status {
 	s.interval.Store("")
 	s.simInfo.Store(map[string]any{})
 	s.attitude.Store(AttitudeSnapshot{})
+	s.ahrsSensors.Store(AHRSSensorsSnapshot{})
+	s.fan.Store(fancontrol.Snapshot{})
 	return s
+}
+
+func (s *Status) SetFan(nowUTC time.Time, snap fancontrol.Snapshot) {
+	if nowUTC.IsZero() {
+		nowUTC = time.Now().UTC()
+	}
+	// Ensure Enabled is reflected even if the service hasn't ticked yet.
+	if snap.LastUpdateAt.IsZero() {
+		snap.LastUpdateAt = nowUTC.UTC()
+	}
+	s.fan.Store(snap)
+}
+
+// AHRSSensorsSnapshot is a small, UI-friendly view of AHRS hardware health.
+// This is intended for debugging/verification and is not a flight instrument.
+type AHRSSensorsSnapshot struct {
+	Enabled           bool   `json:"enabled"`
+	IMUDetected       bool   `json:"imu_detected"`
+	BaroDetected      bool   `json:"baro_detected"`
+	IMUWorking        bool   `json:"imu_working"`
+	BaroWorking       bool   `json:"baro_working"`
+	OrientationSet    bool   `json:"orientation_set"`
+	ForwardAxis       int    `json:"forward_axis"`
+	IMULastUpdateUTC  string `json:"imu_last_update_utc,omitempty"`
+	BaroLastUpdateUTC string `json:"baro_last_update_utc,omitempty"`
+	LastError         string `json:"last_error,omitempty"`
 }
 
 // AttitudeSnapshot is a small, UI-friendly view of AHRS output.
@@ -45,6 +77,20 @@ func (s *Status) SetAttitude(nowUTC time.Time, att AttitudeSnapshot) {
 	}
 	att.LastUpdateUTC = nowUTC.UTC().Format(time.RFC3339Nano)
 	s.attitude.Store(att)
+}
+
+func (s *Status) SetAHRSSensors(nowUTC time.Time, a AHRSSensorsSnapshot) {
+	if nowUTC.IsZero() {
+		nowUTC = time.Now().UTC()
+	}
+	// Normalize empty timestamps to omit.
+	if a.IMULastUpdateUTC == "" && a.IMUWorking {
+		a.IMULastUpdateUTC = nowUTC.UTC().Format(time.RFC3339Nano)
+	}
+	if a.BaroLastUpdateUTC == "" && a.BaroWorking {
+		a.BaroLastUpdateUTC = nowUTC.UTC().Format(time.RFC3339Nano)
+	}
+	s.ahrsSensors.Store(a)
 }
 
 func (s *Status) SetStatic(gdl90Dest string, interval string, simInfo map[string]any) {
@@ -70,15 +116,17 @@ func (s *Status) MarkTick(nowUTC time.Time, framesSentThisTick int) {
 }
 
 type StatusSnapshot struct {
-	Service         string           `json:"service"`
-	NowUTC          string           `json:"now_utc"`
-	UptimeSec       int64            `json:"uptime_sec"`
-	GDL90Dest       string           `json:"gdl90_dest"`
-	Interval        string           `json:"interval"`
-	FramesSentTotal uint64           `json:"frames_sent_total"`
-	LastTickUTC     string           `json:"last_tick_utc,omitempty"`
-	Sim             map[string]any   `json:"sim"`
-	Attitude        AttitudeSnapshot `json:"attitude"`
+	Service         string              `json:"service"`
+	NowUTC          string              `json:"now_utc"`
+	UptimeSec       int64               `json:"uptime_sec"`
+	GDL90Dest       string              `json:"gdl90_dest"`
+	Interval        string              `json:"interval"`
+	FramesSentTotal uint64              `json:"frames_sent_total"`
+	LastTickUTC     string              `json:"last_tick_utc,omitempty"`
+	Sim             map[string]any      `json:"sim"`
+	Attitude        AttitudeSnapshot    `json:"attitude"`
+	AHRSSensors     AHRSSensorsSnapshot `json:"ahrs"`
+	Fan             fancontrol.Snapshot `json:"fan"`
 }
 
 func (s *Status) Snapshot(nowUTC time.Time) StatusSnapshot {
@@ -98,6 +146,8 @@ func (s *Status) Snapshot(nowUTC time.Time) StatusSnapshot {
 		FramesSentTotal: atomic.LoadUint64(&s.framesSent),
 		Sim:             s.simInfo.Load().(map[string]any),
 		Attitude:        s.attitude.Load().(AttitudeSnapshot),
+		AHRSSensors:     s.ahrsSensors.Load().(AHRSSensorsSnapshot),
+		Fan:             s.fan.Load().(fancontrol.Snapshot),
 	}
 	if lastTick != 0 {
 		snap.LastTickUTC = time.Unix(0, lastTick).UTC().Format(time.RFC3339Nano)

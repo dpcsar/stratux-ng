@@ -15,7 +15,44 @@ import (
 type Config struct {
 	GDL90 GDL90Config `yaml:"gdl90"`
 	Sim   SimConfig   `yaml:"sim"`
+	AHRS  AHRSConfig  `yaml:"ahrs"`
+	Fan   FanConfig   `yaml:"fan"`
 	Web   WebConfig   `yaml:"web"`
+}
+
+type FanConfig struct {
+	Enable bool `yaml:"enable"`
+
+	// PWMPin is BCM GPIO numbering (matches upstream Stratux).
+	PWMPin int `yaml:"pwm_pin"`
+	// PWMFrequency is the configured base frequency; upstream default is 64000.
+	PWMFrequency int `yaml:"pwm_frequency"`
+	// TempTargetC is the CPU temperature target in degrees C; upstream default is 50.
+	TempTargetC float64 `yaml:"temp_target_c"`
+	// PWMDutyMin is the minimum duty cycle percentage; upstream default is 0.
+	PWMDutyMin int `yaml:"pwm_duty_min"`
+	// UpdateInterval controls how often duty is recomputed; upstream default is 5s.
+	UpdateInterval time.Duration `yaml:"update_interval"`
+}
+
+type AHRSConfig struct {
+	Enable   bool   `yaml:"enable"`
+	I2CBus   int    `yaml:"i2c_bus"`
+	IMUAddr  uint16 `yaml:"imu_addr"`
+	BaroAddr uint16 `yaml:"baro_addr"`
+	// Orientation stores the sensor-to-aircraft mapping.
+	// If unset, Stratux-NG uses the sensor's native axes.
+	Orientation AHRSOrientationConfig `yaml:"orientation"`
+}
+
+type AHRSOrientationConfig struct {
+	// ForwardAxis mirrors Stratux's IMU mapping convention: +/-1..+/-3
+	// corresponding to sensor X/Y/Z, with sign.
+	ForwardAxis int `yaml:"forward_axis"`
+	// GravityInSensor is a gravity vector captured while the unit is installed
+	// in its in-flight orientation. When present (len==3), Stratux-NG will use
+	// it along with ForwardAxis.
+	GravityInSensor []float64 `yaml:"gravity_in_sensor"`
 }
 
 type WebConfig struct {
@@ -245,6 +282,68 @@ func DefaultAndValidate(cfg *Config) error {
 		if _, err := time.Parse(time.RFC3339, cfg.Sim.Scenario.StartTimeUTC); err != nil {
 			return fmt.Errorf("sim.scenario.start_time_utc must be RFC3339 (e.g. 2020-01-01T00:00:00Z): %w", err)
 		}
+	}
+
+	// AHRS defaults + validation.
+	if cfg.AHRS.I2CBus == 0 {
+		cfg.AHRS.I2CBus = 1
+	}
+	if cfg.AHRS.IMUAddr == 0 {
+		cfg.AHRS.IMUAddr = 0x68
+	}
+	if cfg.AHRS.BaroAddr == 0 {
+		cfg.AHRS.BaroAddr = 0x77
+	}
+	if cfg.AHRS.Orientation.ForwardAxis < -3 || cfg.AHRS.Orientation.ForwardAxis > 3 {
+		return fmt.Errorf("ahrs.orientation.forward_axis must be between -3 and 3")
+	}
+	if cfg.AHRS.Orientation.ForwardAxis == 0 {
+		if len(cfg.AHRS.Orientation.GravityInSensor) != 0 {
+			return fmt.Errorf("ahrs.orientation.gravity_in_sensor requires ahrs.orientation.forward_axis")
+		}
+	} else {
+		g := cfg.AHRS.Orientation.GravityInSensor
+		if len(g) != 0 && len(g) != 3 {
+			return fmt.Errorf("ahrs.orientation.gravity_in_sensor must have 3 elements")
+		}
+	}
+	if cfg.AHRS.I2CBus <= 0 {
+		return fmt.Errorf("ahrs.i2c_bus must be > 0")
+	}
+	if cfg.AHRS.IMUAddr > 0x7F {
+		return fmt.Errorf("ahrs.imu_addr must be a 7-bit I2C address")
+	}
+	if cfg.AHRS.BaroAddr > 0x7F {
+		return fmt.Errorf("ahrs.baro_addr must be a 7-bit I2C address")
+	}
+
+	// Fan defaults + validation.
+	if cfg.Fan.PWMPin == 0 {
+		cfg.Fan.PWMPin = 18
+	}
+	if cfg.Fan.PWMFrequency == 0 {
+		cfg.Fan.PWMFrequency = 64000
+	}
+	if cfg.Fan.TempTargetC == 0 {
+		cfg.Fan.TempTargetC = 50.0
+	}
+	if cfg.Fan.UpdateInterval <= 0 {
+		cfg.Fan.UpdateInterval = 5 * time.Second
+	}
+	if cfg.Fan.PWMPin <= 0 {
+		return fmt.Errorf("fan.pwm_pin must be > 0")
+	}
+	if cfg.Fan.PWMFrequency <= 0 {
+		return fmt.Errorf("fan.pwm_frequency must be > 0")
+	}
+	if cfg.Fan.TempTargetC <= 0 {
+		return fmt.Errorf("fan.temp_target_c must be > 0")
+	}
+	if cfg.Fan.PWMDutyMin < 0 || cfg.Fan.PWMDutyMin > 100 {
+		return fmt.Errorf("fan.pwm_duty_min must be between 0 and 100")
+	}
+	if cfg.Fan.UpdateInterval <= 0 {
+		return fmt.Errorf("fan.update_interval must be > 0")
 	}
 
 	// Web UI defaults + validation (Web UI is always enabled).

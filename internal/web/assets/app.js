@@ -26,6 +26,26 @@
   const stRecord = document.getElementById('st-record');
   const stReplay = document.getElementById('st-replay');
 
+  const stFanEnabled = document.getElementById('st-fan-enabled');
+  const stFanCpuTemp = document.getElementById('st-fan-cpu-temp');
+  const stFanDuty = document.getElementById('st-fan-duty');
+  const stFanError = document.getElementById('st-fan-error');
+
+  const stAhrsImuDetected = document.getElementById('st-ahrs-imu-detected');
+  const stAhrsImuWorking = document.getElementById('st-ahrs-imu-working');
+  const stAhrsImuUpdated = document.getElementById('st-ahrs-imu-updated');
+  const stAhrsBaroDetected = document.getElementById('st-ahrs-baro-detected');
+  const stAhrsBaroWorking = document.getElementById('st-ahrs-baro-working');
+  const stAhrsBaroUpdated = document.getElementById('st-ahrs-baro-updated');
+  const stAhrsError = document.getElementById('st-ahrs-error');
+  const stAhrsOrientationSet = document.getElementById('st-ahrs-orientation-set');
+  const stAhrsForwardAxis = document.getElementById('st-ahrs-forward-axis');
+  const btnAhrsLevel = document.getElementById('btn-ahrs-level');
+  const btnAhrsZeroDrift = document.getElementById('btn-ahrs-zero-drift');
+  const btnAhrsOrientForward = document.getElementById('btn-ahrs-orient-forward');
+  const btnAhrsOrientDone = document.getElementById('btn-ahrs-orient-done');
+  const ahrsMsg = document.getElementById('ahrs-msg');
+
   const attValid = document.getElementById('att-valid');
   const attRoll = document.getElementById('att-roll');
   const attPitch = document.getElementById('att-pitch');
@@ -193,6 +213,42 @@
     setChecked(stTraffic, !!sim.traffic);
     setChecked(stRecord, !!sim.record);
     setChecked(stReplay, !!sim.replay);
+
+    const fan = s?.fan || {};
+    setChecked(stFanEnabled, !!fan.enabled);
+    setInput(stFanCpuTemp, fan.cpu_valid ? fmtNum(fan.cpu_temp_c, 1) : '');
+    setInput(stFanDuty, fan.pwm_available ? String(fan.pwm_duty ?? '') : '');
+    setInput(stFanError, fan.last_error || '');
+
+    const ahrs = s?.ahrs || {};
+    setChecked(stAhrsImuDetected, !!ahrs.imu_detected);
+    setChecked(stAhrsImuWorking, !!ahrs.imu_working);
+    setInput(stAhrsImuUpdated, ahrs.imu_last_update_utc || '');
+    setChecked(stAhrsBaroDetected, !!ahrs.baro_detected);
+    setChecked(stAhrsBaroWorking, !!ahrs.baro_working);
+    setInput(stAhrsBaroUpdated, ahrs.baro_last_update_utc || '');
+    setInput(stAhrsError, ahrs.last_error || '');
+
+    setInput(stAhrsOrientationSet, ahrs.orientation_set ? 'true' : 'false');
+    setInput(stAhrsForwardAxis, ahrs.forward_axis == null ? '' : String(ahrs.forward_axis));
+
+    const enabled = !!ahrs.enabled;
+    if (btnAhrsLevel) btnAhrsLevel.disabled = !enabled;
+    if (btnAhrsZeroDrift) btnAhrsZeroDrift.disabled = !enabled;
+    if (btnAhrsOrientForward) btnAhrsOrientForward.disabled = !enabled;
+    if (btnAhrsOrientDone) btnAhrsOrientDone.disabled = !enabled;
+  }
+
+  async function postAhrs(path) {
+    if (ahrsMsg) ahrsMsg.textContent = 'Working…';
+    try {
+      const resp = await fetch(path, { method: 'POST' });
+      const text = await resp.text();
+      if (!resp.ok) throw new Error(text || `HTTP ${resp.status}`);
+      if (ahrsMsg) ahrsMsg.textContent = 'OK.';
+    } catch (e) {
+      if (ahrsMsg) ahrsMsg.textContent = `Failed: ${String(e)}`;
+    }
   }
 
   function fmtNum(x, digits = 1) {
@@ -327,4 +383,9 @@
 
   poll();
   setInterval(poll, 1000);
+
+  btnAhrsLevel?.addEventListener('click', () => postAhrs('/api/ahrs/level'));
+  btnAhrsZeroDrift?.addEventListener('click', () => postAhrs('/api/ahrs/zero-drift'));
+  btnAhrsOrientForward?.addEventListener('click', () => postAhrs('/api/ahrs/orient/forward'));
+  btnAhrsOrientDone?.addEventListener('click', () => postAhrs('/api/ahrs/orient/done'));
 })();

@@ -1,19 +1,68 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 )
 
+type fakeAHRSPersist struct{}
+
+func (f fakeAHRSPersist) SetLevel() error { return nil }
+func (f fakeAHRSPersist) ZeroDrift(ctx context.Context) error { return nil }
+func (f fakeAHRSPersist) OrientForward(ctx context.Context) error { return nil }
+func (f fakeAHRSPersist) OrientDone(ctx context.Context) error { return nil }
+func (f fakeAHRSPersist) Orientation() (forwardAxis int, gravity [3]float64, gravityOK bool) {
+	return 1, [3]float64{0, 0, 1}, true
+}
+
+func TestAPI_AHRSOrientDone_PersistsOrientation(t *testing.T) {
+	tmp := t.TempDir()
+	cfgPath := filepath.Join(tmp, "config.yaml")
+	if err := os.WriteFile(cfgPath, []byte("gdl90:\n  dest: '127.0.0.1:4000'\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	status := NewStatus()
+	settings := SettingsStore{ConfigPath: cfgPath}
+	h := Handler(status, settings, nil, fakeAHRSPersist{})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/ahrs/orient/done", nil)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	resp := w.Result()
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status=%d body=%s", resp.StatusCode, string(b))
+	}
+
+	// Give filesystem a tiny moment on slower CI, though rename is atomic.
+	time.Sleep(10 * time.Millisecond)
+	onDisk, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	text := string(onDisk)
+	if !strings.Contains(text, "orientation") {
+		t.Fatalf("expected orientation in saved yaml, got: %s", text)
+	}
+	if !strings.Contains(text, "forward_axis") {
+		t.Fatalf("expected forward_axis in saved yaml, got: %s", text)
+	}
+}
 func TestAPIStatus(t *testing.T) {
 	st := NewStatus()
 	st.SetStatic("127.0.0.1:4000", "1s", map[string]any{"scenario": false})
 
-	ts := httptest.NewServer(Handler(st, SettingsStore{}, nil))
+	ts := httptest.NewServer(Handler(st, SettingsStore{}, nil, nil))
 	defer ts.Close()
 
 	resp, err := http.Get(ts.URL + "/api/status")
@@ -42,7 +91,7 @@ func TestAPIStatus(t *testing.T) {
 
 func TestRootPage(t *testing.T) {
 	st := NewStatus()
-	ts := httptest.NewServer(Handler(st, SettingsStore{}, nil))
+	ts := httptest.NewServer(Handler(st, SettingsStore{}, nil, nil))
 	defer ts.Close()
 
 	resp, err := http.Get(ts.URL + "/")
@@ -81,7 +130,7 @@ func TestAPIScenarios_ListsYAMLFiles(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(old) })
 
 	st := NewStatus()
-	ts := httptest.NewServer(Handler(st, SettingsStore{}, nil))
+	ts := httptest.NewServer(Handler(st, SettingsStore{}, nil, nil))
 	defer ts.Close()
 
 	resp, err := http.Get(ts.URL + "/api/scenarios")

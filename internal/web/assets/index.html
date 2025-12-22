@@ -140,12 +140,118 @@
           </div>
           <div class="formrow">
             <label class="control">
-              <input id="st-replay" type="checkbox" disabled />
-              <span>Replay enabled</span>
+			  <input id="st-replay" type="checkbox" disabled />
+			  <span>Replay enabled</span>
+			</label>
+		  </div>
+
+          <div class="divider"></div>
+
+          <div class="formrow">
+            <div class="muted">Fan</div>
+          </div>
+
+          <div class="formrow">
+            <label class="control">
+              <input id="st-fan-enabled" type="checkbox" disabled />
+              <span>Enabled</span>
+            </label>
+          </div>
+
+          <div class="formrow">
+            <label class="control">
+              <span>CPU temp (°C)</span>
+              <input id="st-fan-cpu-temp" type="text" readonly />
+            </label>
+          </div>
+
+          <div class="formrow">
+            <label class="control">
+              <span>PWM duty (%)</span>
+              <input id="st-fan-duty" type="text" readonly />
+            </label>
+          </div>
+
+          <div class="formrow">
+            <label class="control">
+              <span>Fan last error</span>
+              <input id="st-fan-error" type="text" readonly />
             </label>
           </div>
 
           <div class="divider"></div>
+
+          <div class="formrow">
+            <div class="muted">AHRS sensors</div>
+          </div>
+
+          <div class="formrow">
+            <label class="control">
+              <input id="st-ahrs-imu-detected" type="checkbox" disabled />
+              <span>IMU detected</span>
+            </label>
+          </div>
+          <div class="formrow">
+            <label class="control">
+              <input id="st-ahrs-imu-working" type="checkbox" disabled />
+              <span>IMU working</span>
+            </label>
+          </div>
+          <div class="formrow">
+            <label class="control">
+              <span>IMU last update (UTC)</span>
+              <input id="st-ahrs-imu-updated" type="text" readonly />
+            </label>
+          </div>
+
+          <div class="formrow">
+            <label class="control">
+              <input id="st-ahrs-baro-detected" type="checkbox" disabled />
+              <span>Baro detected</span>
+            </label>
+          </div>
+          <div class="formrow">
+            <label class="control">
+              <input id="st-ahrs-baro-working" type="checkbox" disabled />
+              <span>Baro working</span>
+            </label>
+          </div>
+          <div class="formrow">
+            <label class="control">
+              <span>Baro last update (UTC)</span>
+              <input id="st-ahrs-baro-updated" type="text" readonly />
+            </label>
+          </div>
+
+          <div class="formrow">
+            <label class="control">
+              <span>AHRS last error</span>
+              <input id="st-ahrs-error" type="text" readonly />
+            </label>
+          </div>
+
+          <div class="formrow">
+            <label class="control">
+              <span>Orientation set</span>
+              <input id="st-ahrs-orientation-set" type="text" readonly />
+            </label>
+          </div>
+
+          <div class="formrow">
+            <label class="control">
+              <span>Forward axis</span>
+              <input id="st-ahrs-forward-axis" type="text" readonly />
+            </label>
+          </div>
+
+          <div class="formactions">
+            <button id="btn-ahrs-level" type="button">Set Level</button>
+            <button id="btn-ahrs-zero-drift" type="button">Zero Drift</button>
+            <button id="btn-ahrs-orient-forward" type="button">Set Forward (point nose-end up)</button>
+            <button id="btn-ahrs-orient-done" type="button">Finish Orientation (place level)</button>
+            <span id="ahrs-msg" class="muted"></span>
+          </div>
+
         </div>
       </section>
 

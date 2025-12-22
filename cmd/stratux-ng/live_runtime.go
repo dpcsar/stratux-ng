@@ -1,11 +1,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
+	"stratux-ng/internal/ahrs"
 	"stratux-ng/internal/config"
+	"stratux-ng/internal/fancontrol"
 	"stratux-ng/internal/udp"
 	"stratux-ng/internal/web"
 )
@@ -14,13 +18,15 @@ type liveRuntime struct {
 	resolvedConfigPath string
 	status             *web.Status
 	sender             *safeBroadcaster
+	ahrsSvc            *ahrs.Service
+	fanSvc             *fancontrol.Service
 
 	cfg      config.Config
 	scenario scenarioRuntime
 	ticker   *time.Ticker
 }
 
-func newLiveRuntime(cfg config.Config, resolvedConfigPath string, status *web.Status, sender *safeBroadcaster) (*liveRuntime, error) {
+func newLiveRuntime(ctx context.Context, cfg config.Config, resolvedConfigPath string, status *web.Status, sender *safeBroadcaster) (*liveRuntime, error) {
 	c := cfg
 	if err := config.DefaultAndValidate(&c); err != nil {
 		return nil, err
@@ -42,6 +48,32 @@ func newLiveRuntime(cfg config.Config, resolvedConfigPath string, status *web.St
 		t = time.NewTicker(c.GDL90.Interval)
 	}
 
+	// Optional: real AHRS bring-up.
+	var ahrsSvc *ahrs.Service
+	if c.AHRS.Enable {
+		var gravity [3]float64
+		var gravitySet bool
+		if g := c.AHRS.Orientation.GravityInSensor; len(g) == 3 {
+			gravity = [3]float64{g[0], g[1], g[2]}
+			gravitySet = true
+		}
+		svc := ahrs.New(ahrs.Config{
+			Enable:   c.AHRS.Enable,
+			I2CBus:   c.AHRS.I2CBus,
+			IMUAddr:  c.AHRS.IMUAddr,
+			BaroAddr: c.AHRS.BaroAddr,
+
+			OrientationForwardAxis: c.AHRS.Orientation.ForwardAxis,
+			OrientationGravitySet:  gravitySet,
+			OrientationGravity:     gravity,
+		})
+		if err := svc.Start(ctx); err != nil {
+			// Keep Stratux-NG running even if AHRS fails to init; AHRS will be marked invalid.
+			log.Printf("ahrs init failed: %v", err)
+		}
+		ahrsSvc = svc
+	}
+
 	r := &liveRuntime{
 		resolvedConfigPath: resolvedConfigPath,
 		status:             status,
@@ -49,7 +81,27 @@ func newLiveRuntime(cfg config.Config, resolvedConfigPath string, status *web.St
 		cfg:                c,
 		scenario:           sc,
 		ticker:             t,
+		ahrsSvc:            ahrsSvc,
 	}
+
+	// Optional: fan control.
+	if c.Fan.Enable {
+		svc := fancontrol.New(fancontrol.Config{
+			Enable:          c.Fan.Enable,
+			PWMPin:          c.Fan.PWMPin,
+			PWMFrequency:    c.Fan.PWMFrequency,
+			TempTargetC:     c.Fan.TempTargetC,
+			PWMDutyMin:      c.Fan.PWMDutyMin,
+			UpdateInterval:  c.Fan.UpdateInterval,
+		})
+		// Keep a reference even if init fails so status can report errors.
+		r.fanSvc = svc
+		if err := svc.Start(ctx); err != nil {
+			// Keep Stratux-NG running even if fan control fails to init.
+			log.Printf("fancontrol init failed: %v", err)
+		}
+	}
+
 	return r, nil
 }
 
@@ -57,10 +109,67 @@ func (r *liveRuntime) Close() {
 	if r == nil {
 		return
 	}
+	if r.ahrsSvc != nil {
+		r.ahrsSvc.Close()
+		r.ahrsSvc = nil
+	}
+	if r.fanSvc != nil {
+		r.fanSvc.Close()
+		r.fanSvc = nil
+	}
 	if r.ticker != nil {
 		r.ticker.Stop()
 		r.ticker = nil
 	}
+}
+
+func (r *liveRuntime) FanSnapshot() (fancontrol.Snapshot, bool) {
+	if r == nil || r.fanSvc == nil {
+		return fancontrol.Snapshot{}, false
+	}
+	return r.fanSvc.Snapshot(), true
+}
+
+func (r *liveRuntime) AHRSSnapshot() (ahrs.Snapshot, bool) {
+	if r == nil || r.ahrsSvc == nil {
+		return ahrs.Snapshot{}, false
+	}
+	return r.ahrsSvc.Snapshot(), true
+}
+
+func (r *liveRuntime) AHRSSetLevel() error {
+	if r == nil || r.ahrsSvc == nil {
+		return fmt.Errorf("ahrs unavailable")
+	}
+	return r.ahrsSvc.SetLevel()
+}
+
+func (r *liveRuntime) AHRSZeroDrift(ctx context.Context) error {
+	if r == nil || r.ahrsSvc == nil {
+		return fmt.Errorf("ahrs unavailable")
+	}
+	return r.ahrsSvc.ZeroDrift(ctx)
+}
+
+func (r *liveRuntime) AHRSOrientForward(ctx context.Context) error {
+	if r == nil || r.ahrsSvc == nil {
+		return fmt.Errorf("ahrs unavailable")
+	}
+	return r.ahrsSvc.OrientForward(ctx)
+}
+
+func (r *liveRuntime) AHRSOrientDone(ctx context.Context) error {
+	if r == nil || r.ahrsSvc == nil {
+		return fmt.Errorf("ahrs unavailable")
+	}
+	return r.ahrsSvc.OrientDone(ctx)
+}
+
+func (r *liveRuntime) AHRSOrientation() (forwardAxis int, gravity [3]float64, gravityOK bool) {
+	if r == nil || r.ahrsSvc == nil {
+		return 0, [3]float64{}, false
+	}
+	return r.ahrsSvc.Orientation()
 }
 
 func (r *liveRuntime) TickChan() <-chan time.Time {
@@ -103,6 +212,12 @@ func (r *liveRuntime) Apply(next config.Config) error {
 	}
 	if c.Web.Listen != r.cfg.Web.Listen {
 		return fmt.Errorf("web.listen requires restart")
+	}
+	if c.AHRS.Enable != r.cfg.AHRS.Enable || c.AHRS.I2CBus != r.cfg.AHRS.I2CBus || c.AHRS.IMUAddr != r.cfg.AHRS.IMUAddr || c.AHRS.BaroAddr != r.cfg.AHRS.BaroAddr {
+		return fmt.Errorf("ahrs settings require restart")
+	}
+	if c.Fan.Enable != r.cfg.Fan.Enable || c.Fan.PWMPin != r.cfg.Fan.PWMPin || c.Fan.PWMFrequency != r.cfg.Fan.PWMFrequency || c.Fan.TempTargetC != r.cfg.Fan.TempTargetC || c.Fan.PWMDutyMin != r.cfg.Fan.PWMDutyMin || c.Fan.UpdateInterval != r.cfg.Fan.UpdateInterval {
+		return fmt.Errorf("fan settings require restart")
 	}
 
 	// Pre-validate side effects before committing anything.

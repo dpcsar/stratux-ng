@@ -248,6 +248,10 @@ func (s SettingsStore) save(cfg config.Config) error {
 		_ = tmp.Close()
 		return err
 	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
 	if err := tmp.Chmod(0o644); err != nil {
 		_ = tmp.Close()
 		return err

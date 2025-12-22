@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"stratux-ng/internal/ahrs"
 	"stratux-ng/internal/config"
 	"stratux-ng/internal/sim"
 )
@@ -71,7 +72,7 @@ func TestBuildGDL90Frames_SimOwnshipAndTrafficMessageSet(t *testing.T) {
 	}
 
 	now := time.Date(2025, 12, 20, 19, 0, 0, 0, time.UTC)
-	frames := buildGDL90Frames(cfg, now)
+	frames := buildGDL90Frames(cfg, now, false, ahrs.Snapshot{})
 	if len(frames) == 0 {
 		t.Fatalf("expected frames")
 	}

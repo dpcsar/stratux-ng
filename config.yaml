@@ -1,5 +1,5 @@
 gdl90:
-    dest: 192.168.10.255:4000
+    dest: 192.168.1.255:4000
     interval: 1s
     record:
         enable: false
@@ -31,5 +31,24 @@ sim:
         path: ./configs/scenarios/edgecases.yaml
         start_time_utc: "2020-01-01T00:00:00Z"
         loop: false
+ahrs:
+    enable: true
+    i2c_bus: 1
+    imu_addr: 104
+    baro_addr: 119
+    orientation:
+        forward_axis: -2
+        gravity_in_sensor:
+            - -0.05416225642137543
+            - -0.1240663918653775
+            - -0.9907946206903081
 web:
     listen: :80
+
+fan:
+    enable: true
+    pwm_pin: 18
+    pwm_frequency: 64000
+    temp_target_c: 50
+    pwm_duty_min: 0
+    update_interval: 5s

@@ -4,7 +4,7 @@ Stratux-NG is a modern, Raspberry Pi–focused, 64-bit-first avionics data appli
 
 ## Status
 
-This repository is currently in **early bring-up**. The simulator + UDP output path is working; hardware inputs (SDR/GPS/AHRS) are planned.
+This repository is in active bring-up. The simulator + UDP output path is working, and **Stratux AHRS 2.0–class AHRS + fan control are supported**.
 
 This is a **new implementation** (new repository) with a modular architecture and reproducible builds, intended to support:
 
@@ -13,8 +13,8 @@ This is a **new implementation** (new repository) with a modular architecture an
   - **978 MHz UAT** via external decoder (e.g., `dump978`)
   - Support for “Nano 2/3” RTL-SDR-class devices and Stratux-compatible hardware
 - **Sensors**
-  - **GPS** (USB/serial; NMEA or gpsd-backed)
-  - **AHRS/IMU** (Stratux-class sensors; integration planned)
+  - **GPS** (USB/serial; NMEA or gpsd-backed; planned)
+  - **AHRS/IMU** (Stratux AHRS 2.0–class I2C sensors: ICM-20948 + BMP280)
 - **Outputs**
   - **GDL90 over UDP** for EFB compatibility (initial focus: **Garmin Pilot** and **enRoute Flight Navigation**; enRoute will be primary test target early)
 - **Networking**
@@ -28,11 +28,11 @@ This is a **new implementation** (new repository) with a modular architecture an
 3. Provide a minimal **HTTP API + web UI** for status and configuration.
 4. Provide a path to building a **bootable image** (later milestone).
 
-### Hardware integration (when devices arrive)
+### Hardware integration (next)
 - Ingest 1090 data from `readsb`
 - Ingest 978 data from `dump978`
 - GPS ingestion (NMEA/gpsd)
-- AHRS ingestion (IMU driver + attitude output as needed)
+- GPS ingestion
 - Process supervision (restart decoders, health checks, logging)
 
 ## Architecture (high level)
@@ -144,6 +144,79 @@ Log format (written by record mode):
 - **Target OS:** Raspberry Pi OS 64-bit (arm64)
 - **Tooling:** Go toolchain (version TBD), plus typical Pi utilities for networking/AP setup
 - **Decoders (optional):** `readsb` (1090) and `dump978` (978) treated as external processes/data sources
+
+## AHRS (ICM-20948 + BMP280)
+
+Stratux-NG can read a Stratux AHRS 2.0–class board over I2C (typically `0x68` for the IMU and `0x77` for the baro) and feed roll/pitch + pressure altitude into the existing Stratux-like AHRS GDL90 messages.
+
+- Enable I2C on the Pi and confirm the sensors appear (example scan): `sudo i2cdetect -y 1`
+- Enable AHRS in your config (see [config.yaml](config.yaml)):
+  - `ahrs.enable: true`
+  - `ahrs.i2c_bus: 1`
+  - `ahrs.imu_addr: 0x68`
+  - `ahrs.baro_addr: 0x77`
+
+Notes:
+- If `ahrs.enable` is true and the sensors cannot be initialized, Stratux-NG continues running but marks AHRS invalid.
+- Initial bring-up computes roll/pitch from accelerometer (gravity vector). Heading remains derived from the simulator until GPS/magnetometer integration is added.
+
+Calibration + orientation (Stratux AHRS 2.0 style):
+- **Set Level**: cages roll/pitch so the current attitude becomes (0,0).
+- **Zero Drift**: estimates stationary gyro bias over ~2 seconds.
+- **Set Forward (point nose-end up)**: point the end of the AHRS board that will face the aircraft nose up toward the sky; Stratux-NG records which axis is “forward”.
+- **Finish Orientation (place level)**: place the board in its mounted in-flight orientation, keep it still for ~1s, and Stratux-NG captures gravity and builds a stable sensor→body mapping.
+- Orientation is persisted to YAML when you press “Finish Orientation” in the Web UI.
+
+Startup behavior:
+- On startup, Stratux-NG does a best-effort Set Level + Zero Drift once the IMU has produced stable samples.
+
+Verification (quick):
+- Open the Status page and confirm:
+  - “IMU detected” and “IMU working” are checked.
+  - “Baro detected” and “Baro working” are checked.
+  - `AHRS last error` is empty.
+- Or check `GET /api/status` and confirm `ahrs.baro_working: true` and a recent `ahrs.baro_last_update_utc`.
+
+Troubleshooting (AHRS not detected/working):
+- Confirm I2C is enabled:
+  - `sudo raspi-config` → Interface Options → I2C (recommended), or
+  - ensure `/boot/firmware/config.txt` includes `dtparam=i2c_arm=on`.
+- Confirm the bus exists: `ls -l /dev/i2c-*` (Stratux AHRS 2.0 is typically on `/dev/i2c-1`).
+- Scan the bus: `sudo i2cdetect -y 1` and look for `68` (IMU) and `77` (baro).
+- If the scan is empty:
+  - double-check wiring/connector seating,
+  - confirm the board is powered,
+  - and check `dmesg | grep -i i2c` for controller/driver errors.
+
+## Fan control (PWM on GPIO18)
+
+Stratux-NG can drive a PWM cooling fan on Raspberry Pi using BCM GPIO 18 (same default pin and control behavior as upstream Stratux).
+
+- Enable fan control in your config (see [config.yaml](config.yaml)):
+  - `fan.enable: true`
+  - `fan.pwm_pin: 18`
+  - `fan.pwm_frequency: 64000`
+  - `fan.temp_target_c: 50`
+  - `fan.pwm_duty_min: 0`
+  - `fan.update_interval: 5s`
+
+Notes:
+- If fan control fails to initialize (unsupported platform, permission issues, etc.), Stratux-NG continues running.
+- When the fan control loop exits unexpectedly, it attempts a fail-safe “fan full on” duty.
+Raspberry Pi OS notes:
+- This uses Linux PWM via `/sys/class/pwm` (recommended for Pi 5 compatibility).
+- Ensure the PWM overlay is enabled (example for Bookworm): add `dtoverlay=pwm-2chan` to `/boot/firmware/config.txt`.
+- The service typically needs permission to write under `/sys/class/pwm` (run as root or grant appropriate access via systemd).
+
+Troubleshooting (fan PWM not available):
+- Confirm the overlay is active after reboot:
+  - `ls -l /sys/class/pwm/` (should contain `pwmchip*`)
+  - `cat /sys/class/pwm/pwmchip0/npwm` (should be non-zero)
+- Stratux-NG currently supports `fan.pwm_pin: 18` (GPIO18 / PWM channel 0) via sysfs PWM.
+- If `fan.last_error` mentions permissions, run the service as root or grant access to `/sys/class/pwm` via systemd.
+
+Image build note (pi-gen):
+- When we build a flashable SD image with pi-gen, bake `dtoverlay=pwm-2chan` into the image’s boot config by ensuring the generated `/boot/firmware/config.txt` includes that line.
 
 ## Networking / Wi‑Fi AP
 

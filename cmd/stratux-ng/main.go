@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"stratux-ng/internal/ahrs"
 	"stratux-ng/internal/config"
 	"stratux-ng/internal/gdl90"
 	"stratux-ng/internal/replay"
@@ -23,6 +24,75 @@ import (
 	"stratux-ng/internal/udp"
 	"stratux-ng/internal/web"
 )
+
+type ahrsProxy struct {
+	mu sync.RWMutex
+	rt *liveRuntime
+}
+
+func (p *ahrsProxy) setRuntime(rt *liveRuntime) {
+	p.mu.Lock()
+	p.rt = rt
+	p.mu.Unlock()
+}
+
+func (p *ahrsProxy) clearRuntime(rt *liveRuntime) {
+	p.mu.Lock()
+	if p.rt == rt {
+		p.rt = nil
+	}
+	p.mu.Unlock()
+}
+
+func (p *ahrsProxy) SetLevel() error {
+	p.mu.RLock()
+	rt := p.rt
+	p.mu.RUnlock()
+	if rt == nil {
+		return fmt.Errorf("ahrs unavailable")
+	}
+	return rt.AHRSSetLevel()
+}
+
+func (p *ahrsProxy) ZeroDrift(ctx context.Context) error {
+	p.mu.RLock()
+	rt := p.rt
+	p.mu.RUnlock()
+	if rt == nil {
+		return fmt.Errorf("ahrs unavailable")
+	}
+	return rt.AHRSZeroDrift(ctx)
+}
+
+func (p *ahrsProxy) OrientForward(ctx context.Context) error {
+	p.mu.RLock()
+	rt := p.rt
+	p.mu.RUnlock()
+	if rt == nil {
+		return fmt.Errorf("ahrs unavailable")
+	}
+	return rt.AHRSOrientForward(ctx)
+}
+
+func (p *ahrsProxy) OrientDone(ctx context.Context) error {
+	p.mu.RLock()
+	rt := p.rt
+	p.mu.RUnlock()
+	if rt == nil {
+		return fmt.Errorf("ahrs unavailable")
+	}
+	return rt.AHRSOrientDone(ctx)
+}
+
+func (p *ahrsProxy) Orientation() (forwardAxis int, gravity [3]float64, gravityOK bool) {
+	p.mu.RLock()
+	rt := p.rt
+	p.mu.RUnlock()
+	if rt == nil {
+		return 0, [3]float64{}, false
+	}
+	return rt.AHRSOrientation()
+}
 
 func decodeAttitudeFromFrames(frames [][]byte) web.AttitudeSnapshot {
 	var out web.AttitudeSnapshot
@@ -330,8 +400,9 @@ func main() {
 	}
 
 	log.Printf("web ui enabled listen=%s", cfg.Web.Listen)
+	proxy := &ahrsProxy{}
 	go func() {
-		err := web.Serve(ctx, cfg.Web.Listen, status, web.SettingsStore{ConfigPath: resolvedConfigPath, Apply: applyFunc}, logBuf)
+		err := web.Serve(ctx, cfg.Web.Listen, status, web.SettingsStore{ConfigPath: resolvedConfigPath, Apply: applyFunc}, logBuf, proxy)
 		if err != nil && ctx.Err() == nil {
 			if errors.Is(err, syscall.EACCES) {
 				log.Printf("web ui bind failed (permission denied) listen=%s: %v", cfg.Web.Listen, err)
@@ -376,13 +447,15 @@ func main() {
 	}
 
 	go func() {
-		rt, err := newLiveRuntime(cfg, resolvedConfigPath, status, sender)
+		rt, err := newLiveRuntime(ctx, cfg, resolvedConfigPath, status, sender)
 		if err != nil {
 			log.Printf("runtime init failed: %v", err)
 			cancel()
 			return
 		}
+		proxy.setRuntime(rt)
 		defer rt.Close()
+		defer proxy.clearRuntime(rt)
 
 		// Replay sender runs separately so we can still accept live updates.
 		if rt.Config().GDL90.Replay.Enable {
@@ -421,7 +494,38 @@ func main() {
 					frames = buildGDL90FramesFromScenario(curCfg, now.UTC(), sc.elapsed, sc.scenario, sc.ownshipICAO, sc.trafficICAO)
 				} else {
 					now = time.Now()
-					frames = buildGDL90Frames(curCfg, now.UTC())
+					var snap ahrs.Snapshot
+					var haveAHRS bool
+					if fanSnap, haveFan := rt.FanSnapshot(); haveFan {
+						status.SetFan(now.UTC(), fanSnap)
+					}
+					if curCfg.AHRS.Enable {
+						snap, haveAHRS = rt.AHRSSnapshot()
+						// Publish AHRS sensor health for the Status page.
+						nowUTC := now.UTC()
+						imuWorking := haveAHRS && snap.IMUDetected && !snap.IMULastUpdateAt.IsZero() && nowUTC.Sub(snap.IMULastUpdateAt.UTC()) <= 2*time.Second
+						baroWorking := haveAHRS && snap.BaroDetected && !snap.BaroLastUpdateAt.IsZero() && nowUTC.Sub(snap.BaroLastUpdateAt.UTC()) <= 5*time.Second
+						ah := web.AHRSSensorsSnapshot{
+							Enabled:        true,
+							IMUDetected:    haveAHRS && snap.IMUDetected,
+							BaroDetected:   haveAHRS && snap.BaroDetected,
+							IMUWorking:     imuWorking,
+							BaroWorking:    baroWorking,
+							OrientationSet: snap.OrientationSet,
+							ForwardAxis:    snap.OrientationForwardAxis,
+							LastError:      snap.LastError,
+						}
+						if !snap.IMULastUpdateAt.IsZero() {
+							ah.IMULastUpdateUTC = snap.IMULastUpdateAt.UTC().Format(time.RFC3339Nano)
+						}
+						if !snap.BaroLastUpdateAt.IsZero() {
+							ah.BaroLastUpdateUTC = snap.BaroLastUpdateAt.UTC().Format(time.RFC3339Nano)
+						}
+						status.SetAHRSSensors(nowUTC, ah)
+					} else {
+						status.SetAHRSSensors(now.UTC(), web.AHRSSensorsSnapshot{Enabled: false})
+					}
+					frames = buildGDL90Frames(curCfg, now.UTC(), haveAHRS, snap)
 				}
 				status.SetAttitude(now.UTC(), decodeAttitudeFromFrames(frames))
 				status.MarkTick(now.UTC(), len(frames))
@@ -504,11 +608,14 @@ func runListen(ctx context.Context, addr string, dumpHex bool) error {
 	}
 }
 
-func buildGDL90Frames(cfg config.Config, now time.Time) [][]byte {
+func buildGDL90Frames(cfg config.Config, now time.Time, haveAHRS bool, ahrsSnap ahrs.Snapshot) [][]byte {
 	// Ownship sim is always enabled (unless scenario mode is driving frames).
 	// Advertise GPS/AHRS as valid so EFBs don't show "No GPS reception".
 	gpsValid := true
 	ahrsValid := true
+	if cfg.AHRS.Enable {
+		ahrsValid = haveAHRS && ahrsSnap.Valid
+	}
 	frames := make([][]byte, 0, 16)
 	frames = append(frames,
 		gdl90.HeartbeatFrameAt(now, gpsValid, false),
@@ -554,20 +661,45 @@ func buildGDL90Frames(cfg config.Config, now time.Time) [][]byte {
 
 	// Stratux-like AHRS messages (sim-driven). Even without a real IMU, some
 	// EFBs expect to see these message types.
+	roll := 0.0
+	pitch := 0.0
+	if cfg.AHRS.Enable && haveAHRS {
+		roll = ahrsSnap.RollDeg
+		pitch = ahrsSnap.PitchDeg
+	}
+
+	pressureAltFeet := float64(altFeet)
+	pressureAltValid := true
+	if cfg.AHRS.Enable {
+		pressureAltValid = haveAHRS && ahrsSnap.PressureAltValid
+		if pressureAltValid {
+			pressureAltFeet = ahrsSnap.PressureAltFeet
+		}
+	}
+
+	vs := vvelFpm
+	vsValid := true
+	if cfg.AHRS.Enable {
+		vsValid = haveAHRS && ahrsSnap.VerticalSpeedValid
+		if vsValid {
+			vs = ahrsSnap.VerticalSpeedFpm
+		}
+	}
+
 	att := gdl90.Attitude{
 		Valid:                ahrsValid,
-		RollDeg:              0,
-		PitchDeg:             0,
+		RollDeg:              roll,
+		PitchDeg:             pitch,
 		HeadingDeg:           trk,
 		SlipSkidDeg:          0,
 		YawRateDps:           0,
 		GLoad:                1.0,
 		IndicatedAirspeedKt:  cfg.Sim.Ownship.GroundKt,
 		TrueAirspeedKt:       cfg.Sim.Ownship.GroundKt,
-		PressureAltitudeFeet: float64(altFeet),
-		PressureAltValid:     true,
-		VerticalSpeedFpm:     vvelFpm,
-		VerticalSpeedValid:   true,
+		PressureAltitudeFeet: pressureAltFeet,
+		PressureAltValid:     pressureAltValid,
+		VerticalSpeedFpm:     vs,
+		VerticalSpeedValid:   vsValid,
 	}
 	frames = append(frames,
 		gdl90.ForeFlightAHRSFrame(att),

@@ -18,7 +18,17 @@ import (
 //go:embed assets/*
 var embeddedAssets embed.FS
 
-func Handler(status *Status, settings SettingsStore, logs *LogBuffer) http.Handler {
+// AHRSController optionally exposes calibration actions to the Web UI.
+// Implementations should be safe to call concurrently.
+type AHRSController interface {
+	SetLevel() error
+	ZeroDrift(ctx context.Context) error
+	OrientForward(ctx context.Context) error
+	OrientDone(ctx context.Context) error
+	Orientation() (forwardAxis int, gravity [3]float64, gravityOK bool)
+}
+
+func Handler(status *Status, settings SettingsStore, logs *LogBuffer, ahrsCtl AHRSController) http.Handler {
 	mux := http.NewServeMux()
 
 	assetsFS, err := fs.Sub(embeddedAssets, "assets")
@@ -42,6 +52,98 @@ func Handler(status *Status, settings SettingsStore, logs *LogBuffer) http.Handl
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write(b)
 		_, _ = w.Write([]byte("\n"))
+	})
+
+	// AHRS actions (optional).
+	mux.HandleFunc("/api/ahrs/level", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if ahrsCtl == nil {
+			http.Error(w, "ahrs unavailable", http.StatusNotFound)
+			return
+		}
+		if err := ahrsCtl.SetLevel(); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte("{\"ok\":true}\n"))
+	})
+
+	mux.HandleFunc("/api/ahrs/zero-drift", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if ahrsCtl == nil {
+			http.Error(w, "ahrs unavailable", http.StatusNotFound)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+		if err := ahrsCtl.ZeroDrift(ctx); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte("{\"ok\":true}\n"))
+	})
+
+	mux.HandleFunc("/api/ahrs/orient/forward", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if ahrsCtl == nil {
+			http.Error(w, "ahrs unavailable", http.StatusNotFound)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+		if err := ahrsCtl.OrientForward(ctx); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte("{\"ok\":true}\n"))
+	})
+
+	mux.HandleFunc("/api/ahrs/orient/done", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if ahrsCtl == nil {
+			http.Error(w, "ahrs unavailable", http.StatusNotFound)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+		if err := ahrsCtl.OrientDone(ctx); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		// Best-effort: persist orientation to YAML config so it survives reboot.
+		if strings.TrimSpace(settings.ConfigPath) != "" {
+			forwardAxis, gravity, ok := ahrsCtl.Orientation()
+			if ok && forwardAxis != 0 {
+				cfg, err := settings.load()
+				if err == nil {
+					cfg.AHRS.Orientation.ForwardAxis = forwardAxis
+					cfg.AHRS.Orientation.GravityInSensor = []float64{gravity[0], gravity[1], gravity[2]}
+					_ = settings.save(cfg)
+				}
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte("{\"ok\":true}\n"))
 	})
 
 	// Scenario list API (used by the Settings UI).
@@ -153,14 +255,14 @@ func Handler(status *Status, settings SettingsStore, logs *LogBuffer) http.Handl
 	return mux
 }
 
-func Serve(ctx context.Context, listenAddr string, status *Status, settings SettingsStore, logs *LogBuffer) error {
+func Serve(ctx context.Context, listenAddr string, status *Status, settings SettingsStore, logs *LogBuffer, ahrsCtl AHRSController) error {
 	if status == nil {
 		status = NewStatus()
 	}
 
 	srv := &http.Server{
 		Addr:              listenAddr,
-		Handler:           Handler(status, settings, logs),
+		Handler:           Handler(status, settings, logs, ahrsCtl),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,
