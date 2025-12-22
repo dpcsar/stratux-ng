@@ -1,0 +1,19 @@
+# Example systemd drop-in for Stratux-NG when using gpsd.
+#
+# This is a *drop-in snippet*, not a complete unit.
+#
+# Install (example):
+#   sudo mkdir -p /etc/systemd/system/stratux-ng.service.d
+#   sudo install -m 644 configs/systemd/stratux-ng-gpsd.conf.example \
+#     /etc/systemd/system/stratux-ng.service.d/10-gpsd.conf
+#   sudo systemctl daemon-reload
+#   sudo systemctl restart stratux-ng
+#
+# Notes:
+# - On Debian/Raspberry Pi OS, the gpsd package usually provides gpsd.socket/gpsd.service.
+# - Some images run gpsd via socket activation (gpsd.socket). In that case,
+#   ordering against gpsd.socket is the right dependency.
+
+[Unit]
+Wants=gpsd.socket
+After=gpsd.socket

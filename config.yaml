@@ -9,6 +9,21 @@ gdl90:
         path: ./gdl90-record.log
         speed: 1
         loop: false
+
+# Optional: live GPS via USB serial (e.g. Stratux GPYes 2.0 u-blox8).
+# When enabled, Stratux-NG will use GPS fixes for GDL90 ownship position.
+gps:
+    enable: true
+    # Source can be:
+    # - nmea: read NMEA directly from a serial device (default)
+    # - gpsd: read fixes from gpsd (recommended for “any random USB GPS” appliance images)
+    source: gpsd
+    gpsd_addr: 127.0.0.1:2947
+    # Recommended for appliance images: create a stable symlink via udev (see configs/udev/99-stratux-gps.rules.example)
+    device: /dev/stratux-gps
+    baud: 9600
+    horizontal_accuracy_m: 10
+
 sim:
     ownship:
         center_lat_deg: 45.5404
@@ -46,7 +61,7 @@ ahrs:
             - -0.1240663918653775
             - -0.9907946206903081
 web:
-    listen: :80
+    listen: :8080
 
 fan:
     enable: true

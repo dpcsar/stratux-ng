@@ -84,8 +84,9 @@ func OwnshipReportFrame(o Ownship) []byte {
 	// Vertical velocity (12-bit signed, 64 fpm resolution). 0x800 = unknown.
 	vvel := uint16(0x800)
 	if o.VvelValid {
-		vv := int16(math.Round(float64(o.VvelFpm) / 64.0))
-		vvel = uint16(vv) & 0x0FFF
+		vv64 := int32(math.Round(float64(o.VvelFpm) / 64.0))
+		vv64 = clampI32(vv64, -2047, 2047)
+		vvel = uint16(int16(vv64)) & 0x0FFF
 	}
 	msg[15] |= byte((vvel & 0x0F00) >> 8)
 	msg[16] = byte(vvel & 0x00FF)

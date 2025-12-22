@@ -6,6 +6,10 @@
 #
 # Install (example):
 #   sudo install -m 644 configs/systemd/stratux-ng.service.example /etc/systemd/system/stratux-ng.service
+#   # Optional but recommended for appliance images: stable GPS symlink
+#   sudo install -m 644 configs/udev/99-stratux-gps.rules.example /etc/udev/rules.d/99-stratux-gps.rules
+#   sudo udevadm control --reload-rules
+#   sudo udevadm trigger
 #   sudo mkdir -p /data/stratux-ng
 #   sudo install -m 644 config.yaml /data/stratux-ng/config.yaml
 #   sudo systemctl daemon-reload
@@ -26,6 +30,9 @@ RestartSec=1
 # Run unprivileged if you create a user; otherwise remove these two lines.
 User=stratuxng
 Group=stratuxng
+
+# Allow access to serial devices like /dev/ttyACM* (GPS). Most distros use the dialout group.
+SupplementaryGroups=dialout
 
 # Hardening: keep the filesystem mostly read-only and explicitly allow /data.
 NoNewPrivileges=true

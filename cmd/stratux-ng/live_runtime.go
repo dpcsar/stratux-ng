@@ -10,6 +10,7 @@ import (
 	"stratux-ng/internal/ahrs"
 	"stratux-ng/internal/config"
 	"stratux-ng/internal/fancontrol"
+	"stratux-ng/internal/gps"
 	"stratux-ng/internal/udp"
 	"stratux-ng/internal/web"
 )
@@ -19,6 +20,7 @@ type liveRuntime struct {
 	status             *web.Status
 	sender             *safeBroadcaster
 	ahrsSvc            *ahrs.Service
+	gpsSvc             *gps.Service
 	fanSvc             *fancontrol.Service
 
 	cfg      config.Config
@@ -84,15 +86,31 @@ func newLiveRuntime(ctx context.Context, cfg config.Config, resolvedConfigPath s
 		ahrsSvc:            ahrsSvc,
 	}
 
+	// Optional: real GPS bring-up (USB serial NMEA).
+	if c.GPS.Enable {
+		svc := gps.New(gps.Config{
+			Enable:    c.GPS.Enable,
+			Source:    c.GPS.Source,
+			GPSDAddr:  c.GPS.GPSDAddr,
+			Device:    c.GPS.Device,
+			Baud:      c.GPS.Baud,
+		})
+		if err := svc.Start(ctx); err != nil {
+			// Keep Stratux-NG running even if GPS fails to init.
+			log.Printf("gps init failed: %v", err)
+		}
+		r.gpsSvc = svc
+	}
+
 	// Optional: fan control.
 	if c.Fan.Enable {
 		svc := fancontrol.New(fancontrol.Config{
-			Enable:          c.Fan.Enable,
-			PWMPin:          c.Fan.PWMPin,
-			PWMFrequency:    c.Fan.PWMFrequency,
-			TempTargetC:     c.Fan.TempTargetC,
-			PWMDutyMin:      c.Fan.PWMDutyMin,
-			UpdateInterval:  c.Fan.UpdateInterval,
+			Enable:         c.Fan.Enable,
+			PWMPin:         c.Fan.PWMPin,
+			PWMFrequency:   c.Fan.PWMFrequency,
+			TempTargetC:    c.Fan.TempTargetC,
+			PWMDutyMin:     c.Fan.PWMDutyMin,
+			UpdateInterval: c.Fan.UpdateInterval,
 		})
 		// Keep a reference even if init fails so status can report errors.
 		r.fanSvc = svc
@@ -112,6 +130,10 @@ func (r *liveRuntime) Close() {
 	if r.ahrsSvc != nil {
 		r.ahrsSvc.Close()
 		r.ahrsSvc = nil
+	}
+	if r.gpsSvc != nil {
+		r.gpsSvc.Close()
+		r.gpsSvc = nil
 	}
 	if r.fanSvc != nil {
 		r.fanSvc.Close()
@@ -135,6 +157,13 @@ func (r *liveRuntime) AHRSSnapshot() (ahrs.Snapshot, bool) {
 		return ahrs.Snapshot{}, false
 	}
 	return r.ahrsSvc.Snapshot(), true
+}
+
+func (r *liveRuntime) GPSSnapshot() (gps.Snapshot, bool) {
+	if r == nil || r.gpsSvc == nil {
+		return gps.Snapshot{}, false
+	}
+	return r.gpsSvc.Snapshot(), true
 }
 
 func (r *liveRuntime) AHRSSetLevel() error {
@@ -215,6 +244,9 @@ func (r *liveRuntime) Apply(next config.Config) error {
 	}
 	if c.AHRS.Enable != r.cfg.AHRS.Enable || c.AHRS.I2CBus != r.cfg.AHRS.I2CBus || c.AHRS.IMUAddr != r.cfg.AHRS.IMUAddr || c.AHRS.BaroAddr != r.cfg.AHRS.BaroAddr {
 		return fmt.Errorf("ahrs settings require restart")
+	}
+	if c.GPS.Enable != r.cfg.GPS.Enable || strings.TrimSpace(c.GPS.Device) != strings.TrimSpace(r.cfg.GPS.Device) || c.GPS.Baud != r.cfg.GPS.Baud {
+		return fmt.Errorf("gps settings require restart")
 	}
 	if c.Fan.Enable != r.cfg.Fan.Enable || c.Fan.PWMPin != r.cfg.Fan.PWMPin || c.Fan.PWMFrequency != r.cfg.Fan.PWMFrequency || c.Fan.TempTargetC != r.cfg.Fan.TempTargetC || c.Fan.PWMDutyMin != r.cfg.Fan.PWMDutyMin || c.Fan.UpdateInterval != r.cfg.Fan.UpdateInterval {
 		return fmt.Errorf("fan settings require restart")

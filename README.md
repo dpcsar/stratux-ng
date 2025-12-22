@@ -13,7 +13,7 @@ This is a **new implementation** (new repository) with a modular architecture an
   - **978 MHz UAT** via external decoder (e.g., `dump978`)
   - Support for “Nano 2/3” RTL-SDR-class devices and Stratux-compatible hardware
 - **Sensors**
-  - **GPS** (USB/serial; NMEA or gpsd-backed; planned)
+  - **GPS** (USB/serial; NMEA RMC+GGA supported)
   - **AHRS/IMU** (Stratux AHRS 2.0–class I2C sensors: ICM-20948 + BMP280)
 - **Outputs**
   - **GDL90 over UDP** for EFB compatibility (initial focus: **Garmin Pilot** and **enRoute Flight Navigation**; enRoute will be primary test target early)
@@ -31,8 +31,7 @@ This is a **new implementation** (new repository) with a modular architecture an
 ### Hardware integration (next)
 - Ingest 1090 data from `readsb`
 - Ingest 978 data from `dump978`
-- GPS ingestion (NMEA/gpsd)
-- GPS ingestion
+- GPS ingestion (gpsd integration)
 - Process supervision (restart decoders, health checks, logging)
 
 ## Architecture (high level)
@@ -105,6 +104,27 @@ Then:
 - Bring up the Wi‑Fi AP (see [docs/wifi-ap-hostapd-dnsmasq.md](docs/wifi-ap-hostapd-dnsmasq.md))
 - Connect your tablet/phone (EFB device) to the Pi Wi‑Fi
 
+### Appliance / SD image build checklist
+
+When you move from development (`go run ...`) to a flashable SD image, these are the practical “make it work every boot” steps:
+
+- Persistent config path
+  - Mount an ext4 partition at `/data`
+  - Put config at `/data/stratux-ng/config.yaml`
+  - See: [docs/sd-image-persistence.md](docs/sd-image-persistence.md)
+- Stable GPS device name (recommended)
+  - Install the udev rule example: `configs/udev/99-stratux-gps.rules.example`
+  - Configure `gps.device: /dev/stratux-gps` (avoid hard-coding `/dev/ttyACM0`)
+- gpsd (recommended for “any random USB GPS”)
+  - Install/enable `gpsd` in the image and set `gps.source: gpsd` (default address: `127.0.0.1:2947`)
+- Service management (recommended)
+  - Install and enable the systemd unit: `configs/systemd/stratux-ng.service.example`
+  - Ensure the service can read serial devices (typically `dialout`; the example unit uses `SupplementaryGroups=dialout`)
+- Network / Wi‑Fi AP
+  - Set up AP services per: [docs/wifi-ap-hostapd-dnsmasq.md](docs/wifi-ap-hostapd-dnsmasq.md)
+- Port binding
+  - If you want `web.listen: :80`, use capabilities (or systemd `AmbientCapabilities`) rather than running everything as root
+
 ### Record / replay (GDL90 output frames)
 
 Stratux-NG can record the *framed* GDL90 UDP packets it emits, then replay them later for deterministic EFB testing (no SDR/GPS/AHRS required).
@@ -170,7 +190,33 @@ GDL90 altitude semantics (Stratux-compatible):
 Heading/yaw note (Stratux-like):
 - The AHRS board can measure **yaw rate** (gyro Z), but a stable absolute **yaw/heading angle** generally requires an external reference.
 - Upstream Stratux behavior is effectively “gyro for short-term dynamics (turns), GPS track as a heading reference when valid”; magnetometer heading is typically left invalid until calibration/fusion is implemented.
-- Next planned work for Stratux-NG: bring up **GPS ingestion** so we can provide real track/groundspeed and use that as a heading reference (and later improve turn/heading behavior).
+- GPS ingestion is supported (USB serial NMEA) and provides real track/groundspeed for heading reference.
+
+## GPS (USB serial NMEA)
+
+Stratux-NG can read a USB GPS that presents as a serial device (common for the Stratux GPYes 2.0 u-blox8). It parses NMEA **RMC** (lat/lon/groundspeed/track) and **GGA** (altitude).
+
+- Plug in the GPS and look for `/dev/ttyACM0` (common) or `/dev/ttyUSB0`.
+- Appliance/image recommendation (Stratux-like): install a udev rule that creates a stable symlink (so the device name doesn’t renumber across reboots).
+  - This repo includes an example: `configs/udev/99-stratux-gps.rules.example`
+  - After installing the rule, use `gps.device: /dev/stratux-gps`
+- Enable GPS in [config.yaml](config.yaml):
+  - `gps.enable: true`
+  - optional: `gps.source: gpsd` (recommended for appliance images targeting “any random USB GPS”)
+    - `gps.gpsd_addr: 127.0.0.1:2947`
+  - optional: `gps.device: /dev/stratux-gps` (recommended for images)
+    - If omitted, Stratux-NG auto-detects `/dev/ttyACM*`/`/dev/ttyUSB*`
+  - optional: `gps.baud: 9600`
+
+Notes on `gpsd`:
+- `gpsd` is not required for known-good GPS hardware, but it improves plug-and-play compatibility across varied USB GPS devices.
+- Stratux-NG’s `gpsd` mode consumes gpsd JSON reports (TPV/SKY) and maps them to the same ownship/status fields.
+
+Appliance/image note:
+- On Raspberry Pi OS / Debian-based images, `gpsd` is typically run via systemd (often socket-activated).
+- This repo includes a small systemd drop-in example to order Stratux-NG after gpsd: `configs/systemd/stratux-ng-gpsd.conf.example`
+
+Linux permission note: if Stratux-NG logs an “open failed (permission denied)” for the device, grant access to the serial device (commonly by adding the service user to the `dialout` group, or by running the service with appropriate permissions).
 
 Calibration + orientation (Stratux AHRS 2.0 style):
 - **Set Level**: cages roll/pitch so the current attitude becomes (0,0).

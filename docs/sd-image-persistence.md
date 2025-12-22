@@ -66,6 +66,20 @@ This repo ships an example unit:
 
 It hardens the service and only allows writes under `/data/stratux-ng`.
 
+## GPS device naming (recommended for images)
+
+For appliance images, avoid hard-coding `/dev/ttyACM0` in config. Linux can renumber tty devices across boots if other USB devices appear.
+
+Recommended approach (Stratux-like): install a udev rule that creates a stable symlink and point config at that:
+
+- Example rule in this repo: `configs/udev/99-stratux-gps.rules.example`
+- Install to: `/etc/udev/rules.d/99-stratux-gps.rules`
+- Configure: `gps.device: /dev/stratux-gps`
+
+If you plan to support “any random USB GPS” in an image, consider running `gpsd` and set `gps.source: gpsd`:
+
+- See: [docs/gpsd.md](gpsd.md)
+
 ## Minimal “data partition” fstab snippet
 
 This is just a sketch; you’ll need the correct device/UUID.

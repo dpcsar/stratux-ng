@@ -322,6 +322,84 @@ func TestTrafficReportFrame_VerticalVelocityPacking(t *testing.T) {
 	}
 }
 
+func TestOwnshipReportFrame_VerticalVelocityClamps(t *testing.T) {
+	msgUp := unframeAndCheckCRC(t, OwnshipReportFrame(Ownship{
+		ICAO:        [3]byte{0x01, 0x02, 0x03},
+		LatDeg:      45.0,
+		LonDeg:      -122.0,
+		AltFeet:     4500,
+		HaveNICNACp: true,
+		NIC:         8,
+		NACp:        8,
+		GroundKt:    100,
+		TrackDeg:    90,
+		VvelValid:   true,
+		VvelFpm:     9999999,
+		Callsign:    "TEST",
+		Emitter:     0x01,
+	}))
+	vvelUp := uint16(msgUp[15]&0x0F)<<8 | uint16(msgUp[16])
+	if vvelUp != 0x7FF {
+		t.Fatalf("unexpected vvel clamp(+): got 0x%03X want 0x7FF", vvelUp)
+	}
+
+	msgDn := unframeAndCheckCRC(t, OwnshipReportFrame(Ownship{
+		ICAO:        [3]byte{0x01, 0x02, 0x04},
+		LatDeg:      45.0,
+		LonDeg:      -122.0,
+		AltFeet:     4500,
+		HaveNICNACp: true,
+		NIC:         8,
+		NACp:        8,
+		GroundKt:    100,
+		TrackDeg:    90,
+		VvelValid:   true,
+		VvelFpm:     -9999999,
+		Callsign:    "TEST",
+		Emitter:     0x01,
+	}))
+	vvelDn := uint16(msgDn[15]&0x0F)<<8 | uint16(msgDn[16])
+	if vvelDn != 0x801 {
+		t.Fatalf("unexpected vvel clamp(-): got 0x%03X want 0x801", vvelDn)
+	}
+}
+
+func TestTrafficReportFrame_VerticalVelocityClamps(t *testing.T) {
+	msgUp := unframeAndCheckCRC(t, TrafficReportFrame(Traffic{
+		AddrType: 0x00,
+		ICAO:     [3]byte{0x01, 0x02, 0x03},
+		LatDeg:   45.0,
+		LonDeg:   -122.0,
+		AltFeet:  4500,
+		NIC:      8,
+		NACp:     8,
+		GroundKt: 100,
+		TrackDeg: 90,
+		VvelFpm:  9999999,
+	}))
+	vvelUp := uint16(msgUp[15]&0x0F)<<8 | uint16(msgUp[16])
+	if vvelUp != 0x7FF {
+		t.Fatalf("unexpected vvel clamp(+): got 0x%03X want 0x7FF", vvelUp)
+	}
+
+	msgDn := unframeAndCheckCRC(t, TrafficReportFrame(Traffic{
+		AddrType: 0x00,
+		ICAO:     [3]byte{0x01, 0x02, 0x04},
+		LatDeg:   45.0,
+		LonDeg:   -122.0,
+		AltFeet:  4500,
+		NIC:      8,
+		NACp:     8,
+		GroundKt: 100,
+		TrackDeg: 90,
+		VvelFpm:  -9999999,
+	}))
+	vvelDn := uint16(msgDn[15]&0x0F)<<8 | uint16(msgDn[16])
+	if vvelDn != 0x801 {
+		t.Fatalf("unexpected vvel clamp(-): got 0x%03X want 0x801", vvelDn)
+	}
+}
+
 func TestEncodeLatLon24_DecodeWithinResolution(t *testing.T) {
 	cases := []struct {
 		lat float64

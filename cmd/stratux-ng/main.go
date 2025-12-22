@@ -19,6 +19,7 @@ import (
 	"stratux-ng/internal/ahrs"
 	"stratux-ng/internal/config"
 	"stratux-ng/internal/gdl90"
+	"stratux-ng/internal/gps"
 	"stratux-ng/internal/replay"
 	"stratux-ng/internal/sim"
 	"stratux-ng/internal/udp"
@@ -491,13 +492,37 @@ func main() {
 				var frames [][]byte
 				if sc != nil && sc.scenario != nil {
 					now = sc.startUTC.Add(sc.elapsed)
+					// Scenario mode is deterministic and currently does not use live GPS.
+					status.SetGPS(now.UTC(), gps.Snapshot{Enabled: false})
 					frames = buildGDL90FramesFromScenario(curCfg, now.UTC(), sc.elapsed, sc.scenario, sc.ownshipICAO, sc.trafficICAO)
 				} else {
 					now = time.Now()
 					var snap ahrs.Snapshot
 					var haveAHRS bool
+					var gpsSnap gps.Snapshot
+					var haveGPS bool
 					if fanSnap, haveFan := rt.FanSnapshot(); haveFan {
 						status.SetFan(now.UTC(), fanSnap)
+					}
+					if curCfg.GPS.Enable {
+						gpsSnap, haveGPS = rt.GPSSnapshot()
+						if haveGPS {
+							if gpsSnap.LastFixUTC != "" {
+								if tFix, perr := time.Parse(time.RFC3339Nano, gpsSnap.LastFixUTC); perr == nil {
+									age := now.UTC().Sub(tFix.UTC()).Seconds()
+									if age < 0 {
+										age = 0
+									}
+									gpsSnap.FixAgeSec = age
+									gpsSnap.FixStale = age > 3.0
+								}
+							}
+							status.SetGPS(now.UTC(), gpsSnap)
+						} else {
+							status.SetGPS(now.UTC(), gps.Snapshot{Enabled: true, Valid: false})
+						}
+					} else {
+						status.SetGPS(now.UTC(), gps.Snapshot{Enabled: false})
 					}
 					if curCfg.AHRS.Enable {
 						snap, haveAHRS = rt.AHRSSnapshot()
@@ -525,7 +550,11 @@ func main() {
 					} else {
 						status.SetAHRSSensors(now.UTC(), web.AHRSSensorsSnapshot{Enabled: false})
 					}
-					frames = buildGDL90Frames(curCfg, now.UTC(), haveAHRS, snap)
+					if curCfg.GPS.Enable {
+						frames = buildGDL90FramesWithGPS(curCfg, now.UTC(), haveAHRS, snap, haveGPS, gpsSnap)
+					} else {
+						frames = buildGDL90Frames(curCfg, now.UTC(), haveAHRS, snap)
+					}
 				}
 				status.SetAttitude(now.UTC(), decodeAttitudeFromFrames(frames))
 				status.MarkTick(now.UTC(), len(frames))
@@ -738,6 +767,174 @@ func buildGDL90Frames(cfg config.Config, now time.Time, haveAHRS bool, ahrsSnap 
 		}
 		// Deterministic, non-zero ICAO for each target.
 		// Keep it in the "self assigned" range (not necessarily valid ICAO).
+		icaoT := [3]byte{0xF1, 0x00, byte(i + 1)}
+		frames = append(frames, gdl90.TrafficReportFrame(gdl90.Traffic{
+			AddrType:        0x00,
+			ICAO:            icaoT,
+			LatDeg:          tgt.LatDeg,
+			LonDeg:          tgt.LonDeg,
+			AltFeet:         tgt.AltFeet,
+			NIC:             8,
+			NACp:            8,
+			GroundKt:        tgt.GroundKt,
+			TrackDeg:        tgt.TrackDeg,
+			VvelFpm:         tgt.VvelFpm,
+			OnGround:        tgt.GroundKt == 0,
+			Extrapolated:    tgt.Extrapolated,
+			EmitterCategory: 0x01,
+			Tail:            fmt.Sprintf("TGT%04d", i+1),
+			PriorityStatus:  0,
+		}))
+	}
+
+	return frames
+}
+
+func buildGDL90FramesWithGPS(cfg config.Config, now time.Time, haveAHRS bool, ahrsSnap ahrs.Snapshot, haveGPS bool, gpsSnap gps.Snapshot) [][]byte {
+	// GPS mode: emit ownship from live GPS when we have a recent fix.
+	icao, err := gdl90.ParseICAOHex(cfg.Sim.Ownship.ICAO)
+	ownshipOK := err == nil
+	if err != nil {
+		log.Printf("ownship invalid sim.ownship.icao: %v", err)
+	}
+
+	ahrsValid := true
+	if cfg.AHRS.Enable {
+		ahrsValid = haveAHRS && ahrsSnap.Valid
+	}
+
+	// Determine if we have a reasonably fresh fix.
+	fixOK := haveGPS && gpsSnap.Enabled && gpsSnap.Valid
+	if fixOK && gpsSnap.LastFixUTC != "" {
+		if tFix, perr := time.Parse(time.RFC3339Nano, gpsSnap.LastFixUTC); perr == nil {
+			if now.UTC().Sub(tFix.UTC()) > 3*time.Second {
+				fixOK = false
+			}
+		}
+	}
+
+	gpsValid := ownshipOK && fixOK
+
+	frames := make([][]byte, 0, 16)
+	frames = append(frames,
+		gdl90.HeartbeatFrameAt(now, gpsValid, false),
+		gdl90.StratuxHeartbeatFrame(gpsValid, ahrsValid),
+	)
+
+	// Identify as a Stratux-like device for apps that key off 0x65.
+	frames = append(frames, gdl90.ForeFlightIDFrame("Stratux", "Stratux-NG"))
+	if !gpsValid {
+		return frames
+	}
+
+	nacp := gdl90.NACpFromHorizontalAccuracyMeters(cfg.GPS.HorizontalAccuracyM)
+
+	geoAltFeet := cfg.Sim.Ownship.AltFeet
+	if gpsSnap.AltFeet != nil {
+		geoAltFeet = *gpsSnap.AltFeet
+	}
+
+	// GDL90 Ownship Report (0x0A) altitude is pressure altitude when available.
+	// Mirror upstream Stratux behavior by preferring baro-derived pressure altitude.
+	ownshipAltFeet := geoAltFeet
+	if cfg.AHRS.Enable && haveAHRS && ahrsSnap.PressureAltValid {
+		ownshipAltFeet = int(ahrsSnap.PressureAltFeet)
+	}
+
+	groundKt := 0
+	if gpsSnap.GroundKt != nil {
+		groundKt = *gpsSnap.GroundKt
+	}
+	trackDeg := 0.0
+	if gpsSnap.TrackDeg != nil {
+		trackDeg = *gpsSnap.TrackDeg
+	}
+
+	vvelFpm := 0
+	vvelValid := false
+	if gpsSnap.VertSpeedFPM != nil {
+		vvelFpm = *gpsSnap.VertSpeedFPM
+		vvelValid = true
+	}
+
+	frames = append(frames, gdl90.OwnshipReportFrame(gdl90.Ownship{
+		ICAO:        icao,
+		LatDeg:      gpsSnap.LatDeg,
+		LonDeg:      gpsSnap.LonDeg,
+		AltFeet:     ownshipAltFeet,
+		HaveNICNACp: true,
+		NIC:         8,
+		NACp:        nacp,
+		GroundKt:    groundKt,
+		TrackDeg:    trackDeg,
+		OnGround:    groundKt == 0,
+		VvelFpm:     vvelFpm,
+		VvelValid:   vvelValid,
+		Callsign:    cfg.Sim.Ownship.Callsign,
+		Emitter:     0x01,
+	}))
+	frames = append(frames, gdl90.OwnshipGeometricAltitudeFrame(geoAltFeet))
+
+	// Stratux-like AHRS messages. If AHRS is present, use it; otherwise keep
+	// the sim attitude neutral but with heading aligned to track.
+	roll := 0.0
+	pitch := 0.0
+	if cfg.AHRS.Enable && haveAHRS {
+		roll = ahrsSnap.RollDeg
+		pitch = ahrsSnap.PitchDeg
+	}
+
+	pressureAltFeet := float64(geoAltFeet)
+	pressureAltValid := false
+	if cfg.AHRS.Enable {
+		pressureAltValid = haveAHRS && ahrsSnap.PressureAltValid
+		if pressureAltValid {
+			pressureAltFeet = ahrsSnap.PressureAltFeet
+		}
+	}
+
+	att := gdl90.Attitude{
+		Valid:                ahrsValid,
+		RollDeg:              roll,
+		PitchDeg:             pitch,
+		HeadingDeg:           trackDeg,
+		SlipSkidDeg:          0,
+		YawRateDps:           0,
+		GLoad:                1.0,
+		IndicatedAirspeedKt:  groundKt,
+		TrueAirspeedKt:       groundKt,
+		PressureAltitudeFeet: pressureAltFeet,
+		PressureAltValid:     pressureAltValid,
+		VerticalSpeedFpm:     vvelFpm,
+		VerticalSpeedValid:   vvelValid,
+	}
+	if cfg.AHRS.Enable && haveAHRS && ahrsSnap.VerticalSpeedValid {
+		att.VerticalSpeedFpm = ahrsSnap.VerticalSpeedFpm
+		att.VerticalSpeedValid = true
+	}
+	frames = append(frames,
+		gdl90.ForeFlightAHRSFrame(att),
+		gdl90.AHRSGDL90LEFrame(att),
+	)
+
+	// If sim traffic is enabled, it still uses sim center from config.
+	if !cfg.Sim.Traffic.Enable {
+		return frames
+	}
+
+	ts := sim.TrafficSim{
+		CenterLatDeg: cfg.Sim.Ownship.CenterLatDeg,
+		CenterLonDeg: cfg.Sim.Ownship.CenterLonDeg,
+		BaseAltFeet:  cfg.Sim.Ownship.AltFeet,
+		GroundKt:     cfg.Sim.Traffic.GroundKt,
+		RadiusNm:     cfg.Sim.Traffic.RadiusNm,
+		Period:       cfg.Sim.Traffic.Period,
+	}
+	targets := ts.Targets(now, cfg.Sim.Traffic.Count)
+	for i, tgt := range targets {
+		if !tgt.Visible {
+			continue
+		}
 		icaoT := [3]byte{0xF1, 0x00, byte(i + 1)}
 		frames = append(frames, gdl90.TrafficReportFrame(gdl90.Traffic{
 			AddrType:        0x00,

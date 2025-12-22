@@ -1,0 +1,25 @@
+# Stratux-NG: stable GPS device name
+#
+# Goal: create /dev/stratux-gps so the configured gps.device does not change
+# across reboots (ttyACM0/ttyACM1 can renumber when USB devices change).
+#
+# This example targets common u-blox USB GPS devices (including Stratux GPYes 2.0)
+# that enumerate as ttyACM* or ttyUSB*.
+#
+# Customize if needed:
+#   udevadm info -a -n /dev/ttyACM0
+# and then match on a unique attribute set (vendor/product/serial).
+#
+# Install:
+#   sudo install -m 644 configs/udev/99-stratux-gps.rules.example /etc/udev/rules.d/99-stratux-gps.rules
+#   sudo udevadm control --reload-rules
+#   sudo udevadm trigger
+#
+# Verify:
+#   ls -l /dev/stratux-gps
+#
+# Note: Most distros already put ttyACM/ttyUSB devices in group dialout.
+# The MODE/GROUP below makes that explicit.
+
+SUBSYSTEM=="tty", KERNEL=="ttyACM*", ENV{ID_VENDOR_ID}=="1546", SYMLINK+="stratux-gps", GROUP="dialout", MODE="0660"
+SUBSYSTEM=="tty", KERNEL=="ttyUSB*", ENV{ID_VENDOR_ID}=="1546", SYMLINK+="stratux-gps", GROUP="dialout", MODE="0660"

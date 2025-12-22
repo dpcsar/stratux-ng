@@ -6,6 +6,7 @@ import (
 
 	"stratux-ng/internal/ahrs"
 	"stratux-ng/internal/config"
+	"stratux-ng/internal/gps"
 	"stratux-ng/internal/sim"
 )
 
@@ -156,10 +157,10 @@ func TestBuildGDL90Frames_OwnshipAltitudePrefersBaroPressureAltitude(t *testing.
 	// Use a 25-ft-aligned value to avoid GDL90 quantization ambiguity.
 	baroAltFeet := 4150.0
 	frames := buildGDL90Frames(cfg, now, true, ahrs.Snapshot{
-		Valid:           true,
-		IMUDetected:     true,
-		BaroDetected:    true,
-		PressureAltFeet: baroAltFeet,
+		Valid:            true,
+		IMUDetected:      true,
+		BaroDetected:     true,
+		PressureAltFeet:  baroAltFeet,
 		PressureAltValid: true,
 	})
 
@@ -249,5 +250,233 @@ func TestBuildGDL90Frames_DoesNotAdvertiseGPSValidWithoutOwnship(t *testing.T) {
 	// In stratux heartbeat, msg[1] bit1 indicates GPS valid.
 	if (hbCC[1] & 0x02) != 0 {
 		t.Fatalf("expected stratux heartbeat gpsValid=false")
+	}
+}
+
+func TestBuildGDL90FramesWithGPS_OwnshipVerticalSpeedFromGPS(t *testing.T) {
+	cfg := config.Config{
+		GDL90: config.GDL90Config{Dest: "127.0.0.1:4000", Interval: 1 * time.Second},
+		GPS:   config.GPSConfig{Enable: true, HorizontalAccuracyM: 10},
+		Sim: config.SimConfig{
+			Ownship: config.OwnshipSimConfig{
+				CenterLatDeg: 45.541,
+				CenterLonDeg: -122.949,
+				AltFeet:      3500,
+				GroundKt:     90,
+				RadiusNm:     0.5,
+				Period:       120 * time.Second,
+				ICAO:         "F00001",
+				Callsign:     "STRATUX",
+			},
+			Traffic: config.TrafficSimConfig{Enable: false},
+		},
+	}
+
+	now := time.Date(2025, 12, 22, 12, 0, 0, 0, time.UTC)
+	alt := 5000
+	gs := 100
+	trk := 270.0
+	vv := 640 // 10 * 64 fpm
+	gpsSnap := gps.Snapshot{
+		Enabled:      true,
+		Valid:        true,
+		LatDeg:       45.5,
+		LonDeg:       -122.9,
+		AltFeet:      &alt,
+		GroundKt:     &gs,
+		TrackDeg:     &trk,
+		VertSpeedFPM: &vv,
+		LastFixUTC:   now.UTC().Format(time.RFC3339Nano),
+	}
+
+	frames := buildGDL90FramesWithGPS(cfg, now, false, ahrs.Snapshot{}, true, gpsSnap)
+	var ownshipMsg []byte
+	for _, f := range frames {
+		msg := unframeForMsg(t, f)
+		if msg[0] == 0x0A {
+			ownshipMsg = msg
+			break
+		}
+	}
+	if ownshipMsg == nil {
+		t.Fatalf("expected ownship report")
+	}
+	if len(ownshipMsg) < 17 {
+		t.Fatalf("ownship msg too short: %d", len(ownshipMsg))
+	}
+
+	vvelU := uint16(ownshipMsg[15]&0x0F)<<8 | uint16(ownshipMsg[16])
+	if vvelU != 0x00A {
+		t.Fatalf("unexpected vvel: got 0x%03X want 0x00A", vvelU)
+	}
+}
+
+func TestBuildGDL90FramesWithGPS_OwnshipVerticalSpeedNegativeFromGPS(t *testing.T) {
+	cfg := config.Config{
+		GDL90: config.GDL90Config{Dest: "127.0.0.1:4000", Interval: 1 * time.Second},
+		GPS:   config.GPSConfig{Enable: true, HorizontalAccuracyM: 10},
+		Sim: config.SimConfig{
+			Ownship: config.OwnshipSimConfig{
+				CenterLatDeg: 45.541,
+				CenterLonDeg: -122.949,
+				AltFeet:      3500,
+				GroundKt:     90,
+				RadiusNm:     0.5,
+				Period:       120 * time.Second,
+				ICAO:         "F00001",
+				Callsign:     "STRATUX",
+			},
+			Traffic: config.TrafficSimConfig{Enable: false},
+		},
+	}
+
+	now := time.Date(2025, 12, 22, 12, 0, 0, 0, time.UTC)
+	alt := 5000
+	gs := 100
+	trk := 270.0
+	vv := -640 // -10 * 64 fpm
+	gpsSnap := gps.Snapshot{
+		Enabled:      true,
+		Valid:        true,
+		LatDeg:       45.5,
+		LonDeg:       -122.9,
+		AltFeet:      &alt,
+		GroundKt:     &gs,
+		TrackDeg:     &trk,
+		VertSpeedFPM: &vv,
+		LastFixUTC:   now.UTC().Format(time.RFC3339Nano),
+	}
+
+	frames := buildGDL90FramesWithGPS(cfg, now, false, ahrs.Snapshot{}, true, gpsSnap)
+	var ownshipMsg []byte
+	for _, f := range frames {
+		msg := unframeForMsg(t, f)
+		if msg[0] == 0x0A {
+			ownshipMsg = msg
+			break
+		}
+	}
+	if ownshipMsg == nil {
+		t.Fatalf("expected ownship report")
+	}
+	if len(ownshipMsg) < 17 {
+		t.Fatalf("ownship msg too short: %d", len(ownshipMsg))
+	}
+
+	vvelU := uint16(ownshipMsg[15]&0x0F)<<8 | uint16(ownshipMsg[16])
+	if vvelU != 0xFF6 {
+		t.Fatalf("unexpected vvel: got 0x%03X want 0xFF6", vvelU)
+	}
+}
+
+func TestBuildGDL90FramesWithGPS_OwnshipVerticalSpeedUnknownWhenAbsent(t *testing.T) {
+	cfg := config.Config{
+		GDL90: config.GDL90Config{Dest: "127.0.0.1:4000", Interval: 1 * time.Second},
+		GPS:   config.GPSConfig{Enable: true, HorizontalAccuracyM: 10},
+		Sim: config.SimConfig{
+			Ownship: config.OwnshipSimConfig{
+				CenterLatDeg: 45.541,
+				CenterLonDeg: -122.949,
+				AltFeet:      3500,
+				GroundKt:     90,
+				RadiusNm:     0.5,
+				Period:       120 * time.Second,
+				ICAO:         "F00001",
+				Callsign:     "STRATUX",
+			},
+			Traffic: config.TrafficSimConfig{Enable: false},
+		},
+	}
+
+	now := time.Date(2025, 12, 22, 12, 0, 0, 0, time.UTC)
+	alt := 5000
+	gs := 100
+	trk := 270.0
+	gpsSnap := gps.Snapshot{
+		Enabled:    true,
+		Valid:      true,
+		LatDeg:     45.5,
+		LonDeg:     -122.9,
+		AltFeet:    &alt,
+		GroundKt:   &gs,
+		TrackDeg:   &trk,
+		LastFixUTC: now.UTC().Format(time.RFC3339Nano),
+	}
+
+	frames := buildGDL90FramesWithGPS(cfg, now, false, ahrs.Snapshot{}, true, gpsSnap)
+	var ownshipMsg []byte
+	for _, f := range frames {
+		msg := unframeForMsg(t, f)
+		if msg[0] == 0x0A {
+			ownshipMsg = msg
+			break
+		}
+	}
+	if ownshipMsg == nil {
+		t.Fatalf("expected ownship report")
+	}
+	if len(ownshipMsg) < 17 {
+		t.Fatalf("ownship msg too short: %d", len(ownshipMsg))
+	}
+
+	vvelU := uint16(ownshipMsg[15]&0x0F)<<8 | uint16(ownshipMsg[16])
+	if vvelU != 0x800 {
+		t.Fatalf("unexpected vvel: got 0x%03X want 0x800 (unknown)", vvelU)
+	}
+}
+
+func TestBuildGDL90FramesWithGPS_AHRSLEVerticalSpeedFromGPS(t *testing.T) {
+	cfg := config.Config{
+		GDL90: config.GDL90Config{Dest: "127.0.0.1:4000", Interval: 1 * time.Second},
+		GPS:   config.GPSConfig{Enable: true, HorizontalAccuracyM: 10},
+		AHRS:  config.AHRSConfig{Enable: false},
+		Sim: config.SimConfig{
+			Ownship: config.OwnshipSimConfig{
+				CenterLatDeg: 45.541,
+				CenterLonDeg: -122.949,
+				AltFeet:      3500,
+				GroundKt:     90,
+				RadiusNm:     0.5,
+				Period:       120 * time.Second,
+				ICAO:         "F00001",
+				Callsign:     "STRATUX",
+			},
+			Traffic: config.TrafficSimConfig{Enable: false},
+		},
+	}
+
+	now := time.Date(2025, 12, 22, 12, 0, 0, 0, time.UTC)
+	alt := 5000
+	gs := 100
+	trk := 270.0
+	vv := 640
+	gpsSnap := gps.Snapshot{
+		Enabled:      true,
+		Valid:        true,
+		LatDeg:       45.5,
+		LonDeg:       -122.9,
+		AltFeet:      &alt,
+		GroundKt:     &gs,
+		TrackDeg:     &trk,
+		VertSpeedFPM: &vv,
+		LastFixUTC:   now.UTC().Format(time.RFC3339Nano),
+	}
+
+	frames := buildGDL90FramesWithGPS(cfg, now, false, ahrs.Snapshot{}, true, gpsSnap)
+	var leMsg []byte
+	for _, f := range frames {
+		msg := unframeForMsg(t, f)
+		if len(msg) >= 22 && msg[0] == 0x4C {
+			leMsg = msg
+			break
+		}
+	}
+	if leMsg == nil {
+		t.Fatalf("expected AHRS LE report (0x4C)")
+	}
+
+	vs := int16(leMsg[20])<<8 | int16(leMsg[21])
+	if vs != 640 {
+		t.Fatalf("unexpected LE vertical speed: got %d want 640", vs)
 	}
 }

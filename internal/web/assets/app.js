@@ -26,6 +26,29 @@
   const stRecord = document.getElementById('st-record');
   const stReplay = document.getElementById('st-replay');
 
+  const stGpsEnabled = document.getElementById('st-gps-enabled');
+  const stGpsValid = document.getElementById('st-gps-valid');
+  const stGpsStale = document.getElementById('st-gps-stale');
+  const stGpsAge = document.getElementById('st-gps-age');
+  const stGpsSource = document.getElementById('st-gps-source');
+  const stGpsDevice = document.getElementById('st-gps-device');
+  const stGpsGPSDAddr = document.getElementById('st-gps-gpsd-addr');
+  const stGpsBaud = document.getElementById('st-gps-baud');
+  const stGpsLastFix = document.getElementById('st-gps-last-fix');
+  const stGpsFixQ = document.getElementById('st-gps-fixq');
+  const stGpsFixMode = document.getElementById('st-gps-fixmode');
+  const stGpsSats = document.getElementById('st-gps-sats');
+  const stGpsHdop = document.getElementById('st-gps-hdop');
+  const stGpsHAcc = document.getElementById('st-gps-hacc');
+  const stGpsVAcc = document.getElementById('st-gps-vacc');
+  const stGpsLat = document.getElementById('st-gps-lat');
+  const stGpsLon = document.getElementById('st-gps-lon');
+  const stGpsAlt = document.getElementById('st-gps-alt');
+  const stGpsGround = document.getElementById('st-gps-ground');
+  const stGpsTrack = document.getElementById('st-gps-track');
+  const stGpsVSpeed = document.getElementById('st-gps-vspeed');
+  const stGpsError = document.getElementById('st-gps-error');
+
   const stFanEnabled = document.getElementById('st-fan-enabled');
   const stFanCpuTemp = document.getElementById('st-fan-cpu-temp');
   const stFanDuty = document.getElementById('st-fan-duty');
@@ -213,6 +236,47 @@
     setChecked(stTraffic, !!sim.traffic);
     setChecked(stRecord, !!sim.record);
     setChecked(stReplay, !!sim.replay);
+
+    const gps = s?.gps || {};
+
+    function fmtFixMode(gpsSource, mode) {
+      const src = String(gpsSource || '').toLowerCase();
+      if (src !== 'gpsd') return '-';
+      if (mode == null) return '-';
+      switch (Number(mode)) {
+        case 1:
+          return 'no fix';
+        case 2:
+          return '2d';
+        case 3:
+          return '3d';
+        default:
+          return String(mode);
+      }
+    }
+
+    setChecked(stGpsEnabled, !!gps.enabled);
+    setChecked(stGpsValid, !!gps.valid);
+    setChecked(stGpsStale, !!gps.fix_stale);
+    setInput(stGpsAge, gps.fix_age_sec == null ? '' : fmtNum(gps.fix_age_sec, 1));
+    setInput(stGpsSource, gps.source || '');
+    setInput(stGpsDevice, gps.device || '');
+    setInput(stGpsGPSDAddr, gps.gpsd_addr || '');
+    setInput(stGpsBaud, gps.baud == null ? '' : String(gps.baud));
+    setInput(stGpsLastFix, gps.last_fix_utc || '');
+    setInput(stGpsFixQ, gps.fix_quality == null ? '' : String(gps.fix_quality));
+    setInput(stGpsFixMode, fmtFixMode(gps.source, gps.fix_mode));
+    setInput(stGpsSats, gps.satellites == null ? '' : String(gps.satellites));
+    setInput(stGpsHdop, gps.hdop == null ? '' : fmtNum(gps.hdop, 1));
+    setInput(stGpsHAcc, gps.horiz_acc_m == null ? '' : fmtNum(gps.horiz_acc_m, 1));
+    setInput(stGpsVAcc, gps.vert_acc_m == null ? '' : fmtNum(gps.vert_acc_m, 1));
+    setInput(stGpsLat, gps.enabled && gps.valid ? fmtNum(gps.lat_deg, 6) : '');
+    setInput(stGpsLon, gps.enabled && gps.valid ? fmtNum(gps.lon_deg, 6) : '');
+    setInput(stGpsAlt, gps.alt_feet == null ? '' : String(gps.alt_feet));
+    setInput(stGpsGround, gps.ground_kt == null ? '' : String(gps.ground_kt));
+    setInput(stGpsTrack, gps.track_deg == null ? '' : fmtNum(gps.track_deg, 1));
+    setInput(stGpsVSpeed, gps.vert_speed_fpm == null ? '' : String(gps.vert_speed_fpm));
+    setInput(stGpsError, gps.last_error || '');
 
     const fan = s?.fan || {};
     setChecked(stFanEnabled, !!fan.enabled);

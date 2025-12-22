@@ -16,7 +16,9 @@ func openPWM(pin int) (pwmDriver, error) {
 	return nil, fmt.Errorf("fancontrol: pwm unsupported on this platform")
 }
 
-func (u *unsupportedPWM) SetFrequencyHz(hz int) error { return fmt.Errorf("fancontrol: pwm unsupported") }
+func (u *unsupportedPWM) SetFrequencyHz(hz int) error {
+	return fmt.Errorf("fancontrol: pwm unsupported")
+}
 func (u *unsupportedPWM) SetDutyPercent(p float64) error {
 	return fmt.Errorf("fancontrol: pwm unsupported")
 }

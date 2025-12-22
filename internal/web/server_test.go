@@ -15,10 +15,10 @@ import (
 
 type fakeAHRSPersist struct{}
 
-func (f fakeAHRSPersist) SetLevel() error { return nil }
-func (f fakeAHRSPersist) ZeroDrift(ctx context.Context) error { return nil }
+func (f fakeAHRSPersist) SetLevel() error                         { return nil }
+func (f fakeAHRSPersist) ZeroDrift(ctx context.Context) error     { return nil }
 func (f fakeAHRSPersist) OrientForward(ctx context.Context) error { return nil }
-func (f fakeAHRSPersist) OrientDone(ctx context.Context) error { return nil }
+func (f fakeAHRSPersist) OrientDone(ctx context.Context) error    { return nil }
 func (f fakeAHRSPersist) Orientation() (forwardAxis int, gravity [3]float64, gravityOK bool) {
 	return 1, [3]float64{0, 0, 1}, true
 }

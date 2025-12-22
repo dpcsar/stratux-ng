@@ -14,10 +14,38 @@ import (
 
 type Config struct {
 	GDL90 GDL90Config `yaml:"gdl90"`
+	GPS   GPSConfig   `yaml:"gps"`
 	Sim   SimConfig   `yaml:"sim"`
 	AHRS  AHRSConfig  `yaml:"ahrs"`
 	Fan   FanConfig   `yaml:"fan"`
 	Web   WebConfig   `yaml:"web"`
+}
+
+type GPSConfig struct {
+	Enable bool `yaml:"enable"`
+
+	// Source selects how GPS data is ingested.
+	//
+	// Supported values:
+	// - "nmea": read NMEA sentences directly from a serial device
+	// - "gpsd": connect to gpsd and consume JSON reports
+	//
+	// When empty, defaults to "nmea".
+	Source string `yaml:"source"`
+
+	// GPSDAddr is the host:port of a local gpsd instance (default: 127.0.0.1:2947).
+	// Only used when Source == "gpsd".
+	GPSDAddr string `yaml:"gpsd_addr"`
+
+	// Device is the serial device path (e.g. /dev/ttyACM0 or /dev/ttyUSB0).
+	// When empty, Stratux-NG will attempt to auto-detect a likely device.
+	Device string `yaml:"device"`
+
+	// Baud is the serial baud rate. Most USB u-blox receivers default to 9600.
+	Baud int `yaml:"baud"`
+
+	// HorizontalAccuracyM is used to derive NACp similarly to upstream Stratux.
+	HorizontalAccuracyM float64 `yaml:"horizontal_accuracy_m"`
 }
 
 type FanConfig struct {
@@ -230,6 +258,35 @@ func DefaultAndValidate(cfg *Config) error {
 
 	if cfg.GDL90.Record.Enable && cfg.GDL90.Replay.Enable {
 		return fmt.Errorf("gdl90.record and gdl90.replay cannot both be enabled")
+	}
+
+	// GPS defaults + validation.
+	if strings.TrimSpace(cfg.GPS.Source) == "" {
+		cfg.GPS.Source = "nmea"
+	}
+	cfg.GPS.Source = strings.ToLower(strings.TrimSpace(cfg.GPS.Source))
+	if cfg.GPS.Source != "nmea" && cfg.GPS.Source != "gpsd" {
+		return fmt.Errorf("gps.source must be one of: nmea, gpsd")
+	}
+	if cfg.GPS.Source == "gpsd" {
+		if strings.TrimSpace(cfg.GPS.GPSDAddr) == "" {
+			cfg.GPS.GPSDAddr = "127.0.0.1:2947"
+		}
+		if _, _, err := net.SplitHostPort(strings.TrimSpace(cfg.GPS.GPSDAddr)); err != nil {
+			return fmt.Errorf("gps.gpsd_addr must be host:port")
+		}
+	}
+	if cfg.GPS.Baud == 0 {
+		cfg.GPS.Baud = 9600
+	}
+	if cfg.GPS.Baud < 0 {
+		return fmt.Errorf("gps.baud must be > 0")
+	}
+	if cfg.GPS.HorizontalAccuracyM == 0 {
+		cfg.GPS.HorizontalAccuracyM = 10
+	}
+	if cfg.GPS.HorizontalAccuracyM < 0 {
+		return fmt.Errorf("gps.horizontal_accuracy_m must be >= 0")
 	}
 
 	// Simulator defaults (safe even if disabled).

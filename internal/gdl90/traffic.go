@@ -68,7 +68,9 @@ func TrafficReportFrame(t Traffic) []byte {
 	msg[14] = byte((spd & 0x0FF0) >> 4)
 	msg[15] = byte((spd & 0x000F) << 4)
 
-	vvel := int16(math.Round(float64(t.VvelFpm) / 64.0))
+	vv64 := int32(math.Round(float64(t.VvelFpm) / 64.0))
+	vv64 = clampI32(vv64, -2047, 2047)
+	vvel := int16(vv64)
 	vvelU := uint16(vvel) & 0x0FFF
 	msg[15] |= byte((vvelU & 0x0F00) >> 8)
 	msg[16] = byte(vvelU & 0x00FF)

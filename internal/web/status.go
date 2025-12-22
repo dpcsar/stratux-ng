@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"stratux-ng/internal/fancontrol"
+	"stratux-ng/internal/gps"
 )
 
 type Status struct {
@@ -16,7 +17,8 @@ type Status struct {
 	simInfo       atomic.Value // map[string]any
 	attitude      atomic.Value // AttitudeSnapshot
 	ahrsSensors   atomic.Value // AHRSSensorsSnapshot
-	fan          atomic.Value // fancontrol.Snapshot
+	fan           atomic.Value // fancontrol.Snapshot
+	gps           atomic.Value // gps.Snapshot
 }
 
 func NewStatus() *Status {
@@ -30,7 +32,17 @@ func NewStatus() *Status {
 	s.attitude.Store(AttitudeSnapshot{})
 	s.ahrsSensors.Store(AHRSSensorsSnapshot{})
 	s.fan.Store(fancontrol.Snapshot{})
+	s.gps.Store(gps.Snapshot{Enabled: false})
 	return s
+}
+
+func (s *Status) SetGPS(_ time.Time, snap gps.Snapshot) {
+	// snap is already a UI-friendly struct (strings + optional numbers).
+	// Keep this method symmetrical with SetFan/SetAttitude.
+	if s == nil {
+		return
+	}
+	s.gps.Store(snap)
 }
 
 func (s *Status) SetFan(nowUTC time.Time, snap fancontrol.Snapshot) {
@@ -127,6 +139,7 @@ type StatusSnapshot struct {
 	Attitude        AttitudeSnapshot    `json:"attitude"`
 	AHRSSensors     AHRSSensorsSnapshot `json:"ahrs"`
 	Fan             fancontrol.Snapshot `json:"fan"`
+	GPS             gps.Snapshot        `json:"gps"`
 }
 
 func (s *Status) Snapshot(nowUTC time.Time) StatusSnapshot {
@@ -148,6 +161,7 @@ func (s *Status) Snapshot(nowUTC time.Time) StatusSnapshot {
 		Attitude:        s.attitude.Load().(AttitudeSnapshot),
 		AHRSSensors:     s.ahrsSensors.Load().(AHRSSensorsSnapshot),
 		Fan:             s.fan.Load().(fancontrol.Snapshot),
+		GPS:             s.gps.Load().(gps.Snapshot),
 	}
 	if lastTick != 0 {
 		snap.LastTickUTC = time.Unix(0, lastTick).UTC().Format(time.RFC3339Nano)
