@@ -930,6 +930,8 @@ func (s *Service) startupCal(ctx context.Context) {
 		// Run SetLevel (requires valid). Retry briefly if needed.
 		setDeadline := time.NewTimer(setLevelMaxWait)
 		defer setDeadline.Stop()
+		// NOTE: Labeled break is intentional; the select's break would only break the select.
+		retrySetLevel:
 		for {
 			if err := s.SetLevel(); err == nil {
 				break
@@ -940,7 +942,7 @@ func (s *Service) startupCal(ctx context.Context) {
 			case <-s.stopCh:
 				return
 			case <-setDeadline.C:
-				break
+				break retrySetLevel
 			case <-time.After(100 * time.Millisecond):
 			}
 		}

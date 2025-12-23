@@ -28,12 +28,6 @@ import (
 //   to get the actual PWM output frequency.
 // - SetDutyPercent expects 0..100.
 
-type pwmDriver interface {
-	SetFrequencyHz(hz int) error
-	SetDutyPercent(p float64) error
-	Close() error
-}
-
 type sysfsPWM struct {
 	chipPath string // /sys/class/pwm/pwmchipN
 	pwmPath  string // /sys/class/pwm/pwmchipN/pwmM

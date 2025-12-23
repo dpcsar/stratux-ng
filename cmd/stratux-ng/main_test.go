@@ -495,7 +495,7 @@ func findAHRSLERaw(t *testing.T, frames [][]byte) []byte {
 
 func leHeadingDeg(t *testing.T, leMsg []byte) float64 {
 	t.Helper()
-	if leMsg == nil || len(leMsg) < 10 {
+	if len(leMsg) < 10 {
 		t.Fatalf("LE msg too short")
 	}
 	h10 := int16(leMsg[8])<<8 | int16(leMsg[9])

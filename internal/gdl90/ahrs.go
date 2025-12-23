@@ -164,26 +164,6 @@ func deg10(deg float64) int16 {
 	return int16(clampI32(int32(v), -32768, 32767))
 }
 
-func deg10u(deg float64) uint16 {
-	deg = math.Mod(deg, 360)
-	if deg < 0 {
-		deg += 360
-	}
-	v := math.Round(deg * 10)
-	if v < 0 {
-		v = 0
-	}
-	if v > 65535 {
-		v = 65535
-	}
-	return uint16(v)
-}
-
-func g1000(g float64) int16 {
-	v := math.Round(g * 1000)
-	return int16(clampI32(int32(v), -32768, 32767))
-}
-
 func clampI32(v, lo, hi int32) int32 {
 	if v < lo {
 		return lo

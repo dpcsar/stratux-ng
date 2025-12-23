@@ -19,7 +19,7 @@ BIN := $(BIN_DIR)/$(APP_NAME)
 #   CONFIG=/data/stratux-ng/config.yaml make run
 CONFIG ?= ./config.yaml
 
-.PHONY: help test build run fmt vet tidy clean
+.PHONY: help test build run fmt vet staticcheck tidy clean
 
 help:
 	@printf "%s\n" "Targets:" \
@@ -28,6 +28,7 @@ help:
 	  "  make run         Run via go run (CONFIG=$(CONFIG))" \
 	  "  make fmt         gofmt all .go files" \
 	  "  make vet         go vet ./..." \
+	  "  make staticcheck Run staticcheck ./... (install: apt package go-staticcheck on Debian/Trixie)" \
 	  "  make tidy        go mod tidy" \
 	  "  make clean       Remove ./bin"
 
@@ -46,6 +47,9 @@ fmt:
 
 vet:
 	go vet ./...
+
+staticcheck:
+	go-staticcheck ./...
 
 tidy:
 	go mod tidy

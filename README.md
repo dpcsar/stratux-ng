@@ -162,8 +162,17 @@ Log format (written by record mode):
 ## Prerequisites (planned)
 
 - **Target OS:** Raspberry Pi OS 64-bit (arm64)
-- **Tooling:** Go toolchain (version TBD), plus typical Pi utilities for networking/AP setup
+- **Tooling:** Go toolchain (**Go 1.22+**), plus typical Pi utilities for networking/AP setup
 - **Decoders (optional):** `readsb` (1090) and `dump978` (978) treated as external processes/data sources
+
+### Code quality (development)
+
+- Format: `gofmt -w .`
+- Tests: `go test ./...`
+- Vet: `go vet ./...`
+- Static analysis (optional but recommended):
+  - Debian/Trixie: `go-staticcheck ./...` (package: `go-staticcheck`)
+  - Or use the repo target: `make staticcheck`
 
 ## AHRS (ICM-20948 + BMP280)
 

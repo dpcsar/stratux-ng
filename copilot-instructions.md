@@ -53,6 +53,9 @@
 - Run `go test ./...` after code changes.
 - If feasible, also run `go test -race ./...` on supported platforms. Note: on some Raspberry Pi / arm64 environments, ThreadSanitizer can fail with errors like `ThreadSanitizer: unsupported VMA range`; treat that as an environment limitation unless there’s other evidence of a race.
 - Keep code formatted with `gofmt`.
+- Static analysis is recommended when available:
+  - Debian/Trixie uses `go-staticcheck` (apt package: `go-staticcheck`).
+  - Repo helper target: `make staticcheck`.
 - Avoid adding new dependencies unless there is a clear benefit.
 - Prefer tests that do not require network access (unit tests and small integration-ish tests that operate on frames in-memory).
 
