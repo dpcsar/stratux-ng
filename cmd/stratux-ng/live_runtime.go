@@ -106,6 +106,7 @@ func newLiveRuntime(ctx context.Context, cfg config.Config, resolvedConfigPath s
 	if c.Fan.Enable {
 		svc := fancontrol.New(fancontrol.Config{
 			Enable:         c.Fan.Enable,
+			Backend:        c.Fan.Backend,
 			PWMPin:         c.Fan.PWMPin,
 			PWMFrequency:   c.Fan.PWMFrequency,
 			TempTargetC:    c.Fan.TempTargetC,

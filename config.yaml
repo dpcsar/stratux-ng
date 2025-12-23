@@ -44,13 +44,14 @@ ahrs:
     imu_addr: 104
     baro_addr: 119
     orientation:
-        forward_axis: -2
+        forward_axis: 2
         gravity_in_sensor:
-            - -0.020923741830921962
-            - -0.11055439047436445
-            - -0.9936497993632539
+            - -0.006832413723942425
+            - -0.11065199776608238
+            - -0.9938357276296117
 fan:
     enable: true
+    backend: auto
     pwm_pin: 18
     pwm_frequency: 64000
     temp_target_c: 50

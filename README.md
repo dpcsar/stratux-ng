@@ -266,6 +266,12 @@ Raspberry Pi OS notes:
 - Ensure the PWM overlay is enabled (example for Bookworm): add `dtoverlay=pwm-2chan` to `/boot/firmware/config.txt`.
 - The service typically needs permission to write under `/sys/class/pwm` (run as root or grant appropriate access via systemd).
 
+Pi 5 + Stratux AHRS 2.0 hat note:
+- Some AHRS 2.0 fan circuits behave like a simple on/off “enable” (2-wire fan power switching). On Raspberry Pi 5, the PWM controller output may not drive that circuit as expected even when `/sys/class/pwm` appears to work.
+- By default (when `fan.backend` is omitted/empty), Stratux-NG uses `auto`: it will choose `gpio` on Raspberry Pi 5 and `pwm` on Raspberry Pi 3/4.
+- You can override explicitly with `fan.backend: pwm` or `fan.backend: gpio`.
+- Quick check: if `gpioset -c gpiochip0 -t 5s,0 18=1` spins the fan but PWM does not, force `fan.backend: gpio`.
+
 Troubleshooting (fan PWM not available):
 - Confirm the overlay is active after reboot:
   - `ls -l /sys/class/pwm/` (should contain `pwmchip*`)

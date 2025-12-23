@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strings"
 	"sync"
 	"time"
 )
@@ -16,6 +17,12 @@ var startupMinDutyDuration = 10 * time.Second
 
 type Config struct {
 	Enable bool
+
+	// Backend selects the hardware control backend.
+	// Supported values:
+	// - "" or "pwm": drive /sys/class/pwm (default)
+	// - "gpio": drive a GPIO line (libgpiod) as on/off power control
+	Backend string
 
 	// PWMPin is BCM GPIO numbering (matches upstream Stratux).
 	PWMPin int
@@ -32,6 +39,7 @@ type Config struct {
 
 type Snapshot struct {
 	Enabled bool `json:"enabled"`
+	Backend string `json:"backend,omitempty"`
 
 	CPUValid bool    `json:"cpu_valid"`
 	CPUTempC float64 `json:"cpu_temp_c"`
@@ -45,6 +53,7 @@ type Snapshot struct {
 
 type Service struct {
 	cfg Config
+	backend string
 
 	mu   sync.RWMutex
 	snap Snapshot
@@ -76,6 +85,20 @@ func New(cfg Config) *Service {
 	// startup fan test. We mirror that behavior here.
 
 	return &Service{cfg: cfg, stopCh: make(chan struct{})}
+}
+
+func normalizeBackend(s string) string {
+	s = strings.TrimSpace(strings.ToLower(s))
+	if s == "" {
+		s = "auto"
+	}
+	if s == "auto" {
+		if isRaspberryPi5() {
+			return "gpio"
+		}
+		return "pwm"
+	}
+	return s
 }
 
 func (s *Service) Snapshot() Snapshot {
@@ -142,7 +165,21 @@ func (s *Service) Start(ctx context.Context) error {
 		sn.Enabled = true
 	})
 
-	drv, err := openPWMFn(s.cfg.PWMPin)
+	backend := normalizeBackend(s.cfg.Backend)
+	s.backend = backend
+	s.setState(func(sn *Snapshot) {
+		sn.Backend = backend
+	})
+	var drv pwmDriver
+	var err error
+	switch backend {
+	case "pwm":
+		drv, err = openPWMFn(s.cfg.PWMPin)
+	case "gpio":
+		drv, err = openGPIOFn(s.cfg.PWMPin)
+	default:
+		err = fmt.Errorf("fancontrol: unknown backend %q", s.cfg.Backend)
+	}
 	if err != nil {
 		s.setErr(err.Error())
 		return err
@@ -152,6 +189,7 @@ func (s *Service) Start(ctx context.Context) error {
 	s.drvMu.Unlock()
 
 	// Upstream multiplies by 100 before calling into rpio pin.Freq().
+	// GPIO backend treats frequency as a no-op.
 	if err := drv.SetFrequencyHz(s.cfg.PWMFrequency * 100); err != nil {
 		s.setErr(fmt.Sprintf("fancontrol: set pwm frequency failed: %v", err))
 		_ = drv.Close()
@@ -213,7 +251,17 @@ func (s *Service) startupAndRun(ctx context.Context, drv pwmDriver) {
 		s.setErr(fmt.Sprintf("fancontrol: set pwm duty failed: %v", err))
 		return
 	}
-	s.setState(func(sn *Snapshot) { sn.PWMDuty = int(math.Round(minDuty)) })
+	s.setState(func(sn *Snapshot) {
+		if s.backend == "gpio" {
+			if minDuty > 0 {
+				sn.PWMDuty = 100
+			} else {
+				sn.PWMDuty = 0
+			}
+			return
+		}
+		sn.PWMDuty = int(math.Round(minDuty))
+	})
 	select {
 	case <-afterFn(startupMinDutyDuration):
 	case <-ctx.Done():
@@ -266,8 +314,14 @@ func (s *Service) runLoop(ctx context.Context, drv pwmDriver) {
 				duty = pidOut
 			} else {
 				lastPWM = 0
-				// Upstream behavior: alwaysOn=true.
-				duty = 1
+				// Upstream behavior: alwaysOn=true (keeps fan spinning at low duty).
+				// In GPIO backend, any non-zero duty is effectively full-on, so don't
+				// force a non-zero "idle" duty.
+				if s.backend == "gpio" {
+					duty = 0
+				} else {
+					duty = 1
+				}
 			}
 
 			// Map duty into [PWMDutyMin..100].
@@ -287,7 +341,15 @@ func (s *Service) runLoop(ctx context.Context, drv pwmDriver) {
 			s.setState(func(sn *Snapshot) {
 				sn.CPUValid = true
 				sn.CPUTempC = cpuC
-				sn.PWMDuty = int(math.Round(duty))
+				if s.backend == "gpio" {
+					if duty > 0 {
+						sn.PWMDuty = 100
+					} else {
+						sn.PWMDuty = 0
+					}
+				} else {
+					sn.PWMDuty = int(math.Round(duty))
+				}
 				sn.LastError = ""
 			})
 		}

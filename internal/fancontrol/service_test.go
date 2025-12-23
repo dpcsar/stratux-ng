@@ -50,7 +50,7 @@ func TestServiceStart_IsNonBlocking(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	svc := New(Config{Enable: true, PWMPin: 18})
+	svc := New(Config{Enable: true, PWMPin: 18, Backend: "pwm"})
 
 	start := time.Now()
 	if err := svc.Start(ctx); err != nil {

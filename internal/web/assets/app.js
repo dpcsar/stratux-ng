@@ -50,6 +50,7 @@
   const stGpsError = document.getElementById('st-gps-error');
 
   const stFanEnabled = document.getElementById('st-fan-enabled');
+  const stFanBackend = document.getElementById('st-fan-backend');
   const stFanCpuTemp = document.getElementById('st-fan-cpu-temp');
   const stFanDuty = document.getElementById('st-fan-duty');
   const stFanError = document.getElementById('st-fan-error');
@@ -725,6 +726,7 @@
     setInput(stGpsError, gps.last_error || '');
 
     const fan = s?.fan || {};
+    setInput(stFanBackend, fan.backend || '');
     setChecked(stFanEnabled, !!fan.enabled);
     setInput(stFanCpuTemp, fan.cpu_valid ? fmtNum(fan.cpu_temp_c, 1) : '');
     setInput(stFanDuty, fan.pwm_available ? String(fan.pwm_duty ?? '') : '');

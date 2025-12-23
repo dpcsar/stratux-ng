@@ -51,6 +51,12 @@ type GPSConfig struct {
 type FanConfig struct {
 	Enable bool `yaml:"enable"`
 
+	// Backend selects the fan control backend.
+	// Supported values:
+	// - "" or "pwm": drive /sys/class/pwm (default)
+	// - "gpio": drive GPIO pin as on/off (libgpiod)
+	Backend string `yaml:"backend"`
+
 	// PWMPin is BCM GPIO numbering (matches upstream Stratux).
 	PWMPin int `yaml:"pwm_pin"`
 	// PWMFrequency is the configured base frequency; upstream default is 64000.
@@ -375,6 +381,14 @@ func DefaultAndValidate(cfg *Config) error {
 	}
 
 	// Fan defaults + validation.
+	backend := strings.TrimSpace(strings.ToLower(cfg.Fan.Backend))
+	if backend == "" {
+		backend = "auto"
+	}
+	if backend != "" && backend != "pwm" && backend != "gpio" && backend != "auto" {
+		return fmt.Errorf("fan.backend must be one of: auto, pwm, gpio")
+	}
+	cfg.Fan.Backend = backend
 	if cfg.Fan.PWMPin == 0 {
 		cfg.Fan.PWMPin = 18
 	}
