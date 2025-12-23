@@ -154,6 +154,33 @@ h2 { margin: 6px 0 6px; font-size: 18px; }
   text-overflow: ellipsis;
 }
 
+.map-trafficbox {
+  position: absolute;
+  top: 54px; /* below the GPS info bar */
+  left: 78px; /* leave room for Leaflet +/- in top-left */
+  z-index: 1100;
+  padding: 8px 10px;
+  pointer-events: none;
+  width: fit-content;
+  max-width: calc(100% - 90px);
+  display: none;
+}
+
+.map-trafficbox.active {
+  display: block;
+}
+
+.map-trafficbox-lines {
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.map-trafficbox-line {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Leaflet custom center control (placed under +/-). */
 .leaflet-control.map-center-control {
   margin-top: 6px;
@@ -175,6 +202,75 @@ h2 { margin: 6px 0 6px; font-size: 18px; }
 
 .leaflet-control.map-center-control a:hover {
   background: rgba(127,127,140,0.18);
+}
+
+/* Ownship + traffic marker icons. */
+.ownship-pin {
+  width: 26px;
+  height: 26px;
+  transform: translate3d(0,0,0);
+}
+
+.ownship-pin svg {
+  display: block;
+  width: 26px;
+  height: 26px;
+  /* Slightly darker/more readable against bright tiles. */
+  filter: brightness(0.80) contrast(1.05);
+}
+
+.traffic-arrow {
+  width: 22px;
+  height: 22px;
+  transform: rotate(var(--rot, 0deg));
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+
+.traffic-arrow svg {
+  display: block;
+  width: 22px;
+  height: 22px;
+  filter: brightness(0.78) contrast(1.05);
+}
+
+/* Traffic: always-visible label (name + relative altitude). */
+.leaflet-tooltip.traffic-label {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid rgba(127,127,140,0.35);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 4px 6px;
+  font-size: 12px;
+  line-height: 1.15;
+}
+
+.leaflet-tooltip.traffic-label::before {
+  border-top-color: rgba(127,127,140,0.35);
+}
+
+/* Traffic hover details: multi-line popup. */
+.leaflet-popup.traffic-popup .leaflet-popup-content-wrapper {
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 12px;
+  border: 1px solid rgba(127,127,140,0.35);
+  box-shadow: var(--shadow);
+}
+
+.leaflet-popup.traffic-popup .leaflet-popup-tip {
+  background: var(--surface);
+}
+
+.traffic-popup-lines {
+  font-size: 12px;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.traffic-popup-line {
+  white-space: nowrap;
 }
 
 .map-msg {

@@ -19,6 +19,7 @@ type Status struct {
 	ahrsSensors   atomic.Value // AHRSSensorsSnapshot
 	fan           atomic.Value // fancontrol.Snapshot
 	gps           atomic.Value // gps.Snapshot
+	traffic       atomic.Value // []TrafficSnapshot
 }
 
 func NewStatus() *Status {
@@ -33,6 +34,7 @@ func NewStatus() *Status {
 	s.ahrsSensors.Store(AHRSSensorsSnapshot{})
 	s.fan.Store(fancontrol.Snapshot{})
 	s.gps.Store(gps.Snapshot{Enabled: false})
+	s.traffic.Store([]TrafficSnapshot{})
 	return s
 }
 
@@ -43,6 +45,49 @@ func (s *Status) SetGPS(_ time.Time, snap gps.Snapshot) {
 		return
 	}
 	s.gps.Store(snap)
+}
+
+// TrafficSnapshot is a small, UI-friendly view of a traffic target.
+//
+// This is intended for visualizing traffic on the web map and is not a
+// certified traffic display.
+type TrafficSnapshot struct {
+	ICAO         string  `json:"icao"`
+	Tail         string  `json:"tail,omitempty"`
+	LatDeg       float64 `json:"lat_deg"`
+	LonDeg       float64 `json:"lon_deg"`
+	AltFeet      int     `json:"alt_feet"`
+	GroundKt     int     `json:"ground_kt"`
+	TrackDeg     float64 `json:"track_deg"`
+	VvelFpm      int     `json:"vvel_fpm"`
+	OnGround     bool    `json:"on_ground"`
+	Extrapolated bool    `json:"extrapolated"`
+
+	// Derived fields for UI.
+	LastSeenUTC string  `json:"last_seen_utc,omitempty"`
+	AgeSec      float64 `json:"age_sec,omitempty"`
+
+	// Internal timestamp used to compute LastSeenUTC/AgeSec.
+	SeenUnixNano int64 `json:"-"`
+}
+
+func (s *Status) SetTraffic(nowUTC time.Time, traffic []TrafficSnapshot) {
+	if s == nil {
+		return
+	}
+	if nowUTC.IsZero() {
+		nowUTC = time.Now().UTC()
+	}
+	// Normalize: stamp all targets with the same "seen" time.
+	seen := nowUTC.UTC().UnixNano()
+	out := make([]TrafficSnapshot, 0, len(traffic))
+	for _, t := range traffic {
+		t.SeenUnixNano = seen
+		t.LastSeenUTC = ""
+		t.AgeSec = 0
+		out = append(out, t)
+	}
+	s.traffic.Store(out)
 }
 
 func (s *Status) SetFan(nowUTC time.Time, snap fancontrol.Snapshot) {
@@ -144,6 +189,7 @@ type StatusSnapshot struct {
 	AHRSSensors     AHRSSensorsSnapshot `json:"ahrs"`
 	Fan             fancontrol.Snapshot `json:"fan"`
 	GPS             gps.Snapshot        `json:"gps"`
+	Traffic         []TrafficSnapshot   `json:"traffic"`
 }
 
 func (s *Status) Snapshot(nowUTC time.Time) StatusSnapshot {
@@ -153,6 +199,22 @@ func (s *Status) Snapshot(nowUTC time.Time) StatusSnapshot {
 	start := time.Unix(0, atomic.LoadInt64(&s.startUnixNano)).UTC()
 	uptime := nowUTC.Sub(start)
 	lastTick := atomic.LoadInt64(&s.lastTickNano)
+
+	// Traffic: compute UI-friendly age/last-seen without mutating the stored slice.
+	trafficRaw := s.traffic.Load().([]TrafficSnapshot)
+	traffic := make([]TrafficSnapshot, 0, len(trafficRaw))
+	for _, t := range trafficRaw {
+		if t.SeenUnixNano != 0 {
+			seenAt := time.Unix(0, t.SeenUnixNano).UTC()
+			t.LastSeenUTC = seenAt.Format(time.RFC3339Nano)
+			age := nowUTC.UTC().Sub(seenAt).Seconds()
+			if age < 0 {
+				age = 0
+			}
+			t.AgeSec = age
+		}
+		traffic = append(traffic, t)
+	}
 
 	snap := StatusSnapshot{
 		Service:         "stratux-ng",
@@ -166,6 +228,7 @@ func (s *Status) Snapshot(nowUTC time.Time) StatusSnapshot {
 		AHRSSensors:     s.ahrsSensors.Load().(AHRSSensorsSnapshot),
 		Fan:             s.fan.Load().(fancontrol.Snapshot),
 		GPS:             s.gps.Load().(gps.Snapshot),
+		Traffic:         traffic,
 	}
 	if lastTick != 0 {
 		snap.LastTickUTC = time.Unix(0, lastTick).UTC().Format(time.RFC3339Nano)

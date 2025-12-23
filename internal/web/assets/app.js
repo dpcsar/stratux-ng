@@ -97,15 +97,36 @@
   const mapLeafletEl = document.getElementById('map-leaflet');
   const mapMsg = document.getElementById('map-msg');
   const mapInfo = document.getElementById('map-info');
+  const mapTrafficBox = document.getElementById('map-trafficbox');
+  const mapTrafficBoxLines = document.getElementById('map-trafficbox-lines');
 
   let leafletMap = null;
   let ownshipMarker = null;
   let ownshipTrack = null;
+
+  let trafficLayer = null;
+  let trafficMarkers = new Map();
+  let lastOwnshipAltFeet = null;
+  let selectedTrafficIcao = null;
   let followOwnship = true;
   let lastGoodLatLng = null;
   let trackPoints = [];
   let hasAutoCentered = false;
   const defaultOwnshipZoom = 12;
+
+  function setSelectedTrafficBox(lines) {
+    if (!mapTrafficBox || !mapTrafficBoxLines) return;
+    const list = Array.isArray(lines) ? lines : [];
+    if (!list.length) {
+      mapTrafficBox.classList.remove('active');
+      mapTrafficBoxLines.innerHTML = '';
+      return;
+    }
+    mapTrafficBoxLines.innerHTML = list
+      .map((s) => `<div class="map-trafficbox-line">${escapeHtml(s)}</div>`)
+      .join('');
+    mapTrafficBox.classList.add('active');
+  }
 
   function centerOnOwnship() {
     followOwnship = true;
@@ -306,20 +327,31 @@
     }).addTo(leafletMap);
 
     const accent = cssVar('--accent') || '#7dd3fc';
+    const iconOutline = 'rgba(0,0,0,0.85)';
 
-    ownshipMarker = window.L.circleMarker([0, 0], {
-      radius: 7,
-      color: accent,
-      weight: 2,
-      fillColor: accent,
-      fillOpacity: 0.35,
-    }).addTo(leafletMap);
+    const ownshipIcon = window.L.divIcon({
+      className: '',
+      iconSize: [26, 26],
+      iconAnchor: [13, 23],
+      html: `
+        <div class="ownship-pin" aria-hidden="true">
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 23s7-7.1 7-13a7 7 0 1 0-14 0c0 5.9 7 13 7 13z" fill="${accent}" fill-opacity="0.95" stroke="${iconOutline}" stroke-width="2.0" />
+            <circle cx="12" cy="10" r="3.2" fill="${cssVar('--surface') || '#111'}" fill-opacity="0.95" />
+          </svg>
+        </div>
+      `.trim(),
+    });
+
+    ownshipMarker = window.L.marker([0, 0], { icon: ownshipIcon, interactive: false }).addTo(leafletMap);
 
     ownshipTrack = window.L.polyline([], {
       color: accent,
       weight: 2,
       opacity: 0.75,
     }).addTo(leafletMap);
+
+    trafficLayer = window.L.layerGroup().addTo(leafletMap);
 
     // Add a Center control under Leaflet's +/- zoom control.
     try {
@@ -350,6 +382,185 @@
     // If user pans/zooms, stop auto-follow until Center is pressed.
     leafletMap.on('dragstart', () => { followOwnship = false; });
     leafletMap.on('zoomstart', () => { followOwnship = false; });
+
+    // Tap/click on empty map clears selected traffic.
+    leafletMap.on('click', () => {
+      selectedTrafficIcao = null;
+      setSelectedTrafficBox([]);
+    });
+  }
+
+  function updateMapTraffic(traffic) {
+    if (!leafletMap || !trafficLayer) return;
+
+    const list = Array.isArray(traffic) ? traffic : [];
+    const want = new Set();
+
+    const danger = cssVar('--danger') || cssVar('--accent') || '#ffffff';
+    const iconOutline = 'rgba(0,0,0,0.85)';
+
+    const detailsByIcao = new Map();
+
+    const toRad = (deg) => (deg * Math.PI) / 180;
+    const toDeg = (rad) => (rad * 180) / Math.PI;
+
+    const haversineNm = (lat1, lon1, lat2, lon2) => {
+      const Rm = 6371000;
+      const dLat = toRad(lat2 - lat1);
+      const dLon = toRad(lon2 - lon1);
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return (Rm * c) / 1852;
+    };
+
+    const bearingDeg = (lat1, lon1, lat2, lon2) => {
+      const y = Math.sin(toRad(lon2 - lon1)) * Math.cos(toRad(lat2));
+      const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) - Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(toRad(lon2 - lon1));
+      let brg = toDeg(Math.atan2(y, x));
+      brg = (brg + 360) % 360;
+      return brg;
+    };
+
+    for (const t of list) {
+      const icao = String(t?.icao || '').trim();
+      if (!icao) continue;
+      const lat = Number(t?.lat_deg);
+      const lon = Number(t?.lon_deg);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+
+      const trk = Number(t?.track_deg);
+      const rot = Number.isFinite(trk) ? trk : 0;
+      const tail = String(t?.tail || '').trim();
+
+      const altFeet = Number(t?.alt_feet);
+      const hasAlt = Number.isFinite(altFeet);
+      const relAlt = (hasAlt && Number.isFinite(lastOwnshipAltFeet)) ? Math.round(altFeet - lastOwnshipAltFeet) : null;
+      const relAltStr = relAlt == null ? '' : (relAlt >= 0 ? `+${relAlt} ft` : `${relAlt} ft`);
+      const relAltFeetLabel = (relAlt == null) ? null : (relAlt >= 0 ? `+${relAlt} ft` : `${relAlt} ft`);
+
+      const vs = Number(t?.vvel_fpm);
+      const trendArrow = Number.isFinite(vs) ? (vs > 50 ? '▲' : (vs < -50 ? '▼' : '')) : '';
+      const vsArrow = Number.isFinite(vs) ? (vs > 0 ? '▲' : (vs < 0 ? '▼' : '')) : '';
+      const vsStr = Number.isFinite(vs) && vs !== 0
+        ? `${Math.abs(Math.round(vs))}fpm${vsArrow ? ` ${vsArrow}` : ''}`
+        : '';
+
+      const gs = Number(t?.ground_kt);
+      const gsStr = Number.isFinite(gs) ? `${Math.round(gs)}kt` : '';
+
+      const trkStr = Number.isFinite(trk) ? `TRK ${fmtNum(trk, 0)}°` : '';
+
+      const ageSec = Number(t?.age_sec);
+      const ageStr = Number.isFinite(ageSec) ? `${fmtNum(ageSec, 0)}s` : '';
+
+      let distStr = '';
+      let brgStr = '';
+      if (lastGoodLatLng) {
+        const distNm = haversineNm(lastGoodLatLng[0], lastGoodLatLng[1], lat, lon);
+        const brg = bearingDeg(lastGoodLatLng[0], lastGoodLatLng[1], lat, lon);
+        if (Number.isFinite(distNm)) distStr = `${fmtNum(distNm, distNm < 10 ? 1 : 0)}nm`;
+        if (Number.isFinite(brg)) brgStr = `${fmtNum(brg, 0)}°`;
+      }
+
+      const labelShort = tail || icao;
+      const labelLong = tail ? `${tail} (${icao})` : icao;
+
+      // Always-visible label: show name + relative altitude.
+      const altLine = (relAltFeetLabel == null)
+        ? '--'
+        : (trendArrow ? `${relAltFeetLabel} ${trendArrow}` : relAltFeetLabel);
+      const labelHtml = `
+        <div>
+          <div>${escapeHtml(labelShort)}</div>
+          <div>${escapeHtml(altLine)}</div>
+        </div>
+      `.trim();
+
+      const infoLines = [
+        labelLong,
+        relAltStr ? `Rel Alt: ${relAltStr}` : 'Rel Alt: --',
+        (distStr || brgStr) ? `Pos: ${[distStr, brgStr].filter(Boolean).join(' ')}` : 'Pos: --',
+        gsStr ? `GS: ${gsStr}` : 'GS: --',
+        trkStr ? `${trkStr}` : 'TRK: --',
+        vsStr ? `VS: ${vsStr}` : 'VS: --',
+        ageStr ? `Age: ${ageStr}` : 'Age: --',
+      ];
+      detailsByIcao.set(icao, infoLines);
+
+      want.add(icao);
+      let marker = trafficMarkers.get(icao);
+      if (!marker) {
+        const icon = window.L.divIcon({
+          className: '',
+          iconSize: [22, 22],
+          iconAnchor: [11, 11],
+          html: `
+            <div class="traffic-arrow" style="--rot:${rot}deg" aria-hidden="true">
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 2 L20 22 L12 18 L4 22 Z" fill="${danger}" fill-opacity="0.92" stroke="${iconOutline}" stroke-width="2.0" />
+              </svg>
+            </div>
+          `.trim(),
+        });
+        marker = window.L.marker([lat, lon], { icon });
+        marker.bindTooltip(labelHtml, {
+          permanent: true,
+          direction: 'top',
+          offset: [0, -14],
+          opacity: 0.95,
+          className: 'traffic-label',
+        });
+
+        // Mobile-first: tap selects traffic and shows the fixed info box.
+        marker.on('click', (e) => {
+          try { window.L.DomEvent.stopPropagation(e); } catch { /* ignore */ }
+          selectedTrafficIcao = (selectedTrafficIcao === icao) ? null : icao;
+          const lines = selectedTrafficIcao ? (detailsByIcao.get(selectedTrafficIcao) || []) : [];
+          setSelectedTrafficBox(lines);
+        });
+
+        marker.addTo(trafficLayer);
+        trafficMarkers.set(icao, marker);
+      } else {
+        try {
+          marker.setLatLng([lat, lon]);
+          const el = marker.getElement?.();
+          const arrow = el ? el.querySelector?.('.traffic-arrow') : null;
+          if (arrow) {
+            arrow.style.setProperty('--rot', `${rot}deg`);
+          }
+          marker.setTooltipContent?.(labelHtml);
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    // Keep selected traffic box in sync with latest data.
+    if (selectedTrafficIcao) {
+      const lines = detailsByIcao.get(selectedTrafficIcao) || [];
+      setSelectedTrafficBox(lines);
+      if (!lines.length) {
+        selectedTrafficIcao = null;
+      }
+    }
+
+    // Remove markers no longer present.
+    for (const [icao, marker] of trafficMarkers.entries()) {
+      if (want.has(icao)) continue;
+      try {
+        trafficLayer.removeLayer(marker);
+      } catch {
+        // ignore
+      }
+      trafficMarkers.delete(icao);
+    }
+
+    // If the selected one disappeared this tick, hide the box.
+    if (selectedTrafficIcao && !want.has(selectedTrafficIcao)) {
+      selectedTrafficIcao = null;
+      setSelectedTrafficBox([]);
+    }
   }
 
   function updateMapFromGPS(gps) {
@@ -374,6 +585,8 @@
 
     setMapMessage('');
     lastGoodLatLng = [lat, lon];
+    lastOwnshipAltFeet = (gps && gps.alt_feet != null) ? Number(gps.alt_feet) : null;
+    if (!Number.isFinite(lastOwnshipAltFeet)) lastOwnshipAltFeet = null;
 
     try {
       ownshipMarker.setLatLng(lastGoodLatLng);
@@ -580,6 +793,15 @@
     const n = Number(x);
     if (!Number.isFinite(n)) return '';
     return n.toFixed(digits);
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
   }
 
   function clamp(x, lo, hi) {
@@ -1248,6 +1470,7 @@
       // Map updates are driven off the same poll.
       initMapIfNeeded();
       updateMapFromGPS(lastGps);
+      updateMapTraffic(s?.traffic);
       if (subtitle) subtitle.textContent = 'Connected';
     } catch {
       if (subtitle) subtitle.textContent = 'Disconnected';

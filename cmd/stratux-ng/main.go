@@ -12,6 +12,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -149,6 +150,94 @@ func decodeAttitudeFromFrames(frames [][]byte) web.AttitudeSnapshot {
 			}
 			continue
 		}
+	}
+	return out
+}
+
+func decodeTrafficFromFrames(frames [][]byte) []web.TrafficSnapshot {
+	// Keep the decode logic local to main for now. We only need enough fields
+	// to render targets on the web map.
+	const latLonResolution = 180.0 / 8388608.0
+	const trackResolution = 360.0 / 256.0
+
+	trafficByICAO := map[string]web.TrafficSnapshot{}
+	order := make([]string, 0, 16)
+
+	decodeSigned24 := func(b0, b1, b2 byte) int32 {
+		u := int32(b0)<<16 | int32(b1)<<8 | int32(b2)
+		// Sign-extend 24-bit.
+		if (u & 0x00800000) != 0 {
+			u |= ^int32(0x00FFFFFF)
+		}
+		return u
+	}
+
+	decodeSigned12 := func(v uint16) int16 {
+		x := int16(v & 0x0FFF)
+		if (x & 0x0800) != 0 {
+			x |= ^int16(0x0FFF)
+		}
+		return x
+	}
+
+	for _, frame := range frames {
+		msg, crcOK, err := gdl90.Unframe(frame)
+		if err != nil || !crcOK || len(msg) < 28 {
+			continue
+		}
+		if msg[0] != 0x14 {
+			continue
+		}
+
+		icao := fmt.Sprintf("%02X%02X%02X", msg[2], msg[3], msg[4])
+		if _, ok := trafficByICAO[icao]; !ok {
+			order = append(order, icao)
+		}
+
+		lat24 := decodeSigned24(msg[5], msg[6], msg[7])
+		lon24 := decodeSigned24(msg[8], msg[9], msg[10])
+		lat := float64(lat24) * latLonResolution
+		lon := float64(lon24) * latLonResolution
+
+		alt12 := (uint16(msg[11]) << 4) | (uint16(msg[12]) >> 4)
+		altFeet := 0
+		if alt12 != 0x0FFF {
+			altFeet = int(alt12)*25 - 1000
+		}
+
+		flags := msg[12] & 0x0F
+		extrap := (flags & 0x04) != 0
+		onGround := (flags & 0x08) == 0
+
+		spd12 := (uint16(msg[14]) << 4) | (uint16(msg[15]) >> 4)
+		groundKt := int(spd12 & 0x0FFF)
+
+		vv12 := (uint16(msg[15]&0x0F) << 8) | uint16(msg[16])
+		vvelFpm := int(decodeSigned12(vv12)) * 64
+
+		trk := float64(msg[17]) * trackResolution
+
+		tail := strings.TrimRight(string(msg[19:27]), " ")
+
+		trafficByICAO[icao] = web.TrafficSnapshot{
+			ICAO:         icao,
+			Tail:         tail,
+			LatDeg:       lat,
+			LonDeg:       lon,
+			AltFeet:      altFeet,
+			GroundKt:     groundKt,
+			TrackDeg:     trk,
+			VvelFpm:      vvelFpm,
+			OnGround:     onGround,
+			Extrapolated: extrap,
+		}
+	}
+
+	// Stable output for UI.
+	sort.Strings(order)
+	out := make([]web.TrafficSnapshot, 0, len(order))
+	for _, icao := range order {
+		out = append(out, trafficByICAO[icao])
 	}
 	return out
 }
@@ -564,6 +653,7 @@ func main() {
 					}
 				}
 				att := decodeAttitudeFromFrames(frames)
+				status.SetTraffic(now.UTC(), decodeTrafficFromFrames(frames))
 				if haveAHRS && snap.IMUDetected && !snap.StartupReady {
 					att.Valid = false
 					att.RollDeg = nil
