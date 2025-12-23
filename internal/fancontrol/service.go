@@ -125,8 +125,21 @@ func (s *Service) Close() {
 	drv := s.drv
 	s.drvMu.Unlock()
 	if drv != nil {
+		// Graceful shutdown: best-effort fan OFF.
+		_ = drv.SetDutyPercent(0)
+		s.setState(func(sn *Snapshot) {
+			if s.backend == "gpio" {
+				sn.PWMDuty = 0
+			} else {
+				sn.PWMDuty = 0
+			}
+		})
 		_ = drv.Close()
 	}
+
+	s.setState(func(sn *Snapshot) {
+		sn.Enabled = false
+	})
 }
 
 func (s *Service) setErr(msg string) {
@@ -223,9 +236,11 @@ func (s *Service) Start(ctx context.Context) error {
 }
 
 func (s *Service) startupAndRun(ctx context.Context, drv pwmDriver) {
+	graceful := false
 	defer func() {
 		// Safe failover: if we ever bail out unexpectedly, try to force fan ON.
-		if drv != nil {
+		// Note: on a normal shutdown path, Service.Close will turn the fan OFF.
+		if !graceful && drv != nil {
 			_ = drv.SetDutyPercent(100)
 			s.setState(func(sn *Snapshot) { sn.PWMDuty = 100 })
 		}
@@ -242,8 +257,10 @@ func (s *Service) startupAndRun(ctx context.Context, drv pwmDriver) {
 	select {
 	case <-afterFn(startupFullDutyDuration):
 	case <-ctx.Done():
+		graceful = true
 		return
 	case <-s.stopCh:
+		graceful = true
 		return
 	}
 	minDuty := float64(clamp(float64(s.cfg.PWMDutyMin), 0, 100))
@@ -265,12 +282,16 @@ func (s *Service) startupAndRun(ctx context.Context, drv pwmDriver) {
 	select {
 	case <-afterFn(startupMinDutyDuration):
 	case <-ctx.Done():
+		graceful = true
 		return
 	case <-s.stopCh:
+		graceful = true
 		return
 	}
 
 	s.runLoop(ctx, drv)
+	// runLoop only returns on ctx cancel or stop.
+	graceful = true
 }
 
 func (s *Service) runLoop(ctx context.Context, drv pwmDriver) {

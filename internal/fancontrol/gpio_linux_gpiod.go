@@ -83,8 +83,8 @@ func (g *gpiodGPIO) Close() error {
 	if g == nil || g.line == nil {
 		return nil
 	}
-	// Fail-safe: leave fan ON when shutting down unexpectedly.
-	_ = g.line.SetValue(1)
+	// Graceful shutdown: turn fan OFF.
+	_ = g.line.SetValue(0)
 	err1 := g.line.Close()
 	g.line = nil
 	if g.chip != nil {

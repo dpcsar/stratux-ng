@@ -73,3 +73,44 @@ func TestServiceStart_IsNonBlocking(t *testing.T) {
 	cancel()
 	svc.Close()
 }
+
+func TestServiceClose_TurnsFanOffOnGracefulShutdown(t *testing.T) {
+	// Make the startup test durations huge to ensure we exercise the ctx cancel path.
+	oldFull := startupFullDutyDuration
+	oldMin := startupMinDutyDuration
+	startupFullDutyDuration = time.Hour
+	startupMinDutyDuration = time.Hour
+	t.Cleanup(func() {
+		startupFullDutyDuration = oldFull
+		startupMinDutyDuration = oldMin
+	})
+
+	fake := &fakePWMDriver{dutyCh: make(chan float64, 16)}
+	oldOpen := openPWMFn
+	openPWMFn = func(pin int) (pwmDriver, error) { return fake, nil }
+	t.Cleanup(func() { openPWMFn = oldOpen })
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	svc := New(Config{Enable: true, PWMPin: 18, Backend: "pwm"})
+	if err := svc.Start(ctx); err != nil {
+		cancel()
+		t.Fatalf("Start: %v", err)
+	}
+
+	// Ensure startup goroutine began.
+	select {
+	case <-fake.dutyCh:
+	case <-time.After(200 * time.Millisecond):
+		cancel()
+		svc.Close()
+		t.Fatalf("expected initial duty set")
+	}
+
+	// Graceful shutdown should leave fan OFF.
+	cancel()
+	svc.Close()
+	if got := fake.lastDuty.Load(); got != 0 {
+		t.Fatalf("last duty=%d want 0", got)
+	}
+}

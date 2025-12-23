@@ -150,8 +150,8 @@ func (d *sysfsPWM) ensureExported() error {
 }
 
 func (d *sysfsPWM) Close() error {
-	// Best-effort: set full duty before disabling.
-	_ = d.SetDutyPercent(100)
+	// Best-effort: turn OFF on graceful shutdown.
+	_ = d.SetDutyPercent(0)
 	_ = d.writeBool("enable", false)
 	d.enabled = false
 	return nil
