@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light dark" />
     <title>Stratux-NG</title>
+    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
     <link
       rel="stylesheet"
       href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -72,7 +73,45 @@
 
       <section id="view-radar" class="view" aria-label="Radar">
         <h2>Radar</h2>
-        <p class="muted">Coming soon. This area will show nearby traffic relative to ownship.</p>
+        <div class="radar-root" aria-label="Traffic radar">
+          <canvas id="radar-canvas" class="radar-canvas" role="img" aria-label="Traffic radar"></canvas>
+
+          <div class="radar-top" aria-label="Radar top controls">
+            <div class="radar-top-left card" aria-label="Radar range">
+              <div class="radar-card-title" aria-hidden="true">RNG</div>
+              <div class="radar-controls-row">
+                <button id="radar-zoom-out" type="button" class="secondary" aria-label="Zoom out">−</button>
+                <span id="radar-range-value" class="radar-pill" aria-label="Range">-- nm</span>
+                <button id="radar-zoom-in" type="button" class="secondary" aria-label="Zoom in">+</button>
+              </div>
+            </div>
+
+            <div class="radar-top-right card" aria-label="Radar alerts">
+              <div class="radar-card-title" aria-hidden="true">Alert</div>
+              <div class="radar-controls-row radar-alerts-mode-row">
+                <button id="radar-alerts-toggle" type="button" class="secondary" aria-pressed="false">--</button>
+              </div>
+
+              <div class="radar-controls-row" aria-label="Alert range">
+                <div class="radar-step" role="group" aria-label="Alert range">
+                  <button id="radar-alert-range-down" type="button" class="secondary" aria-label="Decrease alert range">−</button>
+                  <span id="radar-alert-range-value" class="radar-pill" aria-label="Alert range value">-- nm</span>
+                  <button id="radar-alert-range-up" type="button" class="secondary" aria-label="Increase alert range">+</button>
+                </div>
+              </div>
+
+              <div class="radar-controls-row" aria-label="Alert altitude band">
+                <div class="radar-step" role="group" aria-label="Alert altitude band">
+                  <button id="radar-alert-alt-down" type="button" class="secondary" aria-label="Decrease alert altitude band">−</button>
+                  <span id="radar-alert-alt-value" class="radar-pill" aria-label="Alert altitude band value">±-- ft</span>
+                  <button id="radar-alert-alt-up" type="button" class="secondary" aria-label="Increase alert altitude band">+</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="radar-msg" class="radar-msg" aria-live="polite"></div>
+        </div>
       </section>
 
       <section id="view-map" class="view" aria-label="Map">
@@ -717,9 +756,9 @@
         </div>
       </section>
 
-      <section id="view-about" class="view" aria-label="About">
-        <h2>About</h2>
-        <p class="muted">Basic information for now. More details will be added later.</p>
+      <section id="view-system" class="view" aria-label="System">
+        <h2>System</h2>
+        <p class="muted">Build/runtime details and diagnostics.</p>
 
         <div class="cards">
         <div class="card">
@@ -757,7 +796,7 @@
         <button class="drawer-item drawerbtn" data-view="towers" type="button">Towers</button>
         <button class="drawer-item drawerbtn" data-view="settings" type="button">Settings</button>
         <button class="drawer-item drawerbtn" data-view="logs" type="button">Logs</button>
-        <button class="drawer-item drawerbtn" data-view="about" type="button">About</button>
+        <button class="drawer-item drawerbtn" data-view="system" type="button">System</button>
       </div>
     </aside>
 

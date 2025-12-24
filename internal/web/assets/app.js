@@ -9,7 +9,7 @@
     { key: 'towers', el: document.getElementById('view-towers') },
     { key: 'settings', el: document.getElementById('view-settings') },
     { key: 'logs', el: document.getElementById('view-logs') },
-    { key: 'about', el: document.getElementById('view-about') },
+    { key: 'system', el: document.getElementById('view-system') },
   ];
 
   const subtitle = document.getElementById('subtitle');
@@ -124,9 +124,186 @@
   const mapTrafficBox = document.getElementById('map-trafficbox');
   const mapTrafficBoxLines = document.getElementById('map-trafficbox-lines');
 
+  // Radar UI (traffic radar).
+  const radarCanvas = document.getElementById('radar-canvas');
+  const radarCtx = radarCanvas ? radarCanvas.getContext('2d') : null;
+  const radarMsg = document.getElementById('radar-msg');
+  const radarHudHdg = document.getElementById('radar-hdg');
+  const radarHudRange = document.getElementById('radar-range');
+  const radarHudCount = document.getElementById('radar-count');
+  const radarAlert = document.getElementById('radar-alert');
+  const radarZoomOut = document.getElementById('radar-zoom-out');
+  const radarZoomIn = document.getElementById('radar-zoom-in');
+  const radarRangeValue = document.getElementById('radar-range-value');
+  const radarAlertsToggle = document.getElementById('radar-alerts-toggle');
+  const radarAlertRangeDown = document.getElementById('radar-alert-range-down');
+  const radarAlertRangeUp = document.getElementById('radar-alert-range-up');
+  const radarAlertRangeValue = document.getElementById('radar-alert-range-value');
+  const radarAlertAltDown = document.getElementById('radar-alert-alt-down');
+  const radarAlertAltUp = document.getElementById('radar-alert-alt-up');
+  const radarAlertAltValue = document.getElementById('radar-alert-alt-value');
+
   let leafletMap = null;
   let ownshipMarker = null;
   let ownshipTrack = null;
+
+  let lastTraffic = null;
+  let radarRangeNm = 5;
+  const radarRangesNm = [2, 5, 10, 20, 40];
+  let lastRadarVisibleCount = 0;
+
+  let radarAlertRangeNm = 2;
+  let radarAlertAltBandFeet = 1000;
+  // Alerts mode cycles: off -> both -> speech -> beep -> off
+  let radarAlertsMode = 'both'; // 'off' | 'both' | 'speech' | 'beep'
+
+  const radarAlertRangesNm = [0.5, 1, 2, 3, 5, 10, 15, 20, 30, 40];
+  const radarAlertAltBandsFeet = [200, 500, 1000, 2000, 5000, 10000, 20000, 30000, 40000, 50000];
+
+  const lsKeys = {
+    radarRangeNm: 'stratuxng.radar.range_nm',
+    radarAlertRangeNm: 'stratuxng.radar.alert_range_nm',
+    radarAlertAltBandFeet: 'stratuxng.radar.alert_alt_band_ft',
+    // Back-compat: older builds stored audio_mode + alerts_enabled separately.
+    radarAudioMode: 'stratuxng.radar.audio_mode',
+    radarAlertsEnabled: 'stratuxng.radar.alerts_enabled',
+  };
+
+  function lsGetNumber(key, fallback) {
+    try {
+      const v = localStorage.getItem(key);
+      if (v == null) return fallback;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  function lsGetString(key, fallback) {
+    try {
+      const v = localStorage.getItem(key);
+      return (v == null || v === '') ? fallback : String(v);
+    } catch {
+      return fallback;
+    }
+  }
+
+  function lsSet(key, value) {
+    try {
+      localStorage.setItem(key, String(value));
+    } catch {
+      // ignore
+    }
+  }
+
+  function applyRadarControlStateToUI() {
+    if (radarRangeValue) radarRangeValue.textContent = `${radarRangeNm} nm`;
+    if (radarAlertRangeValue) radarAlertRangeValue.textContent = `${radarAlertRangeNm} nm`;
+    if (radarAlertAltValue) radarAlertAltValue.textContent = `±${radarAlertAltBandFeet} ft`;
+
+    if (radarAlertsToggle) {
+      const label = (() => {
+        if (radarAlertsMode === 'off') return 'Off';
+        if (radarAlertsMode === 'beep') return 'Beep';
+        if (radarAlertsMode === 'speech') return 'Speech';
+        return 'Speech/Beep';
+      })();
+      radarAlertsToggle.textContent = label;
+      radarAlertsToggle.setAttribute('aria-pressed', radarAlertsMode === 'off' ? 'false' : 'true');
+    }
+  }
+
+  // Audio alerts (beep + speech). Browsers require a user gesture to start audio.
+  const audioState = {
+    armed: false,
+    ctx: null,
+    lastBeepAt: 0,
+    lastSpokenAt: 0,
+    lastSpokenWho: '',
+    lastAlertKey: '',
+    prompted: false,
+
+    // Speech throttling/queueing so alerts aren't constantly interrupted.
+    speechBusy: false,
+    speechQueuedText: '',
+    speechLockWho: '',
+    speechLockUntilMs: 0,
+  };
+
+  function armAudioOnce() {
+    if (audioState.armed) return;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) {
+        audioState.armed = true; // mark as "done"; no audio supported
+        return;
+      }
+      audioState.ctx = new AC();
+      // Some browsers start suspended; resume best-effort.
+      try { audioState.ctx.resume?.(); } catch { /* ignore */ }
+      audioState.armed = true;
+    } catch {
+      // If audio init fails, don't keep retrying.
+      audioState.armed = true;
+    }
+  }
+
+  function playBeepPattern() {
+    const ctx = audioState.ctx;
+    if (!ctx || typeof ctx.createOscillator !== 'function') return;
+    const now = ctx.currentTime;
+    const mkBeep = (t0) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, t0);
+      gain.gain.exponentialRampToValueAtTime(0.15, t0 + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.12);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t0);
+      osc.stop(t0 + 0.14);
+    };
+    mkBeep(now);
+    mkBeep(now + 0.18);
+  }
+
+  function speakTraffic(text) {
+    const msg = String(text || '').trim();
+    if (!msg) return;
+    if (!('speechSynthesis' in window) || typeof window.SpeechSynthesisUtterance !== 'function') return;
+
+    const synth = window.speechSynthesis;
+    // If something is already speaking, queue exactly one message (replace any existing queued one).
+    if (audioState.speechBusy || synth.speaking || synth.pending) {
+      audioState.speechQueuedText = msg;
+      return;
+    }
+
+    try {
+      const u = new window.SpeechSynthesisUtterance(msg);
+      u.rate = 1.0;
+      u.pitch = 1.0;
+      u.volume = 1.0;
+      audioState.speechBusy = true;
+      const done = () => {
+        audioState.speechBusy = false;
+        const next = String(audioState.speechQueuedText || '').trim();
+        audioState.speechQueuedText = '';
+        if (next) {
+          // Speak the latest queued message.
+          speakTraffic(next);
+        }
+      };
+      u.onend = done;
+      u.onerror = done;
+      synth.speak(u);
+    } catch {
+      audioState.speechBusy = false;
+    }
+  }
 
   let trafficLayer = null;
   let trafficMarkers = new Map();
@@ -260,7 +437,7 @@
       v.el.classList.toggle('active', v.key === key);
     }
 
-    document.body.classList.toggle('map-active', key === 'map');
+    document.body.classList.toggle('map-active', key === 'map' || key === 'radar');
 
     // Bottom-nav selection only applies to the primary three tabs.
     for (const btn of document.querySelectorAll('.navbtn')) {
@@ -275,6 +452,7 @@
 
     if (key === 'logs') loadLogs();
     if (key === 'settings') loadSettings();
+    if (key === 'radar') drawRadar();
     if (key === 'map') {
       initMapIfNeeded();
       // If the map was initialized while hidden, force Leaflet to compute sizes.
@@ -284,6 +462,321 @@
         // ignore
       }
     }
+  }
+
+  function setRadarMessage(s) {
+    if (!radarMsg) return;
+    radarMsg.textContent = String(s || '');
+  }
+
+  function setRadarHud() {
+    const hdg = getOwnshipHeadingDeg();
+    if (radarHudHdg) radarHudHdg.textContent = Number.isFinite(hdg) ? `HDG ${fmtNum(hdg, 0)}°` : 'HDG --°';
+    if (radarHudRange) radarHudRange.textContent = `RNG ${radarRangeNm} nm`;
+
+    if (radarHudCount) radarHudCount.textContent = `${lastRadarVisibleCount} targets`;
+  }
+
+  function getOwnshipHeadingDeg() {
+    const trk = Number(lastGps?.track_deg);
+    if (Number.isFinite(trk)) return (trk + 360) % 360;
+    const h = lastAttitude?.heading_deg;
+    const hh = (typeof h === 'number') ? h : (h == null ? NaN : Number(h));
+    if (Number.isFinite(hh)) return (hh + 360) % 360;
+    return NaN;
+  }
+
+  function radarResizeCanvasIfNeeded() {
+    if (!radarCanvas) return;
+    const rect = radarCanvas.getBoundingClientRect();
+    const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+    const wantW = Math.max(1, Math.round(rect.width * dpr));
+    const wantH = Math.max(1, Math.round(rect.height * dpr));
+    if (radarCanvas.width !== wantW || radarCanvas.height !== wantH) {
+      radarCanvas.width = wantW;
+      radarCanvas.height = wantH;
+    }
+  }
+
+  function drawRadar() {
+    if (!radarCanvas || !radarCtx) return;
+    const radarView = document.getElementById('view-radar');
+    if (!radarView?.classList?.contains('active')) return;
+
+    radarResizeCanvasIfNeeded();
+
+    const w = radarCanvas.width;
+    const h = radarCanvas.height;
+    const ctx = radarCtx;
+    ctx.clearRect(0, 0, w, h);
+
+    const bg = cssVar('--surface2') || '#111';
+    const text = cssVar('--text') || '#fff';
+    const muted = cssVar('--muted') || '#bbb';
+    const accent = cssVar('--accent') || '#7dd3fc';
+    const danger = cssVar('--danger') || accent;
+    const ring = 'rgba(127,127,140,0.35)';
+    const grid = 'rgba(127,127,140,0.18)';
+
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, w, h);
+
+    const cx = w / 2;
+    const cy = h / 2;
+    const radius = Math.max(10, Math.min(w, h) * 0.46);
+
+    // Full range rings (Garmin-style full circles).
+    ctx.strokeStyle = ring;
+    ctx.lineWidth = Math.max(1, Math.round(Math.min(w, h) * 0.002));
+    for (let i = 1; i <= 4; i++) {
+      const r = (radius * i) / 4;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // Crosshair lines.
+    ctx.strokeStyle = grid;
+    ctx.beginPath();
+    ctx.moveTo(cx - radius, cy);
+    ctx.lineTo(cx + radius, cy);
+    ctx.moveTo(cx, cy - radius);
+    ctx.lineTo(cx, cy + radius);
+    ctx.stroke();
+
+    // Ring labels (top, inside the ring).
+    ctx.fillStyle = muted;
+    ctx.font = `${Math.max(11, Math.round(Math.min(w, h) * 0.02))}px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (let i = 1; i <= 4; i++) {
+      const r = (radius * i) / 4;
+      const nm = (radarRangeNm * i) / 4;
+      ctx.fillText(`${nm}nm`, cx, cy - r + 12);
+    }
+
+    // Heading indicator at top.
+    ctx.fillStyle = text;
+    ctx.font = `${Math.max(12, Math.round(Math.min(w, h) * 0.024))}px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif`;
+    const hdg = getOwnshipHeadingDeg();
+    const hdgText = Number.isFinite(hdg) ? `HDG ${fmtNum(hdg, 0)}°` : 'HDG --°';
+    ctx.fillText(hdgText, cx, cy - radius - 14);
+
+    // Ownship symbol (fixed heading-up: triangle pointing up).
+    ctx.fillStyle = accent;
+    ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - 10);
+    ctx.lineTo(cx - 7, cy + 10);
+    ctx.lineTo(cx + 7, cy + 10);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    const gps = lastGps;
+    const gpsOK = !!(gps && gps.enabled && gps.valid && Number.isFinite(Number(gps.lat_deg)) && Number.isFinite(Number(gps.lon_deg)));
+    if (!gpsOK) {
+      setRadarMessage('GPS fix required for traffic radar.');
+      setRadarHud();
+      if (radarAlert) radarAlert.textContent = '';
+      return;
+    }
+    setRadarMessage('');
+
+    const ownLat = Number(gps.lat_deg);
+    const ownLon = Number(gps.lon_deg);
+    const ownAlt = (gps.alt_feet == null) ? null : Number(gps.alt_feet);
+    const heading = Number.isFinite(hdg) ? hdg : 0;
+
+    const toRad = (deg) => (deg * Math.PI) / 180;
+    const toDeg = (rad) => (rad * 180) / Math.PI;
+    const normDeg = (deg) => ((deg % 360) + 360) % 360;
+    const haversineNm = (lat1, lon1, lat2, lon2) => {
+      const Rm = 6371000;
+      const dLat = toRad(lat2 - lat1);
+      const dLon = toRad(lon2 - lon1);
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return (Rm * c) / 1852;
+    };
+    const bearingDeg = (lat1, lon1, lat2, lon2) => {
+      const y = Math.sin(toRad(lon2 - lon1)) * Math.cos(toRad(lat2));
+      const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) - Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(toRad(lon2 - lon1));
+      return normDeg(toDeg(Math.atan2(y, x)));
+    };
+
+    const list = Array.isArray(lastTraffic) ? lastTraffic : [];
+    let closest = null;
+    let visibleCount = 0;
+
+    const drawTrafficArrow = (x, y, rotRad, fillStyle, strokeStyle) => {
+      // Match the Map marker's SVG shape:
+      //   M12 2 L20 22 L12 18 L4 22 Z
+      // (scaled + rotated)
+      const size = Math.max(8, Math.round(Math.min(w, h) * 0.022));
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(rotRad);
+      ctx.beginPath();
+      ctx.moveTo(0, -size);
+      ctx.lineTo(size * 0.8, size);
+      ctx.lineTo(0, size * 0.6);
+      ctx.lineTo(-size * 0.8, size);
+      ctx.closePath();
+      ctx.fillStyle = fillStyle;
+      ctx.globalAlpha = 0.92;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = strokeStyle;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.restore();
+    };
+
+    // Draw targets.
+    for (const t of list) {
+      const lat = Number(t?.lat_deg);
+      const lon = Number(t?.lon_deg);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+
+      const distNm = haversineNm(ownLat, ownLon, lat, lon);
+      if (!Number.isFinite(distNm) || distNm <= 0) continue;
+      if (distNm > radarRangeNm) continue;
+      visibleCount += 1;
+
+      const brg = bearingDeg(ownLat, ownLon, lat, lon);
+      const rel = normDeg(brg - heading);
+      const ang = toRad(rel);
+
+      const r = (distNm / radarRangeNm) * radius;
+      const x = cx + Math.sin(ang) * r;
+      const y = cy - Math.cos(ang) * r;
+
+      const age = Number(t?.age_sec);
+      const stale = Number.isFinite(age) && age > 15;
+
+      // Target symbol.
+      const alt = Number(t?.alt_feet);
+      const altOK = Number.isFinite(alt);
+      const altDelta = (altOK && Number.isFinite(ownAlt)) ? (alt - ownAlt) : null;
+
+      const isAlertCandidate = !stale && !t?.on_ground && altDelta != null && Math.abs(altDelta) <= radarAlertAltBandFeet;
+      if (isAlertCandidate) {
+        if (!closest || distNm < closest.distNm) {
+          closest = {
+            distNm,
+            altDelta,
+            relDeg: rel,
+            vvelFpm: Number(t?.vvel_fpm),
+            tail: String(t?.tail || '').trim(),
+            icao: String(t?.icao || '').trim(),
+          };
+        }
+      }
+
+      // Icon + direction: match Map traffic marker.
+      const trk = Number(t?.track_deg);
+      const rotDeg = Number.isFinite(trk) ? normDeg(trk - heading) : rel;
+      const rotRad = toRad(rotDeg);
+      drawTrafficArrow(x, y, rotRad, stale ? muted : danger, 'rgba(0,0,0,0.85)');
+
+      // Relative altitude (feet) + vertical trend arrow: match Map label semantics.
+      const vs = Number(t?.vvel_fpm);
+      const trendArrow = Number.isFinite(vs) ? (vs > 50 ? '▲' : (vs < -50 ? '▼' : '')) : '';
+      const relAltFeet = (altDelta == null) ? null : Math.round(altDelta);
+      const relAltFeetLabel = (relAltFeet == null) ? null : (relAltFeet >= 0 ? `+${relAltFeet} ft` : `${relAltFeet} ft`);
+      const label = (relAltFeetLabel == null) ? null : (trendArrow ? `${relAltFeetLabel} ${trendArrow}` : relAltFeetLabel);
+      if (label) {
+        ctx.fillStyle = stale ? muted : text;
+        ctx.font = `${Math.max(11, Math.round(Math.min(w, h) * 0.022))}px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif`;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(label, x + 12, y);
+      }
+    }
+
+    lastRadarVisibleCount = visibleCount;
+
+    // Alerts (visual only): show when closest traffic is very near.
+    const alertsOn = radarAlertsMode !== 'off';
+    if (radarAlert) {
+      if (alertsOn && closest && closest.distNm <= radarAlertRangeNm) {
+        const who = closest.tail || closest.icao || 'traffic';
+        const dh = (closest.altDelta == null) ? '' : ` · ΔALT ${Math.round(closest.altDelta)}ft`;
+        radarAlert.textContent = `TRAFFIC ${who} · ${fmtNum(closest.distNm, 1)}nm${dh}`;
+      } else {
+        radarAlert.textContent = '';
+      }
+    }
+
+    // Audible alerts (beep + speech), gated on user gesture.
+    if (alertsOn && closest && closest.distNm <= radarAlertRangeNm) {
+      if (!audioState.armed || !audioState.ctx) {
+        if (!audioState.prompted) {
+          setRadarMessage('Tap once to enable audio alerts.');
+          audioState.prompted = true;
+        }
+      } else {
+        const nowMs = Date.now();
+        const who = closest.tail || closest.icao || 'traffic';
+        // Keep this fairly stable to avoid rapid "state changes" due to jitter.
+        const alertKey = `${who}|${Math.round(closest.distNm * 10)}`;
+
+        // Beep on first detection or periodically.
+        const beepCooldownMs = 2000;
+        const wantBeep = (radarAlertsMode === 'beep' || radarAlertsMode === 'both');
+        if (wantBeep && (audioState.lastBeepAt === 0 || nowMs - audioState.lastBeepAt >= beepCooldownMs || audioState.lastAlertKey !== alertKey)) {
+          try { audioState.ctx.resume?.(); } catch { /* ignore */ }
+          playBeepPattern();
+          audioState.lastBeepAt = nowMs;
+        }
+
+        // Speech: on change or every ~10s while alert persists.
+        const speakCooldownMs = 10000;
+        const wantSpeech = (radarAlertsMode === 'speech' || radarAlertsMode === 'both');
+        const lockMs = 4500;
+        const lockedOther = (audioState.speechLockWho && audioState.speechLockWho !== who && nowMs < audioState.speechLockUntilMs);
+        if (wantSpeech && !lockedOther && (audioState.lastSpokenAt === 0 || nowMs - audioState.lastSpokenAt >= speakCooldownMs || audioState.lastSpokenWho !== who)) {
+          // Convert relative bearing to clock position.
+          let clock = Math.round((Number(closest.relDeg) || 0) / 30);
+          clock = ((clock % 12) + 12) % 12;
+          if (clock === 0) clock = 12;
+
+          const distNm = Number(closest.distNm);
+          const distSpoken = Number.isFinite(distNm) ? `${fmtNum(distNm, 1)} nautical miles` : '';
+
+          const altDelta = Number(closest.altDelta);
+          const altPart = Number.isFinite(altDelta)
+            ? (() => {
+              const rounded = Math.round(Math.abs(altDelta) / 100) * 100;
+              if (rounded === 0) return 'same altitude';
+              return `${rounded} feet ${altDelta > 0 ? 'above' : 'below'}`;
+            })()
+            : '';
+
+          const vs = Number(closest.vvelFpm);
+          const trend = Number.isFinite(vs) ? (vs > 50 ? 'climbing' : (vs < -50 ? 'descending' : 'level')) : '';
+
+          const parts = ['Traffic', `${clock} o\'clock`];
+          if (distSpoken) parts.push(distSpoken);
+          if (altPart) parts.push(altPart);
+          if (trend) parts.push(trend);
+
+          speakTraffic(parts.join(', '));
+          audioState.lastSpokenAt = nowMs;
+          audioState.lastSpokenWho = who;
+          audioState.speechLockWho = who;
+          audioState.speechLockUntilMs = nowMs + lockMs;
+        }
+
+        audioState.lastAlertKey = alertKey;
+      }
+    } else {
+      audioState.lastAlertKey = '';
+    }
+
+    setRadarHud();
   }
 
   function setMapMessage(s) {
@@ -1578,11 +2071,14 @@
       setAttitudeText(s);
       lastAttitude = s?.attitude || null;
       lastGps = s?.gps || null;
+      lastTraffic = s?.traffic || null;
       drawAttitude();
       // Map updates are driven off the same poll.
       initMapIfNeeded();
       updateMapFromGPS(lastGps);
       updateMapTraffic(s?.traffic);
+      // Radar updates (heading-up traffic view).
+      drawRadar();
       if (subtitle) subtitle.textContent = 'Connected';
     } catch {
       if (subtitle) subtitle.textContent = 'Disconnected';
@@ -1591,7 +2087,7 @@
 
   // Initial view.
   const initial = (location.hash || '#status').slice(1);
-  setView(['attitude', 'radar', 'map', 'status', 'traffic', 'weather', 'towers', 'settings', 'logs', 'about'].includes(initial) ? initial : 'status');
+  setView(['attitude', 'radar', 'map', 'status', 'traffic', 'weather', 'towers', 'settings', 'logs', 'system'].includes(initial) ? initial : 'status');
   logsRefresh?.addEventListener('click', loadLogs);
   logsTail?.addEventListener('change', loadLogs);
 
@@ -1605,7 +2101,9 @@
   setInterval(poll, 1000);
   // Redraw the instrument a bit faster than the status poll so it stays crisp on resize/theme changes.
   setInterval(drawAttitude, 100);
+  setInterval(drawRadar, 100);
   window.addEventListener('resize', drawAttitude);
+  window.addEventListener('resize', drawRadar);
 
   btnAhrsLevel?.addEventListener('click', () => postAhrs('/api/ahrs/level', ahrsMsg));
   btnAhrsZeroDrift?.addEventListener('click', () => postAhrs('/api/ahrs/zero-drift', ahrsMsg));
@@ -1614,4 +2112,101 @@
 
   btnAttAhrsLevel?.addEventListener('click', () => postAhrs('/api/ahrs/level', attAhrsMsg));
   btnAttAhrsZeroDrift?.addEventListener('click', () => postAhrs('/api/ahrs/zero-drift', attAhrsMsg));
+
+  function setRadarRange(nm) {
+    const n = Number(nm);
+    if (!Number.isFinite(n) || n <= 0) return;
+    radarRangeNm = n;
+    lsSet(lsKeys.radarRangeNm, radarRangeNm);
+    applyRadarControlStateToUI();
+    drawRadar();
+  }
+
+  function setRadarAlertsMode(mode) {
+    const m = String(mode || '').toLowerCase();
+    if (!['off', 'both', 'speech', 'beep'].includes(m)) return;
+    radarAlertsMode = m;
+    // Persist using the existing audio_mode key for continuity.
+    lsSet(lsKeys.radarAudioMode, radarAlertsMode);
+    // Back-compat: keep the old enabled flag consistent.
+    lsSet(lsKeys.radarAlertsEnabled, radarAlertsMode === 'off' ? '0' : '1');
+    applyRadarControlStateToUI();
+    drawRadar();
+  }
+
+  function cycleRadarAlertsMode() {
+    // Required cycle: off -> both -> speech -> beep -> off
+    const next = (radarAlertsMode === 'off')
+      ? 'both'
+      : (radarAlertsMode === 'both')
+        ? 'speech'
+        : (radarAlertsMode === 'speech')
+          ? 'beep'
+          : 'off';
+    setRadarAlertsMode(next);
+  }
+
+  function setRadarAlertRange(nm) {
+    const n = Number(nm);
+    if (!Number.isFinite(n) || n <= 0) return;
+    radarAlertRangeNm = n;
+    lsSet(lsKeys.radarAlertRangeNm, radarAlertRangeNm);
+    applyRadarControlStateToUI();
+    drawRadar();
+  }
+
+  function setRadarAlertAltBand(feet) {
+    const n = Number(feet);
+    if (!Number.isFinite(n) || n <= 0) return;
+    radarAlertAltBandFeet = n;
+    lsSet(lsKeys.radarAlertAltBandFeet, radarAlertAltBandFeet);
+    applyRadarControlStateToUI();
+    drawRadar();
+  }
+
+  function stepValue(list, current, dir) {
+    const idx = list.indexOf(current);
+    const i = idx >= 0 ? idx : 0;
+    const next = i + (dir < 0 ? -1 : 1);
+    const clamped = Math.max(0, Math.min(list.length - 1, next));
+    return list[clamped];
+  }
+
+  radarZoomOut?.addEventListener('click', () => {
+    const idx = Math.max(0, radarRangesNm.indexOf(radarRangeNm));
+    setRadarRange(radarRangesNm[Math.max(0, idx - 1)]);
+  });
+  radarZoomIn?.addEventListener('click', () => {
+    const idx = Math.max(0, radarRangesNm.indexOf(radarRangeNm));
+    setRadarRange(radarRangesNm[Math.min(radarRangesNm.length - 1, idx + 1)]);
+  });
+  radarAlertsToggle?.addEventListener('click', cycleRadarAlertsMode);
+
+  radarAlertRangeDown?.addEventListener('click', () => setRadarAlertRange(stepValue(radarAlertRangesNm, radarAlertRangeNm, -1)));
+  radarAlertRangeUp?.addEventListener('click', () => setRadarAlertRange(stepValue(radarAlertRangesNm, radarAlertRangeNm, +1)));
+  radarAlertAltDown?.addEventListener('click', () => setRadarAlertAltBand(stepValue(radarAlertAltBandsFeet, radarAlertAltBandFeet, -1)));
+  radarAlertAltUp?.addEventListener('click', () => setRadarAlertAltBand(stepValue(radarAlertAltBandsFeet, radarAlertAltBandFeet, +1)));
+
+  // Load persisted radar settings.
+  radarRangeNm = lsGetNumber(lsKeys.radarRangeNm, radarRangeNm);
+  if (!radarRangesNm.includes(radarRangeNm)) radarRangeNm = 5;
+  radarAlertRangeNm = lsGetNumber(lsKeys.radarAlertRangeNm, radarAlertRangeNm);
+  if (!radarAlertRangesNm.includes(radarAlertRangeNm)) radarAlertRangeNm = 2;
+  radarAlertAltBandFeet = lsGetNumber(lsKeys.radarAlertAltBandFeet, radarAlertAltBandFeet);
+  if (!radarAlertAltBandsFeet.includes(radarAlertAltBandFeet)) radarAlertAltBandFeet = 1000;
+  // Default required: BOTH.
+  // Back-compat: if alerts_enabled was explicitly off, honor it.
+  const enabledFlag = lsGetString(lsKeys.radarAlertsEnabled, '1');
+  if (enabledFlag === '0') {
+    radarAlertsMode = 'off';
+  } else {
+    const storedMode = lsGetString(lsKeys.radarAudioMode, 'both');
+    radarAlertsMode = ['off', 'both', 'speech', 'beep'].includes(storedMode) ? storedMode : 'both';
+    // If storedMode is 'off' but enabledFlag isn't, still honor 'off'.
+  }
+  applyRadarControlStateToUI();
+
+  // Arm audio on first user gesture.
+  window.addEventListener('pointerdown', armAudioOnce, { once: true });
+  window.addEventListener('keydown', armAudioOnce, { once: true });
 })();

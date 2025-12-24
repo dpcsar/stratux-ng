@@ -154,6 +154,220 @@ h2 { margin: 6px 0 6px; font-size: 18px; }
   display: none;
 }
 
+/* Radar (same full screen layout as Map) */
+#view-radar.active {
+  position: fixed;
+  top: var(--topbar-h);
+  left: 0;
+  right: 0;
+  bottom: var(--bottomnav-h);
+  padding: 0;
+  margin: 0;
+  z-index: 1;
+}
+
+#view-radar > h2 {
+  display: none;
+}
+
+.radar-root {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: var(--surface2);
+}
+
+.radar-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Radar top cards (range / heading / alerts). */
+.radar-top {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  z-index: 1100;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+.radar-top .card {
+  max-width: none;
+  margin: 0;
+  padding: 8px 10px;
+  overflow: visible;
+}
+
+/* The global stacked-card rule (.view .card + .card) would otherwise push the
+   second radar card (Alert) down; keep both top cards aligned. */
+.radar-top .card + .card {
+  margin-top: 0;
+}
+
+.radar-top-left {
+  justify-self: start;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.radar-top-left .radar-controls-row {
+  justify-content: flex-start;
+}
+
+.radar-top-right {
+  justify-self: end;
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.radar-card-title {
+  align-self: flex-start;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: 0.2px;
+  color: var(--text);
+  margin-bottom: 6px;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+/* Shrink the main range value pill a bit (RNG card only). */
+.radar-top-left #radar-range-value {
+  min-width: 108px;
+  padding: 7px 9px;
+  font-size: 12px;
+}
+
+/* Center the alerts mode button row within the card. */
+.radar-top-right .radar-controls-row.radar-alerts-mode-row {
+  width: 100%;
+  justify-content: center;
+}
+
+/* Shrink the alert range/alt value pills (not the main RNG pill). */
+.radar-top-right #radar-alert-range-value,
+.radar-top-right #radar-alert-alt-value {
+  min-width: 70px;
+  padding: 6px 7px;
+  font-size: 12px;
+}
+
+.radar-top-right .radar-controls-row {
+  justify-content: flex-end;
+}
+
+.radar-top-right .radar-controls-row + .radar-controls-row {
+  margin-top: 8px;
+}
+
+.radar-hud-row {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.radar-hud-item {
+  font-size: 13px;
+  letter-spacing: 0.2px;
+  color: var(--muted);
+}
+
+/* Make HDG card text larger and non-wrapping. */
+#radar-hdg {
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: 0.3px;
+  color: var(--text);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+#radar-count {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.radar-alert {
+  margin-top: 6px;
+  font-size: 13px;
+  letter-spacing: 0.2px;
+  color: var(--danger);
+}
+
+.radar-controls {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 1100;
+  padding: 10px;
+}
+
+.radar-controls-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.radar-controls select {
+  background: var(--surface2);
+  color: var(--text);
+  border: 1px solid rgba(127,127,140,0.25);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.radar-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.radar-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 120px;
+  padding: 8px 10px;
+  border: 1px solid rgba(127,127,140,0.25);
+  border-radius: 10px;
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 13px;
+  letter-spacing: 0.2px;
+  user-select: none;
+}
+
+
+
+.radar-msg {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 1100;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 8px 10px;
+  background: rgba(0,0,0,0.25);
+  border-radius: 10px;
+}
+
+.radar-msg:empty {
+  display: none;
+}
+
 .map-root {
   position: relative;
   width: 100%;
