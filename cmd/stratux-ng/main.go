@@ -590,11 +590,23 @@ func main() {
 				var haveAHRS bool
 				if sc != nil && sc.scenario != nil {
 					now = sc.startUTC.Add(sc.elapsed)
+					if ds, ok := rt.ADSB1090DecoderSnapshot(now.UTC()); ok {
+						status.SetADSB1090Decoder(now.UTC(), ds)
+					}
+					if ds, ok := rt.UAT978DecoderSnapshot(now.UTC()); ok {
+						status.SetUAT978Decoder(now.UTC(), ds)
+					}
 					// Scenario mode is deterministic and currently does not use live GPS.
 					status.SetGPS(now.UTC(), gps.Snapshot{Enabled: false})
 					frames = buildGDL90FramesFromScenario(curCfg, now.UTC(), sc.elapsed, sc.scenario, sc.ownshipICAO, sc.trafficICAO)
 				} else {
 					now = time.Now()
+					if ds, ok := rt.ADSB1090DecoderSnapshot(now.UTC()); ok {
+						status.SetADSB1090Decoder(now.UTC(), ds)
+					}
+					if ds, ok := rt.UAT978DecoderSnapshot(now.UTC()); ok {
+						status.SetUAT978Decoder(now.UTC(), ds)
+					}
 					var gpsSnap gps.Snapshot
 					var haveGPS bool
 					if fanSnap, haveFan := rt.FanSnapshot(); haveFan {
@@ -647,9 +659,12 @@ func main() {
 						status.SetAHRSSensors(now.UTC(), web.AHRSSensorsSnapshot{Enabled: false})
 					}
 					if curCfg.GPS.Enable {
-						frames = buildGDL90FramesWithGPS(curCfg, now.UTC(), haveAHRS, snap, haveGPS, gpsSnap, hf)
+						frames = buildGDL90FramesWithGPS(curCfg, now.UTC(), haveAHRS, snap, haveGPS, gpsSnap, hf, rt.TrafficTargets(now.UTC()))
 					} else {
 						frames = buildGDL90Frames(curCfg, now.UTC(), haveAHRS, snap)
+					}
+					if extra := rt.DrainUAT978UplinkFrames(50); len(extra) > 0 {
+						frames = append(frames, extra...)
 					}
 				}
 				att := decodeAttitudeFromFrames(frames)
@@ -980,7 +995,7 @@ func shortestAngleDiffDeg(targetDeg float64, currentDeg float64) float64 {
 	return d
 }
 
-func buildGDL90FramesWithGPS(cfg config.Config, now time.Time, haveAHRS bool, ahrsSnap ahrs.Snapshot, haveGPS bool, gpsSnap gps.Snapshot, hf *headingFuser) [][]byte {
+func buildGDL90FramesWithGPS(cfg config.Config, now time.Time, haveAHRS bool, ahrsSnap ahrs.Snapshot, haveGPS bool, gpsSnap gps.Snapshot, hf *headingFuser, liveTraffic []gdl90.Traffic) [][]byte {
 	// GPS mode: emit ownship from live GPS when we have a recent fix.
 	icao, err := gdl90.ParseICAOHex(cfg.Sim.Ownship.ICAO)
 	ownshipOK := err == nil
@@ -1138,6 +1153,9 @@ func buildGDL90FramesWithGPS(cfg config.Config, now time.Time, haveAHRS bool, ah
 
 	// If sim traffic is enabled, it still uses sim center from config.
 	if !cfg.Sim.Traffic.Enable {
+		for _, t := range liveTraffic {
+			frames = append(frames, gdl90.TrafficReportFrame(t))
+		}
 		return frames
 	}
 

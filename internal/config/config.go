@@ -19,6 +19,71 @@ type Config struct {
 	AHRS  AHRSConfig  `yaml:"ahrs"`
 	Fan   FanConfig   `yaml:"fan"`
 	Web   WebConfig   `yaml:"web"`
+
+	// External decoder inputs (planned): 1090 and 978.
+	//  - 978 is typically ingested as NDJSON-over-TCP (dump978-fa JSON stream).
+	//  - 1090 is ingested by polling a JSON file (dump1090-fa aircraft.json).
+	ADSB1090 DecoderBandConfig `yaml:"adsb1090"`
+	UAT978   DecoderBandConfig `yaml:"uat978"`
+}
+
+// DecoderBandConfig describes one RF band ingest path (e.g. 1090 or 978).
+//
+// Stratux-NG treats decoders as external processes and ingests their output via
+// either:
+//  - newline-delimited JSON (NDJSON) over TCP, or
+//  - a periodically-updated JSON file.
+type DecoderBandConfig struct {
+	Enable bool `yaml:"enable"`
+
+	Decoder DecoderConfig `yaml:"decoder"`
+	SDR     SDRSelector   `yaml:"sdr"`
+}
+
+// DecoderConfig configures either:
+// - a supervised local decoder process (Command non-empty), or
+// - an externally-managed decoder (Command empty) that Stratux-NG connects to.
+//
+// Supported ingest sources:
+// - NDJSON-over-TCP via JSONListen/JSONAddr (e.g. dump978-fa --json-port)
+// - periodically-updated JSON files via JSONFile (e.g. dump1090-fa aircraft.json)
+// - raw line-over-TCP via RawListen/RawAddr (e.g. dump978-fa --raw-port)
+//
+// For NDJSON ingest, set exactly one of JSONListen, JSONAddr, or JSONFile.
+// For raw ingest, set exactly one of RawListen or RawAddr.
+//
+// At least one ingest source must be configured when the band is enabled.
+type DecoderConfig struct {
+	Command string   `yaml:"command"`
+	Args    []string `yaml:"args"`
+
+	JSONListen string `yaml:"json_listen"`
+	JSONAddr   string `yaml:"json_addr"`
+	JSONFile   string `yaml:"json_file"`
+
+	// RawListen/RawAddr configure a TCP endpoint that emits newline-delimited
+	// dump978-style raw messages (e.g. "+<hex>;rs=...;ss=...;").
+	RawListen string `yaml:"raw_listen"`
+	RawAddr   string `yaml:"raw_addr"`
+
+	// JSONFileInterval controls how often JSONFile is polled.
+	// When zero, defaults to 1s.
+	JSONFileInterval time.Duration `yaml:"json_file_interval"`
+}
+
+// SDRSelector describes how to select an SDR device.
+//
+// For RTL-SDR-class devices, the recommended approach is programming a unique
+// EEPROM serial string (e.g. stratux:1090, stratux:978) and selecting by it.
+type SDRSelector struct {
+	// SerialTag is a stable identifier such as "stratux:1090" or "stratux:978".
+	SerialTag string `yaml:"serial_tag"`
+
+	// Index is a fallback device index when no serial tag is available.
+	Index *int `yaml:"index"`
+
+	// Path is an optional stable device path (e.g. a udev /dev/ symlink).
+	Path string `yaml:"path"`
 }
 
 type GPSConfig struct {
@@ -242,6 +307,103 @@ func DefaultAndValidate(cfg *Config) error {
 	}
 	if cfg.GDL90.Interval <= 0 {
 		cfg.GDL90.Interval = 1 * time.Second
+	}
+
+	// Decoder band defaults / validation. Keep permissive for bring-up:
+	// - When Enable=false, ignore configuration.
+	// - When Enable=true, require at least one ingest source.
+	validateBand := func(name string, b *DecoderBandConfig) error {
+		if b == nil || !b.Enable {
+			return nil
+		}
+		listen := strings.TrimSpace(b.Decoder.JSONListen)
+		addr := strings.TrimSpace(b.Decoder.JSONAddr)
+		file := strings.TrimSpace(b.Decoder.JSONFile)
+		rawListen := strings.TrimSpace(b.Decoder.RawListen)
+		rawAddr := strings.TrimSpace(b.Decoder.RawAddr)
+
+		jsonSet := 0
+		if listen != "" {
+			jsonSet++
+		}
+		if addr != "" {
+			jsonSet++
+		}
+		if file != "" {
+			jsonSet++
+		}
+		rawSet := 0
+		if rawListen != "" {
+			rawSet++
+		}
+		if rawAddr != "" {
+			rawSet++
+		}
+		if jsonSet == 0 && rawSet == 0 {
+			return fmt.Errorf("%s.decoder must set at least one ingest source (json_* or raw_*)", name)
+		}
+		if jsonSet != 0 && jsonSet != 1 {
+			return fmt.Errorf("%s.decoder must set exactly one of json_listen, json_addr, or json_file", name)
+		}
+		if rawSet != 0 && rawSet != 1 {
+			return fmt.Errorf("%s.decoder must set exactly one of raw_listen or raw_addr", name)
+		}
+		if rawSet > 0 && name != "uat978" {
+			return fmt.Errorf("%s.decoder raw_* is only supported for uat978", name)
+		}
+		if name == "adsb1090" {
+			// Be strict: 1090 ingest is dump1090-fa aircraft.json polling.
+			if strings.TrimSpace(b.Decoder.JSONFile) == "" {
+				return fmt.Errorf("adsb1090.decoder.json_file is required (dump1090-fa aircraft.json polling)")
+			}
+			if strings.TrimSpace(b.Decoder.JSONListen) != "" || strings.TrimSpace(b.Decoder.JSONAddr) != "" {
+				return fmt.Errorf("adsb1090.decoder only supports json_file (dump1090-fa); json_listen/json_addr are not supported")
+			}
+		}
+		if listen != "" {
+			if _, err := net.ResolveTCPAddr("tcp", listen); err != nil {
+				return fmt.Errorf("%s.decoder.json_listen invalid: %w", name, err)
+			}
+		}
+		if addr != "" {
+			if _, err := net.ResolveTCPAddr("tcp", addr); err != nil {
+				return fmt.Errorf("%s.decoder.json_addr invalid: %w", name, err)
+			}
+		}
+		if file != "" {
+			// Be permissive: allow relative paths (dev) and non-existent files at startup.
+			if strings.ContainsRune(file, '\x00') {
+				return fmt.Errorf("%s.decoder.json_file invalid", name)
+			}
+			if b.Decoder.JSONFileInterval < 0 {
+				return fmt.Errorf("%s.decoder.json_file_interval must be >= 0", name)
+			}
+			if b.Decoder.JSONFileInterval == 0 {
+				b.Decoder.JSONFileInterval = 1 * time.Second
+			}
+		}
+		if rawListen != "" {
+			if _, err := net.ResolveTCPAddr("tcp", rawListen); err != nil {
+				return fmt.Errorf("%s.decoder.raw_listen invalid: %w", name, err)
+			}
+		}
+		if rawAddr != "" {
+			if _, err := net.ResolveTCPAddr("tcp", rawAddr); err != nil {
+				return fmt.Errorf("%s.decoder.raw_addr invalid: %w", name, err)
+			}
+		}
+		// If we are supervising a decoder, a command is required.
+		if strings.TrimSpace(b.Decoder.Command) == "" {
+			// external decoder allowed
+			return nil
+		}
+		return nil
+	}
+	if err := validateBand("adsb1090", &cfg.ADSB1090); err != nil {
+		return err
+	}
+	if err := validateBand("uat978", &cfg.UAT978); err != nil {
+		return err
 	}
 
 	if cfg.GDL90.Record.Enable {

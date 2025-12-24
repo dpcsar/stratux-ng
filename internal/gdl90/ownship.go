@@ -100,7 +100,11 @@ func OwnshipReportFrame(o Ownship) []byte {
 	}
 	msg[18] = emitter
 
-	callsign := sanitizeCallsign(o.Callsign)
+	callsign := o.Callsign
+	if strings.TrimSpace(callsign) == "" {
+		callsign = "STRATUX"
+	}
+	callsign = sanitizeCallsign(callsign)
 	copy(msg[19:27], []byte(callsign))
 
 	msg[27] = (o.Emergency & 0x0F) << 4
@@ -163,9 +167,6 @@ func encodeTrack8(deg float64) byte {
 }
 
 func sanitizeCallsign(s string) string {
-	if s == "" {
-		s = "STRATUX"
-	}
 	s = strings.ToUpper(s)
 	if len(s) > 8 {
 		s = s[:8]

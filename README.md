@@ -4,12 +4,25 @@ Stratux-NG is a modern, Raspberry Pi–focused, 64-bit-first avionics data appli
 
 ## Status
 
-This repository is in active bring-up. The simulator + UDP output path is working, and **Stratux AHRS 2.0–class AHRS + fan control are supported**.
+This repository is in active bring-up, but the core “useful on real hardware” loop is now working.
+
+Working now:
+- **GDL90 over UDP** (heartbeat + ownship + traffic + device ID + Stratux heartbeat)
+- **Simulator** for ownship + traffic (for hardware-free development)
+- **Web UI + status API** (including decoder health)
+- **AHRS (ICM-20948 + BMP280)** + **fan control**
+- **1090** ingest from FlightAware `dump1090-fa` (`aircraft.json` polling) → **real GDL90 Traffic (0x14)**
+- **978** ingest from `dump978-fa` (JSON/NDJSON over TCP) → **real GDL90 Traffic (0x14)**
+- **978** uplink relay from `dump978-fa` raw TCP (`--raw-port`) → **GDL90 Uplink (0x07)** (EFB weather)
+
+Not yet:
+- “Pretty” decoded FIS-B product visualization in the web UI (later milestone)
+- Flashable SD image build pipeline (pi-gen stage implementation; see [docs/pi-gen.md](docs/pi-gen.md))
 
 This is a **new implementation** (new repository) with a modular architecture and reproducible builds, intended to support:
 
 - **SDR inputs**
-  - **1090 MHz ADS‑B / Mode S** via external decoder (e.g., `readsb`)
+  - **1090 MHz ADS‑B / Mode S** via external decoder (e.g., FlightAware `dump1090-fa`)
   - **978 MHz UAT** via external decoder (e.g., `dump978`)
   - Support for “Nano 2/3” RTL-SDR-class devices and Stratux-compatible hardware
 - **Sensors**
@@ -29,26 +42,35 @@ This is a **new implementation** (new repository) with a modular architecture an
 4. Provide a path to building a **bootable image** (later milestone).
 
 ### Hardware integration (next)
-- Ingest 1090 data from `readsb`
-- Ingest 978 data from `dump978`
-- GPS ingestion (gpsd integration)
-- Process supervision (restart decoders, health checks, logging)
+- Ingest 1090 data from FlightAware `dump1090-fa` (done)
+- Ingest 978 data from `dump978-fa` (done)
+- GPS ingestion (gpsd integration) (done)
+- Process supervision (restart decoders, health checks, logging) (done)
 
 ## Architecture (high level)
 
 - `stratux-ng` (Go) is the core:
-  - starts/configures inputs (sim, readsb, dump978, gps, ahrs)
+  - starts/configures inputs (sim, dump1090-fa, dump978, gps, ahrs)
   - maintains an in-memory “traffic + ownship” state
   - outputs **GDL90 UDP**
   - serves an HTTP API + web UI for status/config
 
 - External decoders are treated as data sources:
-  - `readsb` for 1090 MHz
-  - `dump978` for 978 MHz
+  - FlightAware `dump1090-fa` for 1090 MHz
+  - `dump978` / `dump978-fa` for 978 MHz
+
+Decoder I/O convention:
+- 1090 recommended: `dump1090-fa --write-json ...` (Stratux-NG polls `aircraft.json`)
+- 978 traffic recommended: `dump978-fa --json-port ...` (Stratux-NG ingests NDJSON over TCP)
+- 978 weather recommended: `dump978-fa --raw-port ...` (Stratux-NG relays uplinks as GDL90 message `0x07`)
+
+SDR serial tag note (Stratux-style):
+- Many Stratux-tagged RTL-SDRs report USB serial strings like `stx:1090:0` and `stx:978:0` (as seen in `lsusb -v`).
+- Use the exact string reported by your dongle when passing `dump1090-fa --device-type soapy --device driver=rtlsdr,serial=<serial>` or `dump978-fa --sdr driver=rtlsdr,serial=<serial>`.
 
 Wi‑Fi AP configuration is initially handled on the host (systemd + hostapd/dnsmasq or NetworkManager), to keep hardware/network control robust and simple on Raspberry Pi.
 
-## Development (Raspberry Pi 5 + VS Code)
+## Development (Raspberry Pi 3/4/5 + VS Code)
 
 You can develop without SDR/GPS/AHRS hardware using the built-in simulator:
 
@@ -104,6 +126,68 @@ Then:
 - Bring up the Wi‑Fi AP (see [docs/wifi-ap-hostapd-dnsmasq.md](docs/wifi-ap-hostapd-dnsmasq.md))
 - Connect your tablet/phone (EFB device) to the Pi Wi‑Fi
 
+### Installing decoders (Raspberry Pi OS trixie, arm64)
+
+Stratux-NG can either:
+- **Supervise decoders itself** (recommended for development; simplest: one process), or
+- **Connect to external decoders** (if you run `dump1090-fa` / `dump978-fa` as separate systemd services)
+
+This repo targets **Raspberry Pi OS 64-bit (arm64)** on **Pi 3/4/5**.
+Quick check: `uname -m` should print `aarch64`.
+
+1) Install SDR + build dependencies:
+
+```
+sudo apt update
+sudo apt install -y git build-essential cmake pkg-config \
+  libusb-1.0-0-dev zlib1g-dev libncurses-dev \
+  libboost-all-dev rtl-sdr soapysdr-tools soapysdr-module-rtlsdr libsoapysdr-dev
+```
+
+2) Prevent “device busy” (DVB driver grabbing RTL-SDR dongles):
+
+```
+echo 'blacklist dvb_usb_rtl28xxu' | sudo tee /etc/modprobe.d/rtl-sdr-blacklist.conf
+sudo reboot
+```
+
+3) Build/install FlightAware `dump1090-fa` (1090):
+
+```
+cd ~
+git clone https://github.com/flightaware/dump1090.git
+cd dump1090
+make -j"$(nproc)"
+
+# Install with a stable name used by the default config.yaml:
+sudo install -m 755 dump1090 /usr/local/bin/dump1090-fa
+```
+
+4) Build/install FlightAware `dump978` (build target: `dump978-fa`):
+
+```
+cd ~
+git clone https://github.com/flightaware/dump978.git
+cd dump978
+make -j"$(nproc)" dump978-fa
+
+# dump978 does not currently ship a "make install" target; install the binary manually:
+sudo install -m 755 dump978-fa /usr/local/bin/dump978-fa
+```
+
+5) Validate decoder output paths/ports (defaults used by [config.yaml](config.yaml)):
+
+```
+# 1090 aircraft.json (dump1090-fa)
+# Note: this file only exists after dump1090-fa is running.
+# If you're using the provided systemd unit, systemd creates /run/dump1090-fa via RuntimeDirectory.
+ls -l /run/dump1090-fa/aircraft.json
+head /run/dump1090-fa/aircraft.json
+
+# 978 JSON/NDJSON
+nc 127.0.0.1 30978 | head
+```
+
 ### Appliance / SD image build checklist
 
 When you move from development (`go run ...`) to a flashable SD image, these are the practical “make it work every boot” steps:
@@ -124,6 +208,10 @@ When you move from development (`go run ...`) to a flashable SD image, these are
   - Set up AP services per: [docs/wifi-ap-hostapd-dnsmasq.md](docs/wifi-ap-hostapd-dnsmasq.md)
 - Port binding
   - If you want `web.listen: :80`, use capabilities (or systemd `AmbientCapabilities`) rather than running everything as root
+
+For pi-gen image planning and what to bake into the SD image, see:
+
+- [docs/pi-gen.md](docs/pi-gen.md)
 
 ### Record / replay (GDL90 output frames)
 
@@ -159,11 +247,11 @@ Log format (written by record mode):
 - First line: `START`
 - Then one frame per line: `<t_ns>,<hex>` where `t_ns` is nanoseconds since START and `<hex>` is the raw framed UDP payload.
 
-## Prerequisites (planned)
+## Prerequisites
 
-- **Target OS:** Raspberry Pi OS 64-bit (arm64)
+- **Target OS:** Raspberry Pi OS 64-bit (arm64). Current dev target: **Pi OS trixie**.
 - **Tooling:** Go toolchain (**Go 1.22+**), plus typical Pi utilities for networking/AP setup
-- **Decoders (optional):** `readsb` (1090) and `dump978` (978) treated as external processes/data sources
+- **Decoders (optional):** FlightAware `dump1090-fa` (1090) and `dump978-fa`/`dump978` (978)
 
 ### Code quality (development)
 
@@ -356,7 +444,7 @@ Per-app connection steps will be documented once defaults (UDP port/broadcast be
 ### Current defaults (Stratux-NG)
 
 - GDL90 UDP destination is configured via `gdl90.dest` in YAML.
-- `config.yaml` defaults to broadcast: `192.168.10.255:4000`
+- `config.yaml` in this repo defaults to broadcast: `192.168.1.255:4000` (adjust for your subnet)
 - Message transport: UDP, framed GDL90 (with CRC + byte-stuffing)
 
 Notes:
@@ -396,14 +484,14 @@ Stratux-NG supports both:
 - **Web UI** for interactive changes (note: `web.listen` is configured before startup, not via the Web UI)
 
 ## Roadmap (initial milestones)
-- [ ] Core Go service skeleton + config
-- [ ] GDL90 encoder + UDP broadcaster
-- [ ] Simulator input (ownship + traffic)
-- [ ] HTTP API + minimal UI
-- [ ] Process supervisor scaffolding for `readsb` / `dump978`
-- [ ] Record/replay mode for decoder feeds (and/or importers) for repeatable testing
+- [x] Core Go service skeleton + config
+- [x] GDL90 encoder + UDP broadcaster
+- [x] Simulator input (ownship + traffic)
+- [x] HTTP API + minimal UI
+- [x] Process supervision + stream reconnect for `dump1090-fa` / `dump978-fa`
+- [x] Record/replay mode for *GDL90 output frames* (repeatable EFB testing)
 - [ ] Raspberry Pi image build pipeline (pi-gen or equivalent)
-- [ ] Hardware integration: SDR 1090, SDR 978, GPS, AHRS
+- [x] Hardware integration: SDR 1090, SDR 978, GPS, AHRS
 
 ## Contributing
 

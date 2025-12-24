@@ -106,3 +106,18 @@ func OwnshipGeometricAltitudeFrame(altFeetMSL int) []byte {
 	msg[4] = 0x0A
 	return Frame(msg)
 }
+
+// UATUplinkFrame builds and frames a GDL90 Uplink Data message (0x07).
+//
+// Stratux relays dump978 uplink frames (432 bytes) using message ID 0x07,
+// followed by a 3-byte time field (currently set to 0), then the raw payload.
+//
+// Many EFBs (including Garmin Pilot) consume FIS-B weather via these relayed
+// uplink messages.
+func UATUplinkFrame(uplinkPayload []byte) []byte {
+	msg := make([]byte, 0, 1+3+len(uplinkPayload))
+	msg = append(msg, 0x07)
+	msg = append(msg, 0x00, 0x00, 0x00)
+	msg = append(msg, uplinkPayload...)
+	return Frame(msg)
+}

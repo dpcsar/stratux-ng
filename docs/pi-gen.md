@@ -1,0 +1,134 @@
+# pi-gen image plan (Stratux-NG)
+
+This project will eventually ship as a flashable Raspberry Pi OS image built with **pi-gen**.
+
+Target platform policy:
+- Raspberry Pi OS **64-bit (arm64)** on **Pi 3 / 4 / 5**.
+- Verify on-device with: `uname -m` → `aarch64`.
+
+The goal is to keep the runtime behavior identical between:
+- **Dev mode** (`go run` / `make run`)
+- **Appliance mode** (systemd service on a prebuilt SD image)
+
+Stratux-NG is designed so the same YAML config drives both.
+
+## Development workflow (fast iteration)
+
+### 1) Run with simulation only
+
+- `make run` (uses `CONFIG=./config.yaml` by default)
+- Or: `STRATUX_NG_CONFIG=./config.yaml go run ./cmd/stratux-ng`
+
+This path does not require SDRs, GPS, or AHRS.
+
+### 2) Run with real decoders (1090 + 978)
+
+Stratux-NG can supervise decoders itself (recommended).
+
+- Enable `adsb1090.enable: true` and `uat978.enable: true` in your config.
+- Confirm your SDR serial tags (e.g. `stx:1090:0`, `stx:978:0`) match `lsusb -v`.
+
+Typical decoder command lines (examples; adjust for your install):
+- 1090 (FlightAware `dump1090-fa`): `--device-type rtlsdr --device stx:1090:0 --write-json /run/dump1090-fa --write-json-every 1`
+- 978 traffic (`dump978-fa`): `--sdr driver=rtlsdr,serial=stx:978:0 --json-port 30978`
+- 978 weather / FIS-B uplinks (`dump978-fa`): add `--raw-port 30979`
+
+Notes for 978 weather (FIS-B):
+- Stratux-NG does not “decode products” in the image build; it relays **UAT uplinks** as **GDL90 Uplink (0x07)** frames (Stratux-style).
+- You must enable the raw uplink TCP endpoint in config (`uat978.decoder.raw_listen` or `uat978.decoder.raw_addr`) and run `dump978-fa` with `--raw-port`.
+
+For local development without SDR hardware you can still validate parsing/frames via tests:
+- `go test ./...`
+
+## Image workflow (pi-gen)
+
+### Guiding principles
+
+- Put mutable state under `/data`.
+- Keep config at `/data/stratux-ng/config.yaml`.
+- Run `stratux-ng` under systemd and point it at the persistent config via `STRATUX_NG_CONFIG`.
+
+See persistence guidance: [docs/sd-image-persistence.md](sd-image-persistence.md)
+
+### What the image needs to include
+
+**Binaries**
+- `/usr/local/bin/stratux-ng`
+- Decoder binaries available in PATH (recommended): `dump1090-fa`, `dump978-fa`
+
+**978 FIS-B weather (recommended)**
+- Ensure the image’s default config (or first-boot seeded config) enables the 978 raw uplink endpoint.
+- Ensure the decoder command line enables `--raw-port` and the port is reachable from Stratux-NG (typically localhost).
+
+**RTL-SDR access (recommended)**
+- Ensure the DVB kernel driver does not claim RTL-SDR dongles (common source of “device busy”):
+  - Install a modprobe blacklist file (example content): `blacklist dvb_usb_rtl28xxu`
+- Ensure udev permissions allow the service user to access USB/RTL-SDR devices.
+
+**Systemd**
+- Install and enable the main service: [configs/systemd/stratux-ng.service.example](../configs/systemd/stratux-ng.service.example)
+- Optionally add gpsd ordering drop-in when using gpsd: [configs/systemd/stratux-ng-gpsd.conf.example](../configs/systemd/stratux-ng-gpsd.conf.example)
+
+Optional: run decoders as separate services (instead of Stratux-NG supervising them):
+- [configs/systemd/dump1090-fa.service.example](../configs/systemd/dump1090-fa.service.example)
+- [configs/systemd/dump978-fa.service.example](../configs/systemd/dump978-fa.service.example)
+- [configs/systemd/stratux-ng-decoders.conf.example](../configs/systemd/stratux-ng-decoders.conf.example)
+
+**Persistent data**
+- Ensure `/data` exists (either a separate partition, or a directory on rootfs for early prototypes).
+- Ensure `/data/stratux-ng/config.yaml` exists on first boot (seed from the repo’s `config.yaml` or an image-specific default).
+
+**Udev rules (recommended)**
+- GPS stable symlink: `configs/udev/99-stratux-gps.rules.example` → `/etc/udev/rules.d/99-stratux-gps.rules`
+
+**Wi-Fi AP**
+- Bring-up is currently done via host configuration (systemd + hostapd/dnsmasq).
+- See: [docs/wifi-ap-hostapd-dnsmasq.md](wifi-ap-hostapd-dnsmasq.md)
+
+### Suggested pi-gen structure
+
+Create a separate repo (or sibling folder) that contains pi-gen with a custom stage, for example:
+
+- `stage2+` base Raspberry Pi OS (arm64)
+- `stage-stratux-ng/01-packages/00-packages`:
+  - `hostapd`, `dnsmasq`, `iw`, `rfkill`
+  - `gpsd` + `gpsd-clients` (optional)
+  - SDR dependencies:
+    - `rtl-sdr` (or at least `librtlsdr0` + udev rules)
+    - `soapysdr-tools`, `soapysdr-module-rtlsdr`, `libsoapysdr-dev` (for `dump978-fa` using `--sdr driver=rtlsdr,...`)
+    - build deps: `git`, `build-essential`, `cmake`, `pkg-config`, `libusb-1.0-0-dev`, `zlib1g-dev`
+    - dump978 deps: `libboost-all-dev`
+
+- `stage-stratux-ng/01-packages/01-run.sh` (recommended):
+  - Build and install FlightAware `dump1090` and install it as `dump1090-fa`:
+    - `git clone https://github.com/flightaware/dump1090.git`
+    - `make -j$(nproc)`
+    - `install -m 755 dump1090 /usr/local/bin/dump1090-fa`
+  - Build and install FlightAware `dump978` (and provide a `dump978-fa` alias if needed):
+    - `git clone https://github.com/flightaware/dump978.git`
+    - `make -j$(nproc) dump978-fa`
+    - `install -m 755 dump978-fa /usr/local/bin/dump978-fa`
+
+- `stage-stratux-ng/02-files/`:
+  - copy `stratux-ng` binary → `/usr/local/bin/stratux-ng`
+  - copy `config.yaml` → `/data/stratux-ng/config.yaml` (or `/etc/stratux-ng/config.yaml` then copy-on-first-boot)
+  - copy systemd units and enable them
+  - copy udev rule examples as real rules
+
+### Acceptance checklist for the image
+
+On a fresh flashed SD card:
+- `systemctl status stratux-ng` is active
+- Web UI responds on the configured listen addr
+- `/api/status` shows `adsb1090` and `uat978` stream status when enabled
+- EFB sees GDL90 traffic
+- When 978 raw uplinks are enabled, EFB can receive weather (FIS-B) via GDL90 uplink relay
+
+## Recommendation: keep supervision inside Stratux-NG
+
+You *can* run `dump1090-fa` and `dump978-fa` as separate systemd units, but Stratux-NG already includes a supervisor and stream reconnect.
+
+Keeping decoder supervision inside Stratux-NG means:
+- fewer units to manage,
+- consistent logging/health snapshots in `/api/status`,
+- simpler pi-gen stage (install packages + one service).

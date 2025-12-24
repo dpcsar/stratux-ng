@@ -1,0 +1,14 @@
+# Optional systemd drop-in for stratux-ng to order against external decoder services.
+#
+# Use this only if you run dump1090-fa/dump978-fa as separate systemd services.
+#
+# Install (example):
+#   sudo mkdir -p /etc/systemd/system/stratux-ng.service.d
+#   sudo install -m 644 configs/systemd/stratux-ng-decoders.conf.example \
+#     /etc/systemd/system/stratux-ng.service.d/20-decoders.conf
+#   sudo systemctl daemon-reload
+#   sudo systemctl restart stratux-ng
+
+[Unit]
+Wants=dump1090-fa.service dump978-fa.service
+After=dump1090-fa.service dump978-fa.service

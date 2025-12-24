@@ -1,0 +1,4 @@
+{"address":"ABC123","position":{"lat":45.7000,"lon":-122.9000},"geometric_altitude":4300,"ground_speed":121.6,"true_track":181.0,"callsign":"N54321"}
+{"address":"DEF456","position":{"lat":45.7100,"lon":-122.9100},"pressure_altitude":5100,"airground_state":"ground"}
+{"address":"","position":{"lat":0,"lon":0}}
+not-json

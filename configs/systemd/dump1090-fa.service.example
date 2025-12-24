@@ -1,0 +1,41 @@
+# Example systemd unit for dump1090-fa (1090 ADS-B / Mode S).
+#
+# This is OPTIONAL. Stratux-NG can also supervise dump1090-fa directly via config.yaml.
+# Use this unit if you prefer to run decoders as separate services.
+#
+# Install (example):
+#   sudo install -m 644 configs/systemd/dump1090-fa.service.example /etc/systemd/system/dump1090-fa.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now dump1090-fa
+#
+# Notes:
+# - Writes aircraft.json to /run/dump1090-fa (RAM-backed on most distros).
+# - If using this unit, configure Stratux-NG to poll json_file and do NOT run the decoder itself:
+#     adsb1090.enable: true
+#     adsb1090.decoder.command: ""                 # empty
+#     adsb1090.decoder.json_file: /run/dump1090-fa/aircraft.json
+#     adsb1090.decoder.json_file_interval: 1s
+
+[Unit]
+Description=dump1090-fa (1090 ADS-B decoder)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/dump1090-fa \
+  --device-type soapy \
+  --device driver=rtlsdr,serial=stx:1090:0 \
+  --write-json /run/dump1090-fa \
+  --write-json-every 1
+Restart=on-failure
+RestartSec=1
+
+RuntimeDirectory=dump1090-fa
+RuntimeDirectoryMode=0755
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

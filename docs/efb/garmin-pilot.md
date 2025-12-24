@@ -29,6 +29,17 @@ These are the same high-level steps on both platforms. Platform-specific notes a
 3) In Garmin Pilot, locate the **device/receiver** settings section and select an **external ADS‑B / GDL90 / Stratux-style** source if available.
 4) Confirm status indicators show an external source connected and traffic/GPS data present.
 
+### Weather (FIS-B) note
+
+Stratux-NG relays **978 UAT uplinks** (FIS-B weather) the same way Stratux does: as **GDL90 Uplink (message `0x07`)** frames.
+
+To enable weather relay, your 978 decoder should provide a raw uplink TCP stream:
+
+- Run `dump978-fa` with `--raw-port <port>` (in addition to `--json-port <port>` for traffic).
+- Configure the `uat978` decoder with either `raw_listen: <host:port>` or `raw_addr: <host:port>`.
+
+If traffic works but weather does not, the most common cause is that `--raw-port` is not enabled or the `raw_*` endpoint isn’t configured.
+
 ### iOS notes
 
 - If prompted, allow **Local Network** access for Garmin Pilot.
@@ -50,3 +61,11 @@ These are the same high-level steps on both platforms. Platform-specific notes a
 - Use listen mode to confirm packets are arriving on the expected port.
 - On home Wi‑Fi, prefer unicast; some networks block broadcast.
 - If Garmin Pilot only supports a specific receiver type on your platform, tell me what choices it presents and I’ll map Stratux-NG to the closest supported option.
+
+### Quick validation checklist
+
+- Confirm `dump978-fa` is running and listening on both ports:
+	- JSON/NDJSON port (traffic ingest)
+	- raw port (uplink/weather relay)
+- Confirm Stratux-NG status shows the 978 raw stream connected (see the web status page / status API).
+- Confirm Garmin Pilot shows an external receiver connected and has time to download products (FIS-B weather can lag behind traffic).

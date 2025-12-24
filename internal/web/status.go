@@ -4,6 +4,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"stratux-ng/internal/decoder"
 	"stratux-ng/internal/fancontrol"
 	"stratux-ng/internal/gps"
 )
@@ -20,6 +21,8 @@ type Status struct {
 	fan           atomic.Value // fancontrol.Snapshot
 	gps           atomic.Value // gps.Snapshot
 	traffic       atomic.Value // []TrafficSnapshot
+	adsb1090      atomic.Value // DecoderStatusSnapshot
+	uat978        atomic.Value // DecoderStatusSnapshot
 }
 
 func NewStatus() *Status {
@@ -35,7 +38,40 @@ func NewStatus() *Status {
 	s.fan.Store(fancontrol.Snapshot{})
 	s.gps.Store(gps.Snapshot{Enabled: false})
 	s.traffic.Store([]TrafficSnapshot{})
+	s.adsb1090.Store(DecoderStatusSnapshot{Enabled: false})
+	s.uat978.Store(DecoderStatusSnapshot{Enabled: false})
 	return s
+}
+
+// DecoderStatusSnapshot is a UI-friendly view of an external decoder ingest path.
+//
+// This is intended for bring-up and debugging.
+type DecoderStatusSnapshot struct {
+	Enabled      bool   `json:"enabled"`
+	SerialTag    string `json:"serial_tag,omitempty"`
+	Command      string `json:"command,omitempty"`
+	JSONEndpoint string `json:"json_endpoint,omitempty"`
+	RawEndpoint  string `json:"raw_endpoint,omitempty"`
+	JSONFile     string `json:"json_file,omitempty"`
+
+	Supervisor decoder.Snapshot         `json:"supervisor"`
+	Stream     *decoder.NDJSONSnapshot   `json:"stream,omitempty"`
+	RawStream  *decoder.LineSnapshot     `json:"raw_stream,omitempty"`
+	File       *decoder.JSONFileSnapshot `json:"file,omitempty"`
+}
+
+func (s *Status) SetADSB1090Decoder(_ time.Time, snap DecoderStatusSnapshot) {
+	if s == nil {
+		return
+	}
+	s.adsb1090.Store(snap)
+}
+
+func (s *Status) SetUAT978Decoder(_ time.Time, snap DecoderStatusSnapshot) {
+	if s == nil {
+		return
+	}
+	s.uat978.Store(snap)
 }
 
 func (s *Status) SetGPS(_ time.Time, snap gps.Snapshot) {
@@ -190,6 +226,8 @@ type StatusSnapshot struct {
 	Fan             fancontrol.Snapshot `json:"fan"`
 	GPS             gps.Snapshot        `json:"gps"`
 	Traffic         []TrafficSnapshot   `json:"traffic"`
+	ADSB1090        DecoderStatusSnapshot `json:"adsb1090"`
+	UAT978          DecoderStatusSnapshot `json:"uat978"`
 }
 
 func (s *Status) Snapshot(nowUTC time.Time) StatusSnapshot {
@@ -229,6 +267,8 @@ func (s *Status) Snapshot(nowUTC time.Time) StatusSnapshot {
 		Fan:             s.fan.Load().(fancontrol.Snapshot),
 		GPS:             s.gps.Load().(gps.Snapshot),
 		Traffic:         traffic,
+		ADSB1090:        s.adsb1090.Load().(DecoderStatusSnapshot),
+		UAT978:          s.uat978.Load().(DecoderStatusSnapshot),
 	}
 	if lastTick != 0 {
 		snap.LastTickUTC = time.Unix(0, lastTick).UTC().Format(time.RFC3339Nano)

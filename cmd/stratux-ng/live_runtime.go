@@ -2,16 +2,22 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"stratux-ng/internal/ahrs"
 	"stratux-ng/internal/config"
+	"stratux-ng/internal/decoder"
 	"stratux-ng/internal/fancontrol"
 	"stratux-ng/internal/gps"
+	"stratux-ng/internal/gdl90"
 	"stratux-ng/internal/udp"
+	"stratux-ng/internal/traffic"
 	"stratux-ng/internal/web"
 )
 
@@ -23,9 +29,66 @@ type liveRuntime struct {
 	gpsSvc             *gps.Service
 	fanSvc             *fancontrol.Service
 
+	adsb1090Sup    *decoder.Supervisor
+	uat978Sup      *decoder.Supervisor
+	adsb1090File   *decoder.JSONFilePoller
+	uat978Stream   *decoder.NDJSONClient
+	uat978Raw      *decoder.LineClient
+	uat978UplinkQ  chan []byte
+
+	trafficStore *traffic.Store
+
 	cfg      config.Config
 	scenario scenarioRuntime
 	ticker   *time.Ticker
+}
+
+func decoderBandEqual(a, b config.DecoderBandConfig) bool {
+	if a.Enable != b.Enable {
+		return false
+	}
+	if strings.TrimSpace(a.Decoder.Command) != strings.TrimSpace(b.Decoder.Command) {
+		return false
+	}
+	if strings.TrimSpace(a.Decoder.JSONListen) != strings.TrimSpace(b.Decoder.JSONListen) {
+		return false
+	}
+	if strings.TrimSpace(a.Decoder.JSONAddr) != strings.TrimSpace(b.Decoder.JSONAddr) {
+		return false
+	}
+	if strings.TrimSpace(a.Decoder.JSONFile) != strings.TrimSpace(b.Decoder.JSONFile) {
+		return false
+	}
+	if strings.TrimSpace(a.Decoder.RawListen) != strings.TrimSpace(b.Decoder.RawListen) {
+		return false
+	}
+	if strings.TrimSpace(a.Decoder.RawAddr) != strings.TrimSpace(b.Decoder.RawAddr) {
+		return false
+	}
+	if a.Decoder.JSONFileInterval != b.Decoder.JSONFileInterval {
+		return false
+	}
+	if strings.TrimSpace(a.SDR.SerialTag) != strings.TrimSpace(b.SDR.SerialTag) {
+		return false
+	}
+	if strings.TrimSpace(a.SDR.Path) != strings.TrimSpace(b.SDR.Path) {
+		return false
+	}
+	if (a.SDR.Index == nil) != (b.SDR.Index == nil) {
+		return false
+	}
+	if a.SDR.Index != nil && b.SDR.Index != nil && *a.SDR.Index != *b.SDR.Index {
+		return false
+	}
+	if len(a.Decoder.Args) != len(b.Decoder.Args) {
+		return false
+	}
+	for i := range a.Decoder.Args {
+		if a.Decoder.Args[i] != b.Decoder.Args[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func newLiveRuntime(ctx context.Context, cfg config.Config, resolvedConfigPath string, status *web.Status, sender *safeBroadcaster) (*liveRuntime, error) {
@@ -84,6 +147,15 @@ func newLiveRuntime(ctx context.Context, cfg config.Config, resolvedConfigPath s
 		scenario:           sc,
 		ticker:             t,
 		ahrsSvc:            ahrsSvc,
+		uat978UplinkQ:      make(chan []byte, 512),
+		trafficStore:       traffic.NewStore(traffic.StoreConfig{MaxTargets: 200, TTL: 30 * time.Second}),
+	}
+
+	// Optional: external decoders (1090/dump1090-fa, 978/dump978-fa).
+	// Start supervised processes (if configured) and attach NDJSON clients.
+	if err := r.initDecoders(ctx); err != nil {
+		r.Close()
+		return nil, err
 	}
 
 	// Optional: real GPS bring-up (USB serial NMEA).
@@ -124,6 +196,185 @@ func newLiveRuntime(ctx context.Context, cfg config.Config, resolvedConfigPath s
 	return r, nil
 }
 
+func (r *liveRuntime) initDecoders(ctx context.Context) error {
+	if r == nil {
+		return fmt.Errorf("runtime is nil")
+	}
+	// 1090
+	if r.cfg.ADSB1090.Enable {
+		band := r.cfg.ADSB1090
+		jsonFile := strings.TrimSpace(band.Decoder.JSONFile)
+		if jsonFile == "" {
+			return fmt.Errorf("adsb1090.decoder.json_file is required")
+		}
+		log.Printf("adsb1090 enabled json_file=%s interval=%s", jsonFile, band.Decoder.JSONFileInterval)
+		if cmd := strings.TrimSpace(band.Decoder.Command); cmd != "" {
+			log.Printf("adsb1090 supervising decoder cmd=%s args=%q", cmd, band.Decoder.Args)
+			// If we're supervising dump1090-fa and asking it to write under jsonFile,
+			// ensure the directory exists (common path: /run/dump1090-fa).
+			if dir := filepath.Dir(jsonFile); dir != "" && dir != "." {
+				if err := os.MkdirAll(dir, 0o755); err != nil {
+					return fmt.Errorf("adsb1090.decoder.json_file directory: %w", err)
+				}
+			}
+			sup, err := decoder.NewSupervisor(decoder.SupervisorConfig{
+				Name:    "adsb1090",
+				Command: cmd,
+				Args:    band.Decoder.Args,
+				Restart: true,
+			})
+			if err != nil {
+				return fmt.Errorf("adsb1090 supervisor: %w", err)
+			}
+			if err := sup.Start(ctx); err != nil {
+				return fmt.Errorf("adsb1090 supervisor start: %w", err)
+			}
+			r.adsb1090Sup = sup
+			go func() {
+				// Give the child process a moment to start and emit errors.
+				time.Sleep(2 * time.Second)
+				snap := sup.Snapshot()
+				if snap.Running {
+					log.Printf("adsb1090 decoder running pid=%d", snap.PID)
+					return
+				}
+				log.Printf("adsb1090 decoder not running state=%s last_error=%s", snap.State, snap.LastError)
+				if len(snap.Stderr) > 0 {
+					log.Printf("adsb1090 decoder stderr tail:\n%s", strings.Join(snap.Stderr, "\n"))
+				}
+			}()
+		}
+		poller, err := decoder.NewJSONFilePoller(decoder.JSONFilePollerConfig{
+			Name:     "adsb1090",
+			Path:     jsonFile,
+			Interval: band.Decoder.JSONFileInterval,
+		})
+		if err != nil {
+			return fmt.Errorf("adsb1090 jsonfile: %w", err)
+		}
+		if err := poller.Start(ctx, func(raw json.RawMessage) error {
+			// Keep the poller healthy: never return errors for parse issues.
+			targets := traffic.ParseDump1090FAAircraftJSON(raw)
+			if len(targets) > 0 && r.trafficStore != nil {
+				r.trafficStore.UpsertMany(time.Now().UTC(), targets)
+			}
+			return nil
+		}); err != nil {
+			return fmt.Errorf("adsb1090 jsonfile start: %w", err)
+		}
+		r.adsb1090File = poller
+		go func() {
+			time.Sleep(2 * time.Second)
+			snap := poller.Snapshot(time.Now().UTC())
+			if snap.State == "error" {
+				log.Printf("adsb1090 jsonfile poller error path=%s err=%s", snap.Path, snap.LastError)
+			}
+		}()
+	}
+
+	// 978
+	if r.cfg.UAT978.Enable {
+		band := r.cfg.UAT978
+		endpoint := strings.TrimSpace(band.Decoder.JSONAddr)
+		if endpoint == "" {
+			endpoint = strings.TrimSpace(band.Decoder.JSONListen)
+		}
+		rawEndpoint := strings.TrimSpace(band.Decoder.RawAddr)
+		if rawEndpoint == "" {
+			rawEndpoint = strings.TrimSpace(band.Decoder.RawListen)
+		}
+		log.Printf("uat978 enabled json_endpoint=%s raw_endpoint=%s", endpoint, rawEndpoint)
+		if cmd := strings.TrimSpace(band.Decoder.Command); cmd != "" {
+			log.Printf("uat978 supervising decoder cmd=%s args=%q", cmd, band.Decoder.Args)
+			sup, err := decoder.NewSupervisor(decoder.SupervisorConfig{
+				Name:    "uat978",
+				Command: cmd,
+				Args:    band.Decoder.Args,
+				Restart: true,
+			})
+			if err != nil {
+				return fmt.Errorf("uat978 supervisor: %w", err)
+			}
+			if err := sup.Start(ctx); err != nil {
+				return fmt.Errorf("uat978 supervisor start: %w", err)
+			}
+			r.uat978Sup = sup
+			go func() {
+				time.Sleep(2 * time.Second)
+				snap := sup.Snapshot()
+				if snap.Running {
+					log.Printf("uat978 decoder running pid=%d", snap.PID)
+					return
+				}
+				log.Printf("uat978 decoder not running state=%s last_error=%s", snap.State, snap.LastError)
+				if len(snap.Stderr) > 0 {
+					log.Printf("uat978 decoder stderr tail:\n%s", strings.Join(snap.Stderr, "\n"))
+				}
+			}()
+		}
+		if endpoint != "" {
+			client, err := decoder.NewNDJSONClient(decoder.NDJSONClientConfig{
+				Name: "uat978",
+				Addr: endpoint,
+			})
+			if err != nil {
+				return fmt.Errorf("uat978 ndjson: %w", err)
+			}
+			if err := client.Start(ctx, func(raw json.RawMessage) error {
+				// Keep the stream healthy: never return errors for parse issues.
+				targets := traffic.ParseDump978NDJSON(raw)
+				if len(targets) > 0 && r.trafficStore != nil {
+					r.trafficStore.UpsertMany(time.Now().UTC(), targets)
+				}
+				return nil
+			}); err != nil {
+				return fmt.Errorf("uat978 ndjson start: %w", err)
+			}
+			r.uat978Stream = client
+			go func() {
+				time.Sleep(2 * time.Second)
+				snap := client.Snapshot(time.Now().UTC())
+				if snap.State != "connected" {
+					log.Printf("uat978 ndjson state=%s addr=%s last_error=%s", snap.State, snap.Addr, snap.LastError)
+				}
+			}()
+		}
+		if rawEndpoint != "" {
+			lc, err := decoder.NewLineClient(decoder.LineClientConfig{
+				Name: "uat978-raw",
+				Addr: rawEndpoint,
+			})
+			if err != nil {
+				return fmt.Errorf("uat978 raw: %w", err)
+			}
+			if err := lc.Start(ctx, func(line []byte) error {
+				payload, ok := traffic.ParseDump978RawUplinkLine(line)
+				if !ok {
+					return nil
+				}
+				frame := gdl90.UATUplinkFrame(payload)
+				select {
+				case r.uat978UplinkQ <- frame:
+				default:
+				}
+				return nil
+			}); err != nil {
+				return fmt.Errorf("uat978 raw start: %w", err)
+			}
+			r.uat978Raw = lc
+			go func() {
+				time.Sleep(2 * time.Second)
+				snap := lc.Snapshot(time.Now().UTC())
+				if snap.State != "connected" {
+					log.Printf("uat978 raw state=%s addr=%s last_error=%s", snap.State, snap.Addr, snap.LastError)
+				}
+			}()
+		}
+	}
+
+	return nil
+}
+
 func (r *liveRuntime) Close() {
 	if r == nil {
 		return
@@ -140,10 +391,120 @@ func (r *liveRuntime) Close() {
 		r.fanSvc.Close()
 		r.fanSvc = nil
 	}
+	if r.adsb1090File != nil {
+		r.adsb1090File.Close()
+		r.adsb1090File = nil
+	}
+	if r.uat978Stream != nil {
+		r.uat978Stream.Close()
+		r.uat978Stream = nil
+	}
+	if r.uat978Raw != nil {
+		r.uat978Raw.Close()
+		r.uat978Raw = nil
+	}
+	if r.adsb1090Sup != nil {
+		r.adsb1090Sup.Close()
+		r.adsb1090Sup = nil
+	}
+	if r.uat978Sup != nil {
+		r.uat978Sup.Close()
+		r.uat978Sup = nil
+	}
 	if r.ticker != nil {
 		r.ticker.Stop()
 		r.ticker = nil
 	}
+}
+
+func (r *liveRuntime) TrafficTargets(nowUTC time.Time) []gdl90.Traffic {
+	if r == nil || r.trafficStore == nil {
+		return nil
+	}
+	return r.trafficStore.Snapshot(nowUTC)
+}
+
+func (r *liveRuntime) ADSB1090DecoderSnapshot(nowUTC time.Time) (web.DecoderStatusSnapshot, bool) {
+	if r == nil {
+		return web.DecoderStatusSnapshot{}, false
+	}
+	cur := r.cfg.ADSB1090
+	if !cur.Enable {
+		return web.DecoderStatusSnapshot{Enabled: false}, true
+	}
+	jsonFile := strings.TrimSpace(cur.Decoder.JSONFile)
+	snap := web.DecoderStatusSnapshot{
+		Enabled:      true,
+		SerialTag:    strings.TrimSpace(cur.SDR.SerialTag),
+		Command:      strings.TrimSpace(cur.Decoder.Command),
+		JSONFile:     jsonFile,
+	}
+	if r.adsb1090Sup != nil {
+		snap.Supervisor = r.adsb1090Sup.Snapshot()
+	}
+	if r.adsb1090File != nil {
+		fs := r.adsb1090File.Snapshot(nowUTC)
+		snap.File = &fs
+	}
+	return snap, true
+}
+
+func (r *liveRuntime) UAT978DecoderSnapshot(nowUTC time.Time) (web.DecoderStatusSnapshot, bool) {
+	if r == nil {
+		return web.DecoderStatusSnapshot{}, false
+	}
+	cur := r.cfg.UAT978
+	if !cur.Enable {
+		return web.DecoderStatusSnapshot{Enabled: false}, true
+	}
+	ep := strings.TrimSpace(cur.Decoder.JSONAddr)
+	if ep == "" {
+		ep = strings.TrimSpace(cur.Decoder.JSONListen)
+	}
+	rawEP := strings.TrimSpace(cur.Decoder.RawAddr)
+	if rawEP == "" {
+		rawEP = strings.TrimSpace(cur.Decoder.RawListen)
+	}
+	snap := web.DecoderStatusSnapshot{
+		Enabled:      true,
+		SerialTag:    strings.TrimSpace(cur.SDR.SerialTag),
+		Command:      strings.TrimSpace(cur.Decoder.Command),
+		JSONEndpoint: ep,
+		RawEndpoint:  rawEP,
+	}
+	if r.uat978Sup != nil {
+		snap.Supervisor = r.uat978Sup.Snapshot()
+	}
+	if r.uat978Stream != nil {
+		st := r.uat978Stream.Snapshot(nowUTC)
+		snap.Stream = &st
+	}
+	if r.uat978Raw != nil {
+		rs := r.uat978Raw.Snapshot(nowUTC)
+		snap.RawStream = &rs
+	}
+	return snap, true
+}
+
+func (r *liveRuntime) DrainUAT978UplinkFrames(max int) [][]byte {
+	if r == nil || r.uat978UplinkQ == nil {
+		return nil
+	}
+	if max <= 0 {
+		max = 1
+	}
+	out := make([][]byte, 0, max)
+	for i := 0; i < max; i++ {
+		select {
+		case f := <-r.uat978UplinkQ:
+			if len(f) > 0 {
+				out = append(out, f)
+			}
+		default:
+			return out
+		}
+	}
+	return out
 }
 
 func (r *liveRuntime) FanSnapshot() (fancontrol.Snapshot, bool) {
@@ -251,6 +612,12 @@ func (r *liveRuntime) Apply(next config.Config) error {
 	}
 	if c.Fan.Enable != r.cfg.Fan.Enable || c.Fan.PWMPin != r.cfg.Fan.PWMPin || c.Fan.PWMFrequency != r.cfg.Fan.PWMFrequency || c.Fan.TempTargetC != r.cfg.Fan.TempTargetC || c.Fan.PWMDutyMin != r.cfg.Fan.PWMDutyMin || c.Fan.UpdateInterval != r.cfg.Fan.UpdateInterval {
 		return fmt.Errorf("fan settings require restart")
+	}
+	if !decoderBandEqual(c.ADSB1090, r.cfg.ADSB1090) {
+		return fmt.Errorf("adsb1090 settings require restart")
+	}
+	if !decoderBandEqual(c.UAT978, r.cfg.UAT978) {
+		return fmt.Errorf("uat978 settings require restart")
 	}
 
 	// Pre-validate side effects before committing anything.

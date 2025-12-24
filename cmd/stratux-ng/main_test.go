@@ -290,7 +290,7 @@ func TestBuildGDL90FramesWithGPS_OwnshipVerticalSpeedFromGPS(t *testing.T) {
 		LastFixUTC:   now.UTC().Format(time.RFC3339Nano),
 	}
 
-	frames := buildGDL90FramesWithGPS(cfg, now, false, ahrs.Snapshot{}, true, gpsSnap, &headingFuser{})
+	frames := buildGDL90FramesWithGPS(cfg, now, false, ahrs.Snapshot{}, true, gpsSnap, &headingFuser{}, nil)
 	var ownshipMsg []byte
 	for _, f := range frames {
 		msg := unframeForMsg(t, f)
@@ -348,7 +348,7 @@ func TestBuildGDL90FramesWithGPS_OwnshipVerticalSpeedNegativeFromGPS(t *testing.
 		LastFixUTC:   now.UTC().Format(time.RFC3339Nano),
 	}
 
-	frames := buildGDL90FramesWithGPS(cfg, now, false, ahrs.Snapshot{}, true, gpsSnap, &headingFuser{})
+	frames := buildGDL90FramesWithGPS(cfg, now, false, ahrs.Snapshot{}, true, gpsSnap, &headingFuser{}, nil)
 	var ownshipMsg []byte
 	for _, f := range frames {
 		msg := unframeForMsg(t, f)
@@ -404,7 +404,7 @@ func TestBuildGDL90FramesWithGPS_OwnshipVerticalSpeedUnknownWhenAbsent(t *testin
 		LastFixUTC: now.UTC().Format(time.RFC3339Nano),
 	}
 
-	frames := buildGDL90FramesWithGPS(cfg, now, false, ahrs.Snapshot{}, true, gpsSnap, &headingFuser{})
+	frames := buildGDL90FramesWithGPS(cfg, now, false, ahrs.Snapshot{}, true, gpsSnap, &headingFuser{}, nil)
 	var ownshipMsg []byte
 	for _, f := range frames {
 		msg := unframeForMsg(t, f)
@@ -463,7 +463,7 @@ func TestBuildGDL90FramesWithGPS_AHRSLEVerticalSpeedFromGPS(t *testing.T) {
 		LastFixUTC:   now.UTC().Format(time.RFC3339Nano),
 	}
 
-	frames := buildGDL90FramesWithGPS(cfg, now, false, ahrs.Snapshot{}, true, gpsSnap, &headingFuser{})
+	frames := buildGDL90FramesWithGPS(cfg, now, false, ahrs.Snapshot{}, true, gpsSnap, &headingFuser{}, nil)
 	var leMsg []byte
 	for _, f := range frames {
 		msg := unframeForMsg(t, f)
@@ -554,7 +554,7 @@ func TestBuildGDL90FramesWithGPS_HeadingUsesYawForShortTurnsAndGPSForAccuracy(t 
 	}
 
 	// Seed: heading should start at GPS track.
-	frames0 := buildGDL90FramesWithGPS(cfg, t0, true, ahrs.Snapshot{Valid: true, YawRateDps: 0}, true, gpsSnap, hf)
+	frames0 := buildGDL90FramesWithGPS(cfg, t0, true, ahrs.Snapshot{Valid: true, YawRateDps: 0}, true, gpsSnap, hf, nil)
 	le0 := findAHRSLERaw(t, frames0)
 	h0 := leHeadingDeg(t, le0)
 	if h0 < 89.9 || h0 > 90.1 {
@@ -564,7 +564,7 @@ func TestBuildGDL90FramesWithGPS_HeadingUsesYawForShortTurnsAndGPSForAccuracy(t 
 	// Short turn: yaw-rate should advance heading quickly even if GPS track is unchanged.
 	t1 := t0.Add(200 * time.Millisecond)
 	gpsSnap.LastFixUTC = t1.UTC().Format(time.RFC3339Nano)
-	frames1 := buildGDL90FramesWithGPS(cfg, t1, true, ahrs.Snapshot{Valid: true, YawRateDps: 30}, true, gpsSnap, hf)
+	frames1 := buildGDL90FramesWithGPS(cfg, t1, true, ahrs.Snapshot{Valid: true, YawRateDps: 30}, true, gpsSnap, hf, nil)
 	le1 := findAHRSLERaw(t, frames1)
 	h1 := leHeadingDeg(t, le1)
 	if h1 <= 92 {
@@ -576,12 +576,12 @@ func TestBuildGDL90FramesWithGPS_HeadingUsesYawForShortTurnsAndGPSForAccuracy(t 
 	for i := 0; i < 10; i++ {
 		now = now.Add(500 * time.Millisecond)
 		gpsSnap.LastFixUTC = now.UTC().Format(time.RFC3339Nano)
-		frames := buildGDL90FramesWithGPS(cfg, now, true, ahrs.Snapshot{Valid: true, YawRateDps: 0}, true, gpsSnap, hf)
+		frames := buildGDL90FramesWithGPS(cfg, now, true, ahrs.Snapshot{Valid: true, YawRateDps: 0}, true, gpsSnap, hf, nil)
 		_ = findAHRSLERaw(t, frames)
 	}
 	now = now.Add(500 * time.Millisecond)
 	gpsSnap.LastFixUTC = now.UTC().Format(time.RFC3339Nano)
-	framesF := buildGDL90FramesWithGPS(cfg, now, true, ahrs.Snapshot{Valid: true, YawRateDps: 0}, true, gpsSnap, hf)
+	framesF := buildGDL90FramesWithGPS(cfg, now, true, ahrs.Snapshot{Valid: true, YawRateDps: 0}, true, gpsSnap, hf, nil)
 	leF := findAHRSLERaw(t, framesF)
 	hF := leHeadingDeg(t, leF)
 	if hF < 88 || hF > 92 {
@@ -627,7 +627,7 @@ func TestBuildGDL90FramesWithGPS_DoesNotCorrectWhenFixModeInvalid(t *testing.T) 
 	}
 
 	hf := &headingFuser{}
-	frames0 := buildGDL90FramesWithGPS(cfg, t0, true, ahrs.Snapshot{Valid: true, YawRateDps: 0}, true, gpsSnap, hf)
+	frames0 := buildGDL90FramesWithGPS(cfg, t0, true, ahrs.Snapshot{Valid: true, YawRateDps: 0}, true, gpsSnap, hf, nil)
 	h0 := leHeadingDeg(t, findAHRSLERaw(t, frames0))
 	if h0 < 89.9 || h0 > 90.1 {
 		t.Fatalf("seed heading=%v want ~90", h0)
@@ -636,7 +636,7 @@ func TestBuildGDL90FramesWithGPS_DoesNotCorrectWhenFixModeInvalid(t *testing.T) 
 	// Turn: yaw moves heading away from GPS track.
 	t1 := t0.Add(200 * time.Millisecond)
 	gpsSnap.LastFixUTC = t1.UTC().Format(time.RFC3339Nano)
-	frames1 := buildGDL90FramesWithGPS(cfg, t1, true, ahrs.Snapshot{Valid: true, YawRateDps: 30}, true, gpsSnap, hf)
+	frames1 := buildGDL90FramesWithGPS(cfg, t1, true, ahrs.Snapshot{Valid: true, YawRateDps: 30}, true, gpsSnap, hf, nil)
 	h1 := leHeadingDeg(t, findAHRSLERaw(t, frames1))
 	if h1 <= 92 {
 		t.Fatalf("turn heading=%v want >92", h1)
@@ -647,10 +647,10 @@ func TestBuildGDL90FramesWithGPS_DoesNotCorrectWhenFixModeInvalid(t *testing.T) 
 	for i := 0; i < 12; i++ {
 		now = now.Add(500 * time.Millisecond)
 		gpsSnap.LastFixUTC = now.UTC().Format(time.RFC3339Nano)
-		frames := buildGDL90FramesWithGPS(cfg, now, true, ahrs.Snapshot{Valid: true, YawRateDps: 0}, true, gpsSnap, hf)
+		frames := buildGDL90FramesWithGPS(cfg, now, true, ahrs.Snapshot{Valid: true, YawRateDps: 0}, true, gpsSnap, hf, nil)
 		_ = findAHRSLERaw(t, frames)
 	}
-	framesF := buildGDL90FramesWithGPS(cfg, now, true, ahrs.Snapshot{Valid: true, YawRateDps: 0}, true, gpsSnap, hf)
+	framesF := buildGDL90FramesWithGPS(cfg, now, true, ahrs.Snapshot{Valid: true, YawRateDps: 0}, true, gpsSnap, hf, nil)
 	hF := leHeadingDeg(t, findAHRSLERaw(t, framesF))
 	if hF < 92 {
 		t.Fatalf("final heading=%v unexpectedly converged toward GPS track", hF)
@@ -693,5 +693,56 @@ func TestHeadingFuser_DoesNotCorrectWhenGPSTrackInvalid(t *testing.T) {
 	h2 := hf.Update(t2, &trk, false, gs, nil)
 	if h2 < h1-0.5 {
 		t.Fatalf("heading corrected unexpectedly: before=%v after=%v", h1, h2)
+	}
+}
+
+func TestBuildGDL90FramesWithGPS_AppendsLiveTrafficWhenSimTrafficDisabled(t *testing.T) {
+	cfg := config.Config{
+		GDL90: config.GDL90Config{Dest: "127.0.0.1:4000", Interval: 1 * time.Second},
+		GPS:   config.GPSConfig{Enable: true, HorizontalAccuracyM: 10},
+		Sim: config.SimConfig{
+			Ownship: config.OwnshipSimConfig{
+				ICAO:     "F00001",
+				Callsign: "STRATUX",
+				AltFeet:   3500,
+			},
+			Traffic: config.TrafficSimConfig{Enable: false},
+		},
+	}
+
+	now := time.Date(2025, 12, 22, 12, 0, 0, 0, time.UTC)
+	alt := 5000
+	gs := 100
+	trk := 270.0
+	gpsSnap := gps.Snapshot{
+		Enabled:    true,
+		Valid:      true,
+		LatDeg:     45.5,
+		LonDeg:     -122.9,
+		AltFeet:    &alt,
+		GroundKt:   &gs,
+		TrackDeg:   &trk,
+		LastFixUTC: now.UTC().Format(time.RFC3339Nano),
+	}
+
+	icaoT, err := gdl90.ParseICAOHex("ABC123")
+	if err != nil {
+		t.Fatalf("test ICAO invalid: %v", err)
+	}
+
+	frames := buildGDL90FramesWithGPS(cfg, now, false, ahrs.Snapshot{}, true, gpsSnap, &headingFuser{}, []gdl90.Traffic{
+		{AddrType: 0x00, ICAO: icaoT, LatDeg: 45.6, LonDeg: -122.8, AltFeet: 4200, NIC: 8, NACp: 8, GroundKt: 120, TrackDeg: 180, VvelFpm: 0, OnGround: false, EmitterCategory: 0x01, Tail: "N12345"},
+	})
+
+	var found bool
+	for _, f := range frames {
+		msg := unframeForMsg(t, f)
+		if len(msg) >= 5 && msg[0] == 0x14 && msg[2] == 0xAB && msg[3] == 0xC1 && msg[4] == 0x23 {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected traffic report for ABC123")
 	}
 }

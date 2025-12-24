@@ -174,6 +174,30 @@ func TestTrafficReportFrameStartsWith14(t *testing.T) {
 	}
 }
 
+func TestTrafficReportFrame_EmptyTailEncodesSpaces(t *testing.T) {
+	msg := unframeAndCheckCRC(t, TrafficReportFrame(Traffic{
+		AddrType:     0x00,
+		ICAO:         [3]byte{0xF1, 0x00, 0x01},
+		LatDeg:       45.0,
+		LonDeg:       -122.0,
+		AltFeet:      4500,
+		NIC:          8,
+		NACp:         8,
+		GroundKt:     120,
+		TrackDeg:     90,
+		VvelFpm:      0,
+		OnGround:     false,
+		Extrapolated: false,
+		Tail:         "",
+	}))
+	if len(msg) != 28 {
+		t.Fatalf("unexpected traffic length: %d", len(msg))
+	}
+	if got := string(msg[19:27]); got != "        " {
+		t.Fatalf("unexpected callsign bytes: got %q want %q", got, "        ")
+	}
+}
+
 func TestOwnshipReportFrame_CallsignAndValidityBits(t *testing.T) {
 	msg := unframeAndCheckCRC(t, OwnshipReportFrame(Ownship{
 		ICAO:     [3]byte{0xAA, 0xBB, 0xCC},

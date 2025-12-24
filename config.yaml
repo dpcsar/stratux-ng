@@ -59,3 +59,50 @@ fan:
     update_interval: 5s
 web:
     listen: :8080
+
+# External decoders
+#
+# Stratux-NG can ingest:
+# - NDJSON-over-TCP (e.g. dump978-fa JSON stream)
+# - a periodically-updated JSON file (e.g. dump1090-fa aircraft.json)
+#
+# Recommended SDR identification: program EEPROM serial tags (e.g. stratux:1090
+# and stratux:978) and select devices by serial.
+adsb1090:
+    enable: true
+    decoder:
+        # Option A (supervised): run dump1090-fa and poll its aircraft.json.
+        command: dump1090-fa
+        args:
+            - --device-type
+            - soapy
+            - --device
+            - driver=rtlsdr,serial=stx:1090:0
+            - --write-json
+            - /run/dump1090-fa
+            - --write-json-every
+            - "1"
+        json_file: /run/dump1090-fa/aircraft.json
+        json_file_interval: 1s
+        # Option B (external): leave command empty and still set json_file.
+        # command: ""
+    sdr:
+        serial_tag: stx:1090:0
+
+uat978:
+    enable: true
+    decoder:
+        command: dump978-fa
+        args:
+            - --sdr
+            - driver=rtlsdr,serial=stx:978:0
+            - --json-port
+            - "30978"
+            # Raw UAT uplinks (FIS-B weather) for Garmin Pilot / Stratux-like behavior.
+            - --raw-port
+            - "30979"
+        json_listen: 127.0.0.1:30978
+        raw_listen: 127.0.0.1:30979
+        # json_addr: 127.0.0.1:30978
+    sdr:
+        serial_tag: stx:978:0
