@@ -134,407 +134,100 @@
       <section id="view-status" class="view" aria-label="Status">
         <h2>Status</h2>
 
-        <div class="cards">
-
-        <div class="card">
-          <div class="formrow"><div class="muted">System</div></div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>Uptime</span>
-              <input id="st-uptime" type="text" readonly />
-            </label>
+        <div class="st-grid" aria-label="Status sections">
+          <div class="st-section" aria-label="About">
+            <div class="st-head">About</div>
+            <div class="st-row"><div class="st-key">Uptime</div><div id="st-uptime" class="st-val"></div></div>
+            <div class="st-row"><div class="st-key">Now (UTC)</div><div id="st-now" class="st-val"></div></div>
+            <div class="st-row"><div class="st-key">Last tick (UTC)</div><div id="st-last-tick" class="st-val"></div></div>
           </div>
 
-          <div class="formrow">
-            <label class="control">
-              <span>Now (UTC)</span>
-              <input id="st-now" type="text" readonly />
-            </label>
+          <div class="st-section" aria-label="Network">
+            <div class="st-head">Network</div>
+            <div class="st-row"><div class="st-key">Local addrs</div><div id="st-net-local-addrs" class="st-val"></div></div>
+            <div class="st-row"><div class="st-key">Clients (DHCP)</div><div id="st-net-clients-count" class="st-val"></div></div>
+            <div class="st-row st-row-multiline"><div class="st-key">Client list</div><pre id="st-net-clients" class="st-pre" aria-label="Client list"></pre></div>
           </div>
 
-          <div class="formrow">
-            <label class="control">
-              <span>Last tick (UTC)</span>
-              <input id="st-last-tick" type="text" readonly />
-            </label>
+          <div class="st-section" aria-label="Disk">
+            <div class="st-head">Disk</div>
+            <div class="st-row"><div class="st-key">Root total</div><div id="st-disk-total" class="st-val"></div></div>
+            <div class="st-row"><div class="st-key">Root available</div><div id="st-disk-avail" class="st-val"></div></div>
+            <div class="st-row"><div class="st-key">Root free</div><div id="st-disk-free" class="st-val"></div></div>
           </div>
 
-          <div class="divider"></div>
-
-          <div class="formrow"><div class="muted">Network</div></div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>Local addrs</span>
-              <input id="st-net-local-addrs" type="text" readonly />
-            </label>
+          <div class="st-section" aria-label="GDL90 Output">
+            <div class="st-head">GDL90 Output</div>
+            <div class="st-row"><div class="st-key">Destination</div><div id="st-gdl90-dest" class="st-val"></div></div>
+            <div class="st-row"><div class="st-key">Interval</div><div id="st-interval" class="st-val"></div></div>
+            <div class="st-row"><div class="st-key">Frames sent</div><div id="st-frames" class="st-val"></div></div>
           </div>
 
-          <div class="formrow">
-            <label class="control">
-              <span>Clients (DHCP)</span>
-              <input id="st-net-clients-count" type="text" readonly />
-            </label>
+          <div class="st-section" aria-label="Modes">
+            <div class="st-head">Modes</div>
+            <div class="st-row"><div class="st-key">Scenario enabled</div><input id="st-sim-scenario" class="st-led" type="checkbox" disabled /></div>
+            <div class="st-row"><div class="st-key">Sim traffic enabled</div><input id="st-sim-traffic" class="st-led" type="checkbox" disabled /></div>
+            <div class="st-row"><div class="st-key">Recording enabled</div><input id="st-record" class="st-led" type="checkbox" disabled /></div>
+            <div class="st-row"><div class="st-key">Replay enabled</div><input id="st-replay" class="st-led" type="checkbox" disabled /></div>
           </div>
 
-          <div class="formrow">
-            <label class="control">
-              <span>Client list</span>
-              <textarea id="st-net-clients" rows="3" readonly></textarea>
-            </label>
+          <div class="st-section" aria-label="GPS">
+            <div class="st-head">GPS</div>
+            <div class="st-row"><div class="st-key">Enabled</div><input id="st-gps-enabled" class="st-led" type="checkbox" disabled /></div>
+            <div class="st-row"><div class="st-key">Fix valid</div><input id="st-gps-valid" class="st-led" type="checkbox" disabled /></div>
+            <div class="st-row"><div class="st-key">Fix stale (&gt;3s)</div><input id="st-gps-stale" class="st-led" type="checkbox" disabled /></div>
+            <div class="st-row"><div class="st-key">Fix age (s)</div><div id="st-gps-age" class="st-val"></div></div>
+
+            <div class="st-subhead">Source</div>
+            <div class="st-row"><div class="st-key">Source</div><div id="st-gps-source" class="st-val"></div></div>
+            <div class="st-row"><div class="st-key">Device</div><div id="st-gps-device" class="st-val"></div></div>
+            <div class="st-row"><div class="st-key">gpsd addr</div><div id="st-gps-gpsd-addr" class="st-val"></div></div>
+            <div class="st-row"><div class="st-key">Baud</div><div id="st-gps-baud" class="st-val"></div></div>
+
+            <div class="st-subhead">Fix</div>
+            <div class="st-row"><div class="st-key">Last fix (UTC)</div><div id="st-gps-last-fix" class="st-val"></div></div>
+            <div class="st-row"><div class="st-key">Fix quality</div><div id="st-gps-fixq" class="st-val"></div></div>
+            <div class="st-row"><div class="st-key">Fix mode</div><div id="st-gps-fixmode" class="st-val"></div></div>
+            <div class="st-row"><div class="st-key">Satellites</div><div id="st-gps-sats" class="st-val"></div></div>
+            <div class="st-row"><div class="st-key">HDOP</div><div id="st-gps-hdop" class="st-val"></div></div>
+            <div class="st-row"><div class="st-key">Horiz acc (m)</div><div id="st-gps-hacc" class="st-val"></div></div>
+            <div class="st-row"><div class="st-key">Vert acc (m)</div><div id="st-gps-vacc" class="st-val"></div></div>
+
+            <div class="st-subhead">Position</div>
+            <div class="st-row"><div class="st-key">Latitude</div><div id="st-gps-lat" class="st-val"></div></div>
+            <div class="st-row"><div class="st-key">Longitude</div><div id="st-gps-lon" class="st-val"></div></div>
+            <div class="st-row"><div class="st-key">Altitude (ft)</div><div id="st-gps-alt" class="st-val"></div></div>
+            <div class="st-row"><div class="st-key">Ground speed (kt)</div><div id="st-gps-ground" class="st-val"></div></div>
+            <div class="st-row"><div class="st-key">Track (deg)</div><div id="st-gps-track" class="st-val"></div></div>
+            <div class="st-row"><div class="st-key">Vertical speed (fpm)</div><div id="st-gps-vspeed" class="st-val"></div></div>
+            <div class="st-row"><div class="st-key">GPS last error</div><div id="st-gps-error" class="st-val"></div></div>
           </div>
 
-          <div class="divider"></div>
-
-          <div class="formrow"><div class="muted">Disk</div></div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>Root total</span>
-              <input id="st-disk-total" type="text" readonly />
-            </label>
+          <div class="st-section" aria-label="Fan">
+            <div class="st-head">Fan</div>
+            <div class="st-row"><div class="st-key">Backend</div><div id="st-fan-backend" class="st-val"></div></div>
+            <div class="st-row"><div class="st-key">Enabled</div><input id="st-fan-enabled" class="st-led" type="checkbox" disabled /></div>
+            <div class="st-row"><div class="st-key">CPU temp (°C)</div><div id="st-fan-cpu-temp" class="st-val"></div></div>
+            <div class="st-row"><div class="st-key">Duty (%)</div><div id="st-fan-duty" class="st-val"></div></div>
+            <div class="st-row"><div class="st-key">Fan last error</div><div id="st-fan-error" class="st-val"></div></div>
           </div>
 
-          <div class="formrow">
-            <label class="control">
-              <span>Root available</span>
-              <input id="st-disk-avail" type="text" readonly />
-            </label>
+          <div class="st-section" aria-label="AHRS Sensors">
+            <div class="st-head">AHRS Sensors</div>
+            <div class="st-row"><div class="st-key">IMU detected</div><input id="st-ahrs-imu-detected" class="st-led" type="checkbox" disabled /></div>
+            <div class="st-row"><div class="st-key">IMU working</div><input id="st-ahrs-imu-working" class="st-led" type="checkbox" disabled /></div>
+            <div class="st-row"><div class="st-key">IMU last update (UTC)</div><div id="st-ahrs-imu-updated" class="st-val"></div></div>
+
+            <div class="st-subhead">Baro</div>
+            <div class="st-row"><div class="st-key">Baro detected</div><input id="st-ahrs-baro-detected" class="st-led" type="checkbox" disabled /></div>
+            <div class="st-row"><div class="st-key">Baro working</div><input id="st-ahrs-baro-working" class="st-led" type="checkbox" disabled /></div>
+            <div class="st-row"><div class="st-key">Baro last update (UTC)</div><div id="st-ahrs-baro-updated" class="st-val"></div></div>
+
+            <div class="st-subhead">Errors/Config</div>
+            <div class="st-row"><div class="st-key">AHRS last error</div><div id="st-ahrs-error" class="st-val"></div></div>
+            <div class="st-row"><div class="st-key">Orientation set</div><div id="st-ahrs-orientation-set" class="st-val"></div></div>
+            <div class="st-row"><div class="st-key">Forward axis</div><div id="st-ahrs-forward-axis" class="st-val"></div></div>
           </div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>Root free</span>
-              <input id="st-disk-free" type="text" readonly />
-            </label>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="formrow"><div class="muted">GDL90 Output</div></div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>Destination</span>
-              <input id="st-gdl90-dest" type="text" readonly />
-            </label>
-          </div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>Interval</span>
-              <input id="st-interval" type="text" readonly />
-            </label>
-          </div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>Frames sent</span>
-              <input id="st-frames" type="text" readonly />
-            </label>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="formrow"><div class="muted">Modes</div></div>
-
-          <div class="formrow">
-            <label class="control">
-              <input id="st-sim-scenario" type="checkbox" disabled />
-              <span>Scenario enabled</span>
-            </label>
-          </div>
-          <div class="formrow">
-            <label class="control">
-              <input id="st-sim-traffic" type="checkbox" disabled />
-              <span>Sim traffic enabled</span>
-            </label>
-          </div>
-          <div class="formrow">
-            <label class="control">
-              <input id="st-record" type="checkbox" disabled />
-              <span>Recording enabled</span>
-            </label>
-          </div>
-          <div class="formrow">
-            <label class="control">
-              <input id="st-replay" type="checkbox" disabled />
-              <span>Replay enabled</span>
-            </label>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="formrow"><div class="muted">GPS</div></div>
-
-          <div class="formrow">
-            <label class="control">
-              <input id="st-gps-enabled" type="checkbox" disabled />
-              <span>Enabled</span>
-            </label>
-          </div>
-
-          <div class="formrow">
-            <label class="control">
-              <input id="st-gps-valid" type="checkbox" disabled />
-              <span>Fix valid</span>
-            </label>
-          </div>
-
-          <div class="formrow">
-            <label class="control">
-              <input id="st-gps-stale" type="checkbox" disabled />
-              <span>Fix stale (&gt;3s)</span>
-            </label>
-          </div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>Fix age (s)</span>
-              <input id="st-gps-age" type="text" readonly />
-            </label>
-          </div>
-
-          <div class="divider"></div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>Source</span>
-              <input id="st-gps-source" type="text" readonly />
-            </label>
-          </div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>Device</span>
-              <input id="st-gps-device" type="text" readonly />
-            </label>
-          </div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>gpsd addr</span>
-              <input id="st-gps-gpsd-addr" type="text" readonly />
-            </label>
-          </div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>Baud</span>
-              <input id="st-gps-baud" type="text" readonly />
-            </label>
-          </div>
-
-          <div class="divider"></div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>Last fix (UTC)</span>
-              <input id="st-gps-last-fix" type="text" readonly />
-            </label>
-          </div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>Fix quality</span>
-              <input id="st-gps-fixq" type="text" readonly />
-            </label>
-          </div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>Fix mode</span>
-              <input id="st-gps-fixmode" type="text" readonly />
-            </label>
-          </div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>Satellites</span>
-              <input id="st-gps-sats" type="text" readonly />
-            </label>
-          </div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>HDOP</span>
-              <input id="st-gps-hdop" type="text" readonly />
-            </label>
-          </div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>Horiz acc (m)</span>
-              <input id="st-gps-hacc" type="text" readonly />
-            </label>
-          </div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>Vert acc (m)</span>
-              <input id="st-gps-vacc" type="text" readonly />
-            </label>
-          </div>
-
-          <div class="divider"></div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>Latitude</span>
-              <input id="st-gps-lat" type="text" readonly />
-            </label>
-          </div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>Longitude</span>
-              <input id="st-gps-lon" type="text" readonly />
-            </label>
-          </div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>Altitude (ft)</span>
-              <input id="st-gps-alt" type="text" readonly />
-            </label>
-          </div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>Ground speed (kt)</span>
-              <input id="st-gps-ground" type="text" readonly />
-            </label>
-          </div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>Track (deg)</span>
-              <input id="st-gps-track" type="text" readonly />
-            </label>
-          </div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>Vertical speed (fpm)</span>
-              <input id="st-gps-vspeed" type="text" readonly />
-            </label>
-          </div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>GPS last error</span>
-              <input id="st-gps-error" type="text" readonly />
-            </label>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="formrow"><div class="muted">Fan</div></div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>Backend</span>
-              <input id="st-fan-backend" type="text" readonly />
-            </label>
-          </div>
-
-          <div class="formrow">
-            <label class="control">
-              <input id="st-fan-enabled" type="checkbox" disabled />
-              <span>Enabled</span>
-            </label>
-          </div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>CPU temp (°C)</span>
-              <input id="st-fan-cpu-temp" type="text" readonly />
-            </label>
-          </div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>Duty (%)</span>
-              <input id="st-fan-duty" type="text" readonly />
-            </label>
-          </div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>Fan last error</span>
-              <input id="st-fan-error" type="text" readonly />
-            </label>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="formrow"><div class="muted">AHRS Sensors</div></div>
-
-          <div class="formrow">
-            <label class="control">
-              <input id="st-ahrs-imu-detected" type="checkbox" disabled />
-              <span>IMU detected</span>
-            </label>
-          </div>
-          <div class="formrow">
-            <label class="control">
-              <input id="st-ahrs-imu-working" type="checkbox" disabled />
-              <span>IMU working</span>
-            </label>
-          </div>
-          <div class="formrow">
-            <label class="control">
-              <span>IMU last update (UTC)</span>
-              <input id="st-ahrs-imu-updated" type="text" readonly />
-            </label>
-          </div>
-
-          <div class="divider"></div>
-
-          <div class="formrow">
-            <label class="control">
-              <input id="st-ahrs-baro-detected" type="checkbox" disabled />
-              <span>Baro detected</span>
-            </label>
-          </div>
-          <div class="formrow">
-            <label class="control">
-              <input id="st-ahrs-baro-working" type="checkbox" disabled />
-              <span>Baro working</span>
-            </label>
-          </div>
-          <div class="formrow">
-            <label class="control">
-              <span>Baro last update (UTC)</span>
-              <input id="st-ahrs-baro-updated" type="text" readonly />
-            </label>
-          </div>
-
-          <div class="divider"></div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>AHRS last error</span>
-              <input id="st-ahrs-error" type="text" readonly />
-            </label>
-          </div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>Orientation set</span>
-              <input id="st-ahrs-orientation-set" type="text" readonly />
-            </label>
-          </div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>Forward axis</span>
-              <input id="st-ahrs-forward-axis" type="text" readonly />
-            </label>
-          </div>
-        </div>
-
         </div>
       </section>
 
@@ -542,46 +235,22 @@
         <h2>Traffic</h2>
         <p class="muted">Combined traffic targets plus per-band decoder ingest health.</p>
 
-        <div class="cards">
-
-        <div class="card">
-          <div class="formrow"><div class="muted">Targets</div></div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>Count</span>
-              <input id="tr-count" type="text" readonly />
-            </label>
+        <div class="st-grid" aria-label="Traffic sections">
+          <div class="st-section" aria-label="Targets">
+            <div class="st-head">Targets</div>
+            <div class="st-row"><div class="st-key">Count</div><div id="tr-count" class="st-val"></div></div>
+            <div class="st-row st-row-multiline"><div class="st-key">List</div><pre id="tr-list" class="st-pre" aria-label="Traffic target list"></pre></div>
           </div>
 
-          <div class="formrow">
-            <label class="control">
-              <span>List</span>
-              <textarea id="tr-list" rows="10" readonly></textarea>
-            </label>
+          <div class="st-section" aria-label="1090 MHz (ADSB)">
+            <div class="st-head">1090 MHz (ADSB)</div>
+            <div class="st-row st-row-multiline"><div class="st-key">Status</div><pre id="tr-adsb1090" class="st-pre" aria-label="ADSB 1090 status"></pre></div>
           </div>
-        </div>
 
-        <div class="card">
-          <div class="formrow"><div class="muted">1090 MHz (ADSB)</div></div>
-          <div class="formrow">
-            <label class="control">
-              <span>Status</span>
-              <textarea id="tr-adsb1090" rows="8" readonly></textarea>
-            </label>
+          <div class="st-section" aria-label="978 MHz (UAT)">
+            <div class="st-head">978 MHz (UAT)</div>
+            <div class="st-row st-row-multiline"><div class="st-key">Status</div><pre id="tr-uat978" class="st-pre" aria-label="UAT 978 status"></pre></div>
           </div>
-        </div>
-
-        <div class="card">
-          <div class="formrow"><div class="muted">978 MHz (UAT)</div></div>
-          <div class="formrow">
-            <label class="control">
-              <span>Status</span>
-              <textarea id="tr-uat978" rows="8" readonly></textarea>
-            </label>
-          </div>
-        </div>
-
         </div>
       </section>
 
@@ -589,47 +258,15 @@
         <h2>Weather</h2>
         <p class="muted">Stratux-NG relays 978 UAT uplinks (FIS-B) to EFBs; this UI shows relay health (not decoded products).</p>
 
-        <div class="cards">
-
-        <div class="card">
-          <div class="formrow"><div class="muted">978 Uplink Relay</div></div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>Raw endpoint</span>
-              <input id="wx-raw-endpoint" type="text" readonly />
-            </label>
+        <div class="st-grid" aria-label="Weather sections">
+          <div class="st-section" aria-label="978 Uplink Relay">
+            <div class="st-head">978 Uplink Relay</div>
+            <div class="st-row"><div class="st-key">Raw endpoint</div><div id="wx-raw-endpoint" class="st-val"></div></div>
+            <div class="st-row"><div class="st-key">State</div><div id="wx-raw-state" class="st-val"></div></div>
+            <div class="st-row"><div class="st-key">Lines</div><div id="wx-raw-lines" class="st-val"></div></div>
+            <div class="st-row"><div class="st-key">Last seen (UTC)</div><div id="wx-raw-last-seen" class="st-val"></div></div>
+            <div class="st-row"><div class="st-key">Last error</div><div id="wx-raw-error" class="st-val"></div></div>
           </div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>State</span>
-              <input id="wx-raw-state" type="text" readonly />
-            </label>
-          </div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>Lines</span>
-              <input id="wx-raw-lines" type="text" readonly />
-            </label>
-          </div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>Last seen (UTC)</span>
-              <input id="wx-raw-last-seen" type="text" readonly />
-            </label>
-          </div>
-
-          <div class="formrow">
-            <label class="control">
-              <span>Last error</span>
-              <input id="wx-raw-error" type="text" readonly />
-            </label>
-          </div>
-        </div>
-
         </div>
       </section>
 
@@ -637,12 +274,13 @@
         <h2>Towers</h2>
         <p class="muted">Upstream Stratux shows nearby UAT ground stations (“towers”). Stratux-NG does not decode tower info yet.</p>
 
-        <div class="cards">
-        <div class="card">
-          <div class="formrow"><div class="muted">Notes</div></div>
-          <p class="muted">Today, the closest proxy is the 978 raw uplink stream health shown on the Weather page. Implementing a real Towers page requires decoding ground-station metadata from UAT uplinks.</p>
-        </div>
-
+        <div class="st-grid" aria-label="Towers sections">
+          <div class="st-section" aria-label="Notes">
+            <div class="st-head">Notes</div>
+            <div class="st-body">
+              <p class="muted">Today, the closest proxy is the 978 raw uplink stream health shown on the Weather page. Implementing a real Towers page requires decoding ground-station metadata from UAT uplinks.</p>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -650,85 +288,67 @@
         <h2>Settings</h2>
         <p class="muted">Edits are saved to your YAML config and applied immediately.</p>
 
-        <div class="cards">
+        <div class="st-grid" aria-label="Settings sections">
+          <form id="settings-form" class="st-section st-form" autocomplete="off">
+            <div class="st-head">Configuration</div>
 
-        <form id="settings-form" class="card" autocomplete="off">
-          <div class="formrow">
-            <label class="control">
-              <span>GDL90 destination</span>
+            <div class="st-row st-field">
+              <label class="st-key" for="set-gdl90-dest">GDL90 destination</label>
               <input id="set-gdl90-dest" type="text" placeholder="192.168.10.255:4000" />
-            </label>
-          </div>
+            </div>
 
-          <div class="formrow">
-            <label class="control">
-              <span>Interval (e.g. 1s)</span>
+            <div class="st-row st-field">
+              <label class="st-key" for="set-interval">Interval (e.g. 1s)</label>
               <input id="set-interval" type="text" placeholder="1s" />
-            </label>
-          </div>
+            </div>
 
-          <div class="formrow">
-            <label class="control">
+            <div class="st-row">
+              <label class="st-key" for="set-traffic-enable">Sim traffic enabled</label>
               <input id="set-traffic-enable" type="checkbox" />
-              <span>Sim traffic enabled</span>
-            </label>
-          </div>
+            </div>
 
-          <div class="divider"></div>
+            <div class="st-subhead">Scenario</div>
 
-          <div class="formrow">
-            <label class="control">
+            <div class="st-row">
+              <label class="st-key" for="set-scenario-enable">Scenario simulation enabled</label>
               <input id="set-scenario-enable" type="checkbox" />
-              <span>Scenario simulation enabled</span>
-            </label>
-          </div>
+            </div>
 
-          <div class="formrow">
-            <label class="control">
-              <span>Scenario path</span>
+            <div class="st-row st-field">
+              <label class="st-key" for="set-scenario-path">Scenario path</label>
               <select id="set-scenario-path">
                 <option value="">(select a scenario)</option>
               </select>
-            </label>
-          </div>
+            </div>
 
-          <div class="formrow">
-            <label class="control">
-              <span>Scenario start time (RFC3339 UTC)</span>
+            <div class="st-row st-field">
+              <label class="st-key" for="set-scenario-start">Scenario start time (RFC3339 UTC)</label>
               <input id="set-scenario-start" type="text" placeholder="2020-01-01T00:00:00Z" />
-            </label>
-          </div>
+            </div>
 
-          <div class="formrow">
-            <label class="control">
+            <div class="st-row">
+              <label class="st-key" for="set-scenario-loop">Scenario loop</label>
               <input id="set-scenario-loop" type="checkbox" />
-              <span>Scenario loop</span>
-            </label>
-          </div>
+            </div>
 
-          <div class="formactions">
-            <button id="btn-save" type="submit" class="primary">Save</button>
-            <span id="save-msg" class="muted"></span>
-          </div>
+            <div class="st-actions">
+              <button id="btn-save" type="submit" class="primary">Save</button>
+              <span id="save-msg" class="muted"></span>
+            </div>
 
-          <div class="divider"></div>
+            <div class="st-subhead">AHRS calibration</div>
 
-          <div class="formrow">
-            <div class="muted">AHRS calibration</div>
-          </div>
+            <div class="st-body st-buttons">
+              <button id="btn-ahrs-level" type="button">Set Level</button>
+              <button id="btn-ahrs-zero-drift" type="button">Zero Drift</button>
+              <button id="btn-ahrs-orient-forward" type="button">Set Forward (hold so nose-end points up)</button>
+              <button id="btn-ahrs-orient-done" type="button">Finish Orientation (hold level, mounted)</button>
+            </div>
 
-          <div class="formactions">
-            <button id="btn-ahrs-level" type="button">Set Level</button>
-            <button id="btn-ahrs-zero-drift" type="button">Zero Drift</button>
-            <button id="btn-ahrs-orient-forward" type="button">Set Forward (hold so nose-end points up)</button>
-            <button id="btn-ahrs-orient-done" type="button">Finish Orientation (hold level, mounted)</button>
-          </div>
-
-          <div class="formrow">
-            <span id="ahrs-msg" class="muted"></span>
-          </div>
-        </form>
-
+            <div class="st-body">
+              <span id="ahrs-msg" class="muted"></span>
+            </div>
+          </form>
         </div>
       </section>
 
@@ -736,36 +356,44 @@
         <h2>Logs</h2>
         <p class="muted">Recent Stratux-NG logs from <a href="/api/logs?format=text">/api/logs</a>.</p>
 
-        <div class="cards">
-        <div class="controls card">
-          <label class="control">
-            <span>Tail</span>
-            <select id="logs-tail">
-              <option value="200" selected>200 lines</option>
-              <option value="500">500 lines</option>
-              <option value="2000">2000 lines</option>
-            </select>
-          </label>
-          <div class="formactions">
-            <button id="logs-refresh" type="button" class="primary">Refresh</button>
-            <span id="logs-meta" class="muted"></span>
+        <div class="st-grid" aria-label="Logs sections">
+          <div class="st-section" aria-label="Log controls">
+            <div class="st-head">Controls</div>
+            <div class="st-row st-field">
+              <label class="st-key" for="logs-tail">Tail</label>
+              <select id="logs-tail">
+                <option value="200" selected>200 lines</option>
+                <option value="500">500 lines</option>
+                <option value="2000">2000 lines</option>
+              </select>
+            </div>
+            <div class="st-actions">
+              <button id="logs-refresh" type="button" class="primary">Refresh</button>
+              <span id="logs-meta" class="muted"></span>
+            </div>
           </div>
-        </div>
-        <pre id="logs-text" class="card">Loading…</pre>
 
+          <div class="st-section st-wide" aria-label="Log output">
+            <div class="st-head">Output</div>
+            <div class="st-body">
+              <pre id="logs-text" class="st-pre">Loading…</pre>
+            </div>
+          </div>
         </div>
       </section>
 
-      <section id="view-system" class="view" aria-label="System">
-        <h2>System</h2>
+      <section id="view-about" class="view" aria-label="About">
+        <h2>About</h2>
         <p class="muted">Build/runtime details and diagnostics.</p>
 
-        <div class="cards">
-        <div class="card">
-          <p class="muted">Raw build/runtime details:</p>
-          <p><a href="/api/about">/api/about</a></p>
-        </div>
-
+        <div class="st-grid" aria-label="About sections">
+          <div class="st-section" aria-label="Raw diagnostics">
+            <div class="st-head">Diagnostics</div>
+            <div class="st-body">
+              <p class="muted">Raw build/runtime details:</p>
+              <p><a href="/api/about">/api/about</a></p>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -796,7 +424,7 @@
         <button class="drawer-item drawerbtn" data-view="towers" type="button">Towers</button>
         <button class="drawer-item drawerbtn" data-view="settings" type="button">Settings</button>
         <button class="drawer-item drawerbtn" data-view="logs" type="button">Logs</button>
-        <button class="drawer-item drawerbtn" data-view="system" type="button">System</button>
+        <button class="drawer-item drawerbtn" data-view="about" type="button">About</button>
       </div>
     </aside>
 

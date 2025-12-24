@@ -9,7 +9,7 @@
     { key: 'towers', el: document.getElementById('view-towers') },
     { key: 'settings', el: document.getElementById('view-settings') },
     { key: 'logs', el: document.getElementById('view-logs') },
-    { key: 'system', el: document.getElementById('view-system') },
+    { key: 'about', el: document.getElementById('view-about') },
   ];
 
   const subtitle = document.getElementById('subtitle');
@@ -2087,7 +2087,7 @@
 
   // Initial view.
   const initial = (location.hash || '#status').slice(1);
-  setView(['attitude', 'radar', 'map', 'status', 'traffic', 'weather', 'towers', 'settings', 'logs', 'system'].includes(initial) ? initial : 'status');
+  setView(['attitude', 'radar', 'map', 'status', 'traffic', 'weather', 'towers', 'settings', 'logs', 'about'].includes(initial) ? initial : 'status');
   logsRefresh?.addEventListener('click', loadLogs);
   logsTail?.addEventListener('change', loadLogs);
 

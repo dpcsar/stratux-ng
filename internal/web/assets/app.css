@@ -138,6 +138,149 @@ h2 { margin: 6px 0 6px; font-size: 18px; }
   margin-right: 0;
 }
 
+/* Stratux-like sections + rows (used on Status/Traffic/Weather/Towers/Settings/Logs/About). */
+.st-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--pad);
+  align-items: start;
+  max-width: 1050px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.st-section {
+  background: var(--surface);
+  border: 1px solid rgba(127,127,140,0.25);
+  border-radius: 6px;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.st-head {
+  padding: 9px 10px;
+  background: var(--surface2);
+  border-bottom: 1px solid rgba(127,127,140,0.25);
+  font-weight: 650;
+  letter-spacing: 0.2px;
+}
+
+.st-subhead {
+  padding: 8px 10px;
+  border-top: 1px solid rgba(127,127,140,0.25);
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+}
+
+.st-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 7px 10px;
+  border-top: 1px solid rgba(127,127,140,0.25);
+}
+
+.st-row:first-of-type {
+  border-top: 0;
+}
+
+.st-key {
+  color: var(--muted);
+  font-size: 13px;
+  letter-spacing: 0.1px;
+}
+
+.st-val {
+  text-align: right;
+  font-size: 13px;
+  letter-spacing: 0.15px;
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  white-space: nowrap;
+}
+
+.st-row-multiline {
+  grid-template-columns: 1fr;
+  align-items: start;
+}
+
+.st-row-multiline .st-key {
+  margin-bottom: 6px;
+}
+
+.st-pre {
+  margin: 0;
+  padding: 8px 10px;
+  background: transparent;
+  color: var(--text);
+  border: 1px dashed rgba(127,127,140,0.35);
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  min-height: 44px;
+}
+
+.st-body {
+  padding: 10px;
+}
+
+/* Let specific sections span the full grid width. */
+.st-wide {
+  grid-column: 1 / -1;
+}
+
+/* Settings/Logs helper layouts. */
+.st-row.st-field {
+  grid-template-columns: minmax(140px, 260px) 1fr;
+  align-items: center;
+}
+
+.st-actions {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 10px;
+  border-top: 1px solid rgba(127,127,140,0.25);
+}
+
+.st-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* LED-style disabled checkboxes for Status view. */
+#view-status .st-led {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(127,127,140,0.55);
+  background: transparent;
+  margin: 0;
+  justify-self: end;
+}
+
+#view-status .st-led:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Invert meaning for specific "bad when checked" indicators. */
+#view-status #st-gps-stale.st-led:checked {
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
 /* Map (Stratux-like full screen) */
 #view-map.active {
   position: fixed;
