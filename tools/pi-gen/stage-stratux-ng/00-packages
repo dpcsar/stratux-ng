@@ -1,0 +1,26 @@
+# Packages installed into the image for Stratux-NG appliance use.
+
+# Wi-Fi AP building blocks (if you configure AP mode)
+hostapd
+dnsmasq
+iw
+rfkill
+
+# GPS (optional; recommended for broader USB GPS support)
+gpsd
+gpsd-clients
+
+# SDR + Soapy (used by dump978 and some dump1090 configurations)
+rtl-sdr
+soapysdr-tools
+soapysdr-module-rtlsdr
+
+# Decoder build dependencies
+build-essential
+cmake
+pkg-config
+git
+libusb-1.0-0-dev
+zlib1g-dev
+libncurses-dev
+libboost-all-dev

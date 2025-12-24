@@ -19,7 +19,7 @@ BIN := $(BIN_DIR)/$(APP_NAME)
 #   CONFIG=/data/stratux-ng/config.yaml make run
 CONFIG ?= ./config.yaml
 
-.PHONY: help test build run fmt vet staticcheck tidy clean
+.PHONY: help test build run fmt vet staticcheck tidy clean image image-clean
 
 help:
 	@printf "%s\n" "Targets:" \
@@ -56,3 +56,11 @@ tidy:
 
 clean:
 	rm -rf $(BIN_DIR)
+
+image:
+	./tools/pi-gen/build-image.sh
+
+image-clean:
+	-@docker rm -f -v pigen_work >/dev/null 2>&1 || sudo -n docker rm -f -v pigen_work >/dev/null 2>&1 || true
+	-@docker rmi -f pi-gen >/dev/null 2>&1 || sudo -n docker rmi -f pi-gen >/dev/null 2>&1 || true
+	rm -rf ./build

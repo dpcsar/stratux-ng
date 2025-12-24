@@ -42,6 +42,14 @@ For local development without SDR hardware you can still validate parsing/frames
 
 ## Image workflow (pi-gen)
 
+This repo now includes a minimal, in-repo scaffold for image generation under:
+
+- [tools/pi-gen/README.md](../tools/pi-gen/README.md)
+
+It provides:
+- a custom pi-gen stage (`stage-stratux-ng/`) that installs Stratux-NG + decoders
+- a helper script that clones pi-gen, injects the custom stage, and runs pi-gen in Docker
+
 ### Guiding principles
 
 - Put mutable state under `/data`.
@@ -114,6 +122,21 @@ Create a separate repo (or sibling folder) that contains pi-gen with a custom st
   - copy `config.yaml` → `/data/stratux-ng/config.yaml` (or `/etc/stratux-ng/config.yaml` then copy-on-first-boot)
   - copy systemd units and enable them
   - copy udev rule examples as real rules
+
+### Build command (using this repo’s helper)
+
+From the repo root:
+
+- `make image`
+
+Overrides (if needed):
+
+- `PIGEN_RELEASE=bookworm make image`
+- `PIGEN_ARCH=arm64 make image`
+
+Where to find the output:
+
+- pi-gen writes the `.img` artifacts under `build/pi-gen-src/deploy/`
 
 ### Acceptance checklist for the image
 

@@ -1,0 +1,2 @@
+SUBSYSTEM=="tty", KERNEL=="ttyACM*", ENV{ID_VENDOR_ID}=="1546", SYMLINK+="stratux-gps", GROUP="dialout", MODE="0660"
+SUBSYSTEM=="tty", KERNEL=="ttyUSB*", ENV{ID_VENDOR_ID}=="1546", SYMLINK+="stratux-gps", GROUP="dialout", MODE="0660"
