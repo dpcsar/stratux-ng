@@ -94,7 +94,12 @@
 
       <section id="view-status" class="view" aria-label="Status">
         <h2>Status</h2>
-        <div id="status-card" class="card">
+
+        <div class="cards">
+
+        <div class="card">
+          <div class="formrow"><div class="muted">System</div></div>
+
           <div class="formrow">
             <label class="control">
               <span>Uptime</span>
@@ -118,9 +123,61 @@
 
           <div class="divider"></div>
 
+          <div class="formrow"><div class="muted">Network</div></div>
+
           <div class="formrow">
             <label class="control">
-              <span>GDL90 destination</span>
+              <span>Local addrs</span>
+              <input id="st-net-local-addrs" type="text" readonly />
+            </label>
+          </div>
+
+          <div class="formrow">
+            <label class="control">
+              <span>Clients (DHCP)</span>
+              <input id="st-net-clients-count" type="text" readonly />
+            </label>
+          </div>
+
+          <div class="formrow">
+            <label class="control">
+              <span>Client list</span>
+              <textarea id="st-net-clients" rows="3" readonly></textarea>
+            </label>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="formrow"><div class="muted">Disk</div></div>
+
+          <div class="formrow">
+            <label class="control">
+              <span>Root total</span>
+              <input id="st-disk-total" type="text" readonly />
+            </label>
+          </div>
+
+          <div class="formrow">
+            <label class="control">
+              <span>Root available</span>
+              <input id="st-disk-avail" type="text" readonly />
+            </label>
+          </div>
+
+          <div class="formrow">
+            <label class="control">
+              <span>Root free</span>
+              <input id="st-disk-free" type="text" readonly />
+            </label>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="formrow"><div class="muted">GDL90 Output</div></div>
+
+          <div class="formrow">
+            <label class="control">
+              <span>Destination</span>
               <input id="st-gdl90-dest" type="text" readonly />
             </label>
           </div>
@@ -138,8 +195,10 @@
               <input id="st-frames" type="text" readonly />
             </label>
           </div>
+        </div>
 
-          <div class="divider"></div>
+        <div class="card">
+          <div class="formrow"><div class="muted">Modes</div></div>
 
           <div class="formrow">
             <label class="control">
@@ -161,16 +220,14 @@
           </div>
           <div class="formrow">
             <label class="control">
-			  <input id="st-replay" type="checkbox" disabled />
-			  <span>Replay enabled</span>
-			</label>
-		  </div>
-
-          <div class="divider"></div>
-
-          <div class="formrow">
-            <div class="muted">GPS</div>
+              <input id="st-replay" type="checkbox" disabled />
+              <span>Replay enabled</span>
+            </label>
           </div>
+        </div>
+
+        <div class="card">
+          <div class="formrow"><div class="muted">GPS</div></div>
 
           <div class="formrow">
             <label class="control">
@@ -200,6 +257,8 @@
             </label>
           </div>
 
+          <div class="divider"></div>
+
           <div class="formrow">
             <label class="control">
               <span>Source</span>
@@ -227,6 +286,8 @@
               <input id="st-gps-baud" type="text" readonly />
             </label>
           </div>
+
+          <div class="divider"></div>
 
           <div class="formrow">
             <label class="control">
@@ -277,6 +338,8 @@
             </label>
           </div>
 
+          <div class="divider"></div>
+
           <div class="formrow">
             <label class="control">
               <span>Latitude</span>
@@ -325,12 +388,10 @@
               <input id="st-gps-error" type="text" readonly />
             </label>
           </div>
+        </div>
 
-          <div class="divider"></div>
-
-          <div class="formrow">
-            <div class="muted">Fan</div>
-          </div>
+        <div class="card">
+          <div class="formrow"><div class="muted">Fan</div></div>
 
           <div class="formrow">
             <label class="control">
@@ -366,12 +427,10 @@
               <input id="st-fan-error" type="text" readonly />
             </label>
           </div>
+        </div>
 
-          <div class="divider"></div>
-
-          <div class="formrow">
-            <div class="muted">AHRS sensors</div>
-          </div>
+        <div class="card">
+          <div class="formrow"><div class="muted">AHRS Sensors</div></div>
 
           <div class="formrow">
             <label class="control">
@@ -392,6 +451,8 @@
             </label>
           </div>
 
+          <div class="divider"></div>
+
           <div class="formrow">
             <label class="control">
               <input id="st-ahrs-baro-detected" type="checkbox" disabled />
@@ -410,6 +471,8 @@
               <input id="st-ahrs-baro-updated" type="text" readonly />
             </label>
           </div>
+
+          <div class="divider"></div>
 
           <div class="formrow">
             <label class="control">
@@ -431,6 +494,115 @@
               <input id="st-ahrs-forward-axis" type="text" readonly />
             </label>
           </div>
+        </div>
+
+        </div>
+      </section>
+
+      <section id="view-traffic" class="view" aria-label="Traffic">
+        <h2>Traffic</h2>
+        <p class="muted">Combined traffic targets plus per-band decoder ingest health.</p>
+
+        <div class="cards">
+
+        <div class="card">
+          <div class="formrow"><div class="muted">Targets</div></div>
+
+          <div class="formrow">
+            <label class="control">
+              <span>Count</span>
+              <input id="tr-count" type="text" readonly />
+            </label>
+          </div>
+
+          <div class="formrow">
+            <label class="control">
+              <span>List</span>
+              <textarea id="tr-list" rows="10" readonly></textarea>
+            </label>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="formrow"><div class="muted">1090 MHz (ADSB)</div></div>
+          <div class="formrow">
+            <label class="control">
+              <span>Status</span>
+              <textarea id="tr-adsb1090" rows="8" readonly></textarea>
+            </label>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="formrow"><div class="muted">978 MHz (UAT)</div></div>
+          <div class="formrow">
+            <label class="control">
+              <span>Status</span>
+              <textarea id="tr-uat978" rows="8" readonly></textarea>
+            </label>
+          </div>
+        </div>
+
+        </div>
+      </section>
+
+      <section id="view-weather" class="view" aria-label="Weather">
+        <h2>Weather</h2>
+        <p class="muted">Stratux-NG relays 978 UAT uplinks (FIS-B) to EFBs; this UI shows relay health (not decoded products).</p>
+
+        <div class="cards">
+
+        <div class="card">
+          <div class="formrow"><div class="muted">978 Uplink Relay</div></div>
+
+          <div class="formrow">
+            <label class="control">
+              <span>Raw endpoint</span>
+              <input id="wx-raw-endpoint" type="text" readonly />
+            </label>
+          </div>
+
+          <div class="formrow">
+            <label class="control">
+              <span>State</span>
+              <input id="wx-raw-state" type="text" readonly />
+            </label>
+          </div>
+
+          <div class="formrow">
+            <label class="control">
+              <span>Lines</span>
+              <input id="wx-raw-lines" type="text" readonly />
+            </label>
+          </div>
+
+          <div class="formrow">
+            <label class="control">
+              <span>Last seen (UTC)</span>
+              <input id="wx-raw-last-seen" type="text" readonly />
+            </label>
+          </div>
+
+          <div class="formrow">
+            <label class="control">
+              <span>Last error</span>
+              <input id="wx-raw-error" type="text" readonly />
+            </label>
+          </div>
+        </div>
+
+        </div>
+      </section>
+
+      <section id="view-towers" class="view" aria-label="Towers">
+        <h2>Towers</h2>
+        <p class="muted">Upstream Stratux shows nearby UAT ground stations (“towers”). Stratux-NG does not decode tower info yet.</p>
+
+        <div class="cards">
+        <div class="card">
+          <div class="formrow"><div class="muted">Notes</div></div>
+          <p class="muted">Today, the closest proxy is the 978 raw uplink stream health shown on the Weather page. Implementing a real Towers page requires decoding ground-station metadata from UAT uplinks.</p>
+        </div>
 
         </div>
       </section>
@@ -438,6 +610,8 @@
       <section id="view-settings" class="view" aria-label="Settings">
         <h2>Settings</h2>
         <p class="muted">Edits are saved to your YAML config and applied immediately.</p>
+
+        <div class="cards">
 
         <form id="settings-form" class="card" autocomplete="off">
           <div class="formrow">
@@ -515,11 +689,15 @@
             <span id="ahrs-msg" class="muted"></span>
           </div>
         </form>
+
+        </div>
       </section>
 
       <section id="view-logs" class="view" aria-label="Logs">
         <h2>Logs</h2>
         <p class="muted">Recent Stratux-NG logs from <a href="/api/logs?format=text">/api/logs</a>.</p>
+
+        <div class="cards">
         <div class="controls card">
           <label class="control">
             <span>Tail</span>
@@ -535,14 +713,20 @@
           </div>
         </div>
         <pre id="logs-text" class="card">Loading…</pre>
+
+        </div>
       </section>
 
       <section id="view-about" class="view" aria-label="About">
         <h2>About</h2>
         <p class="muted">Basic information for now. More details will be added later.</p>
+
+        <div class="cards">
         <div class="card">
           <p class="muted">Raw build/runtime details:</p>
           <p><a href="/api/about">/api/about</a></p>
+        </div>
+
         </div>
       </section>
 
@@ -568,6 +752,9 @@
       </div>
       <div class="drawer-body">
         <button class="drawer-item drawerbtn" data-view="status" type="button">Status</button>
+        <button class="drawer-item drawerbtn" data-view="traffic" type="button">Traffic</button>
+        <button class="drawer-item drawerbtn" data-view="weather" type="button">Weather</button>
+        <button class="drawer-item drawerbtn" data-view="towers" type="button">Towers</button>
         <button class="drawer-item drawerbtn" data-view="settings" type="button">Settings</button>
         <button class="drawer-item drawerbtn" data-view="logs" type="button">Logs</button>
         <button class="drawer-item drawerbtn" data-view="about" type="button">About</button>

@@ -9,6 +9,29 @@ import (
 	"stratux-ng/internal/gps"
 )
 
+type DiskSnapshot struct {
+	RootPath       string `json:"root_path,omitempty"`
+	RootTotalBytes uint64 `json:"root_total_bytes,omitempty"`
+	RootFreeBytes  uint64 `json:"root_free_bytes,omitempty"`
+	RootAvailBytes uint64 `json:"root_avail_bytes,omitempty"`
+	LastError      string `json:"last_error,omitempty"`
+}
+
+type DHCPClientSnapshot struct {
+	IP         string `json:"ip"`
+	MAC        string `json:"mac,omitempty"`
+	Hostname   string `json:"hostname,omitempty"`
+	ExpiresUTC string `json:"expires_utc,omitempty"`
+}
+
+type NetworkSnapshot struct {
+	LocalAddrs     []string             `json:"local_addrs,omitempty"`
+	Clients        []DHCPClientSnapshot `json:"clients,omitempty"`
+	ClientsCount   int                  `json:"clients_count,omitempty"`
+	DHCPLeasesFile string               `json:"dhcp_leases_file,omitempty"`
+	LastError      string               `json:"last_error,omitempty"`
+}
+
 type Status struct {
 	startUnixNano int64
 	framesSent    uint64
@@ -228,6 +251,8 @@ type StatusSnapshot struct {
 	Traffic         []TrafficSnapshot   `json:"traffic"`
 	ADSB1090        DecoderStatusSnapshot `json:"adsb1090"`
 	UAT978          DecoderStatusSnapshot `json:"uat978"`
+	Disk            *DiskSnapshot       `json:"disk,omitempty"`
+	Network         *NetworkSnapshot    `json:"network,omitempty"`
 }
 
 func (s *Status) Snapshot(nowUTC time.Time) StatusSnapshot {
@@ -269,6 +294,8 @@ func (s *Status) Snapshot(nowUTC time.Time) StatusSnapshot {
 		Traffic:         traffic,
 		ADSB1090:        s.adsb1090.Load().(DecoderStatusSnapshot),
 		UAT978:          s.uat978.Load().(DecoderStatusSnapshot),
+		Disk:            snapshotDisk(nowUTC),
+		Network:         snapshotNetwork(nowUTC),
 	}
 	if lastTick != 0 {
 		snap.LastTickUTC = time.Unix(0, lastTick).UTC().Format(time.RFC3339Nano)

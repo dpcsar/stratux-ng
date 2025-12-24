@@ -4,6 +4,9 @@
     { key: 'radar', el: document.getElementById('view-radar') },
     { key: 'map', el: document.getElementById('view-map') },
     { key: 'status', el: document.getElementById('view-status') },
+    { key: 'traffic', el: document.getElementById('view-traffic') },
+    { key: 'weather', el: document.getElementById('view-weather') },
+    { key: 'towers', el: document.getElementById('view-towers') },
     { key: 'settings', el: document.getElementById('view-settings') },
     { key: 'logs', el: document.getElementById('view-logs') },
     { key: 'about', el: document.getElementById('view-about') },
@@ -18,6 +21,14 @@
   const stUptime = document.getElementById('st-uptime');
   const stNow = document.getElementById('st-now');
   const stLastTick = document.getElementById('st-last-tick');
+
+  const stNetLocalAddrs = document.getElementById('st-net-local-addrs');
+  const stNetClientsCount = document.getElementById('st-net-clients-count');
+  const stNetClients = document.getElementById('st-net-clients');
+
+  const stDiskTotal = document.getElementById('st-disk-total');
+  const stDiskAvail = document.getElementById('st-disk-avail');
+  const stDiskFree = document.getElementById('st-disk-free');
   const stGDL90Dest = document.getElementById('st-gdl90-dest');
   const stInterval = document.getElementById('st-interval');
   const stFrames = document.getElementById('st-frames');
@@ -93,6 +104,18 @@
   const attLeftTapeCtx = attLeftTape ? attLeftTape.getContext('2d') : null;
   const attRightTape = document.getElementById('att-tape-right');
   const attRightTapeCtx = attRightTape ? attRightTape.getContext('2d') : null;
+
+  // Traffic / Weather pages.
+  const trCount = document.getElementById('tr-count');
+  const trList = document.getElementById('tr-list');
+  const trAdsb1090 = document.getElementById('tr-adsb1090');
+  const trUat978 = document.getElementById('tr-uat978');
+
+  const wxRawEndpoint = document.getElementById('wx-raw-endpoint');
+  const wxRawState = document.getElementById('wx-raw-state');
+  const wxRawLines = document.getElementById('wx-raw-lines');
+  const wxRawLastSeen = document.getElementById('wx-raw-last-seen');
+  const wxRawError = document.getElementById('wx-raw-error');
 
   // Map UI.
   const mapLeafletEl = document.getElementById('map-leaflet');
@@ -678,6 +701,41 @@
     setInput(stInterval, interval);
     setInput(stFrames, frames);
 
+    // Network/Disk are optional and OS-dependent.
+    const netw = s?.network || null;
+    const disk = s?.disk || null;
+
+    const netErr = netw?.last_error ? ` (${netw.last_error})` : '';
+    const addrs = Array.isArray(netw?.local_addrs) ? netw.local_addrs : [];
+    setInput(stNetLocalAddrs, addrs.length ? addrs.join(' | ') : (netw ? `-` + netErr : ''));
+
+    const clients = Array.isArray(netw?.clients) ? netw.clients : [];
+    const cc = Number.isFinite(Number(netw?.clients_count)) ? Number(netw.clients_count) : clients.length;
+    setInput(stNetClientsCount, netw ? `${cc}${netErr}` : '');
+
+    if (stNetClients) {
+      if (!netw) {
+        stNetClients.value = '';
+      } else if (!clients.length) {
+        stNetClients.value = netErr ? netErr.trim() : '';
+      } else {
+        stNetClients.value = clients
+          .map((c) => {
+            const host = (c?.hostname || '').trim();
+            const ip = (c?.ip || '').trim();
+            if (host && ip) return `${host}  ${ip}`;
+            return ip || host || '';
+          })
+          .filter(Boolean)
+          .join('\n');
+      }
+    }
+
+    const diskErr = disk?.last_error ? ` (${disk.last_error})` : '';
+    setInput(stDiskTotal, disk ? `${fmtBytes(disk.root_total_bytes)}${diskErr}` : '');
+    setInput(stDiskAvail, disk ? `${fmtBytes(disk.root_avail_bytes)}${diskErr}` : '');
+    setInput(stDiskFree, disk ? `${fmtBytes(disk.root_free_bytes)}${diskErr}` : '');
+
     const sim = s?.sim || {};
     setChecked(stScenario, !!sim.scenario);
     setChecked(stTraffic, !!sim.traffic);
@@ -752,6 +810,44 @@
 
     if (btnAttAhrsLevel) btnAttAhrsLevel.disabled = !enabled;
     if (btnAttAhrsZeroDrift) btnAttAhrsZeroDrift.disabled = !enabled;
+
+    // Traffic page.
+    const traffic = Array.isArray(s?.traffic) ? s.traffic : [];
+    setInput(trCount, String(traffic.length));
+    if (trList) {
+      trList.value = traffic
+        .map((t) => {
+          const id = String(t?.tail || t?.icao || '').trim();
+          const alt = t?.alt_feet == null ? '--' : `${String(t.alt_feet)}ft`;
+          const gs = t?.ground_kt == null ? '--' : `${String(t.ground_kt)}kt`;
+          const trk = t?.track_deg == null ? '--' : `${fmtNum(t.track_deg, 0)}°`;
+          const age = t?.age_sec == null ? '' : ` age ${fmtNum(t.age_sec, 1)}s`;
+          const flags = `${t?.on_ground ? ' GND' : ''}${t?.extrapolated ? ' XTRP' : ''}`;
+          return `${id || '--'}  ${alt} ${gs} ${trk}${age}${flags}`.trim();
+        })
+        .filter(Boolean)
+        .join('\n');
+    }
+
+    function fmtJSON(obj) {
+      try {
+        return obj ? JSON.stringify(obj, null, 2) : '';
+      } catch {
+        return '';
+      }
+    }
+
+    if (trAdsb1090) trAdsb1090.value = fmtJSON(s?.adsb1090);
+    if (trUat978) trUat978.value = fmtJSON(s?.uat978);
+
+    // Weather page (relay health, not decoded products).
+    const uat = s?.uat978 || {};
+    const raw = uat?.raw_stream || {};
+    setInput(wxRawEndpoint, uat?.raw_endpoint || '');
+    setInput(wxRawState, raw?.state || '');
+    setInput(wxRawLines, raw?.lines == null ? '' : String(raw.lines));
+    setInput(wxRawLastSeen, raw?.last_seen_utc || '');
+    setInput(wxRawError, raw?.last_error || '');
   }
 
   let attAhrsBusyCount = 0;
@@ -795,6 +891,20 @@
     const n = Number(x);
     if (!Number.isFinite(n)) return '';
     return n.toFixed(digits);
+  }
+
+  function fmtBytes(x) {
+    const n = Number(x);
+    if (!Number.isFinite(n) || n < 0) return '';
+    const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+    let v = n;
+    let i = 0;
+    while (v >= 1024 && i < units.length - 1) {
+      v /= 1024;
+      i++;
+    }
+    const digits = i === 0 ? 0 : v >= 10 ? 1 : 2;
+    return `${v.toFixed(digits)} ${units[i]}`;
   }
 
   function escapeHtml(s) {
@@ -1480,8 +1590,8 @@
   }
 
   // Initial view.
-  const initial = (location.hash || '#map').slice(1);
-  setView(['attitude', 'radar', 'map', 'status', 'settings', 'logs', 'about'].includes(initial) ? initial : 'map');
+  const initial = (location.hash || '#status').slice(1);
+  setView(['attitude', 'radar', 'map', 'status', 'traffic', 'weather', 'towers', 'settings', 'logs', 'about'].includes(initial) ? initial : 'status');
   logsRefresh?.addEventListener('click', loadLogs);
   logsTail?.addEventListener('change', loadLogs);
 

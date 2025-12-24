@@ -98,6 +98,44 @@ h2 { margin: 6px 0 6px; font-size: 18px; }
   padding: 12px;
   box-shadow: var(--shadow);
   overflow: auto;
+  max-width: 500px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Map HUD cards should not be constrained by the general card width cap. */
+.map-infobar.card,
+.map-trafficbox.card {
+  max-width: calc(100% - 90px);
+  margin-left: 0;
+  margin-right: 0;
+}
+
+/* Attitude instrument should use available width. */
+#view-attitude .card {
+  max-width: none;
+  margin-left: 0;
+  margin-right: 0;
+}
+
+/* Stack spacing (used heavily on Status/Traffic pages). */
+.view .card + .card {
+  margin-top: var(--pad);
+}
+
+/* Responsive card layout: 1/2/3 columns depending on viewport width. */
+.cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pad);
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.cards > .card {
+  flex: 1 1 500px;
+  margin-left: 0;
+  margin-right: 0;
 }
 
 /* Map (Stratux-like full screen) */
@@ -450,13 +488,18 @@ h2 { margin: 6px 0 6px; font-size: 18px; }
   font-size: 13px;
 }
 
-input[type="text"], select {
+input[type="text"], textarea, select {
   width: 100%;
   padding: 10px 12px;
   border-radius: 12px;
   border: 1px solid rgba(127,127,140,0.35);
   background: var(--surface);
   color: var(--text);
+}
+
+textarea {
+  resize: vertical;
+  font-family: inherit;
 }
 
 input[type="checkbox"] {

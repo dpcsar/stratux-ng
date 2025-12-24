@@ -17,7 +17,12 @@ Working now:
 
 Not yet:
 - “Pretty” decoded FIS-B product visualization in the web UI (later milestone)
+- “Towers” page (UAT ground stations / GBTs): the UI entry exists but is currently a placeholder; implementing this requires decoding/deriving ground-station identity + signal stats from 978 UAT uplinks and exposing it via the status/API.
+- Setup page: show Wi‑Fi AP/client connection info (SSID/IP + connected clients) and how to connect an EFB
 - Flashable SD image build pipeline (pi-gen stage implementation; see [docs/pi-gen.md](docs/pi-gen.md))
+
+Web UI note:
+- The web UI is still **work in progress**. Expect ongoing iteration (layout/navigation polish, additional pages for traffic/weather/towers parity, and more detailed status/config tooling).
 
 This is a **new implementation** (new repository) with a modular architecture and reproducible builds, intended to support:
 
