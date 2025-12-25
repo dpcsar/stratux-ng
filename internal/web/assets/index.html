@@ -292,6 +292,30 @@
           <form id="settings-form" class="st-section st-form" autocomplete="off">
             <div class="st-head">Configuration</div>
 
+            <div class="st-subhead">Web UI only (display)</div>
+            <div class="st-body">
+              <p class="muted">These settings affect only this web UI display (saved in your browser). They do not change emitted GDL90 data.</p>
+            </div>
+
+            <div class="st-row st-field">
+              <label class="st-key" for="ui-vsi-traffic-deadband">Traffic vertical speed deadband (fpm)</label>
+              <input id="ui-vsi-traffic-deadband" type="number" min="0" step="1" placeholder="50" />
+            </div>
+
+            <div class="st-row st-field">
+              <label class="st-key" for="ui-vsi-traffic-rounding">Traffic vertical speed rounding (fpm)</label>
+              <input id="ui-vsi-traffic-rounding" type="number" min="0" step="1" placeholder="10" />
+            </div>
+
+            <div class="st-row st-field">
+              <label class="st-key" for="ui-vsi-ownship-rounding">Ownship vertical speed rounding (fpm)</label>
+              <input id="ui-vsi-ownship-rounding" type="number" min="0" step="1" placeholder="10" />
+            </div>
+
+            <div class="st-body">
+              <span id="ui-vsi-msg" class="muted"></span>
+            </div>
+
             <div class="st-row st-field">
               <label class="st-key" for="set-gdl90-dest">GDL90 destination</label>
               <input id="set-gdl90-dest" type="text" placeholder="192.168.10.255:4000" />

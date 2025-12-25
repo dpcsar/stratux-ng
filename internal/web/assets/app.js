@@ -167,7 +167,22 @@
     // Back-compat: older builds stored audio_mode + alerts_enabled separately.
     radarAudioMode: 'stratuxng.radar.audio_mode',
     radarAlertsEnabled: 'stratuxng.radar.alerts_enabled',
+
+    // Web UI-only VSI display settings.
+    vsiTrafficDeadbandFpm: 'stratuxng.webui.vsi.traffic_deadband_fpm',
+    vsiTrafficRoundingFpm: 'stratuxng.webui.vsi.traffic_rounding_fpm',
+    vsiOwnshipRoundingFpm: 'stratuxng.webui.vsi.ownship_rounding_fpm',
   };
+
+  const defaultVsiUi = {
+    trafficDeadbandFpm: 50,
+    trafficRoundingFpm: 10,
+    ownshipRoundingFpm: 10,
+  };
+
+  let vsiTrafficDeadbandFpm = defaultVsiUi.trafficDeadbandFpm;
+  let vsiTrafficRoundingFpm = defaultVsiUi.trafficRoundingFpm;
+  let vsiOwnshipRoundingFpm = defaultVsiUi.ownshipRoundingFpm;
 
   function lsGetNumber(key, fallback) {
     try {
@@ -195,6 +210,38 @@
     } catch {
       // ignore
     }
+  }
+
+  function clampInt(n, min, max, fallback) {
+    const x = Number(n);
+    if (!Number.isFinite(x)) return fallback;
+    const r = Math.round(x);
+    if (r < min) return min;
+    if (r > max) return max;
+    return r;
+  }
+
+  function roundToIncrement(v, step) {
+    const s = Number(step);
+    if (!Number.isFinite(s) || s <= 0) return v;
+    return Math.round(v / s) * s;
+  }
+
+  function applyTrafficVsiUi(vsFpm) {
+    const v = Number(vsFpm);
+    if (!Number.isFinite(v)) return null;
+    const deadband = Math.max(0, Number(vsiTrafficDeadbandFpm) || 0);
+    let out = v;
+    if (deadband > 0 && Math.abs(out) <= deadband) out = 0;
+    out = roundToIncrement(out, vsiTrafficRoundingFpm);
+    return Math.round(out);
+  }
+
+  function applyOwnshipVsiUi(vsFpm) {
+    const v = Number(vsFpm);
+    if (!Number.isFinite(v)) return null;
+    const out = roundToIncrement(v, vsiOwnshipRoundingFpm);
+    return Math.round(out);
   }
 
   function applyRadarControlStateToUI() {
@@ -349,6 +396,11 @@
   const setScenarioStart = document.getElementById('set-scenario-start');
   const setScenarioLoop = document.getElementById('set-scenario-loop');
 
+  const uiVsiTrafficDeadband = document.getElementById('ui-vsi-traffic-deadband');
+  const uiVsiTrafficRounding = document.getElementById('ui-vsi-traffic-rounding');
+  const uiVsiOwnshipRounding = document.getElementById('ui-vsi-ownship-rounding');
+  const uiVsiMsg = document.getElementById('ui-vsi-msg');
+
   const logsText = document.getElementById('logs-text');
   const logsMeta = document.getElementById('logs-meta');
   const logsTail = document.getElementById('logs-tail');
@@ -390,6 +442,36 @@
     const pad2 = (x) => String(x).padStart(2, '0');
     if (h > 0) return `${h}:${pad2(m)}:${pad2(ss)}`;
     return `${m}:${pad2(ss)}`;
+  }
+
+  function applyVsiUiControlStateToUI() {
+    if (uiVsiTrafficDeadband) uiVsiTrafficDeadband.value = String(vsiTrafficDeadbandFpm);
+    if (uiVsiTrafficRounding) uiVsiTrafficRounding.value = String(vsiTrafficRoundingFpm);
+    if (uiVsiOwnshipRounding) uiVsiOwnshipRounding.value = String(vsiOwnshipRoundingFpm);
+  }
+
+  function setVsiUiMessage(s) {
+    if (!uiVsiMsg) return;
+    uiVsiMsg.textContent = String(s || '');
+  }
+
+  function persistVsiUiFromInputs() {
+    // Keep these sane; allow 0 to disable deadband/rounding.
+    vsiTrafficDeadbandFpm = clampInt(uiVsiTrafficDeadband?.value, 0, 5000, defaultVsiUi.trafficDeadbandFpm);
+    vsiTrafficRoundingFpm = clampInt(uiVsiTrafficRounding?.value, 0, 5000, defaultVsiUi.trafficRoundingFpm);
+    vsiOwnshipRoundingFpm = clampInt(uiVsiOwnshipRounding?.value, 0, 5000, defaultVsiUi.ownshipRoundingFpm);
+
+    lsSet(lsKeys.vsiTrafficDeadbandFpm, vsiTrafficDeadbandFpm);
+    lsSet(lsKeys.vsiTrafficRoundingFpm, vsiTrafficRoundingFpm);
+    lsSet(lsKeys.vsiOwnshipRoundingFpm, vsiOwnshipRoundingFpm);
+
+    applyVsiUiControlStateToUI();
+    setVsiUiMessage(`Saved (Web UI only). Traffic: deadband ±${vsiTrafficDeadbandFpm} fpm, rounding ${vsiTrafficRoundingFpm} fpm. Ownship rounding ${vsiOwnshipRoundingFpm} fpm.`);
+
+    // Redraw immediately so the user sees the effect.
+    drawRadar();
+    if (lastTraffic) updateMapTraffic(lastTraffic);
+    if (lastGps) setMapHud(lastGps);
   }
 
   async function loadLogs() {
@@ -682,8 +764,8 @@
       drawTrafficArrow(x, y, rotRad, stale ? muted : danger, 'rgba(0,0,0,0.85)');
 
       // Relative altitude (feet) + vertical trend arrow: match Map label semantics.
-      const vs = Number(t?.vvel_fpm);
-      const trendArrow = Number.isFinite(vs) ? (vs > 50 ? '▲' : (vs < -50 ? '▼' : '')) : '';
+      const vs = applyTrafficVsiUi(Number(t?.vvel_fpm));
+      const trendArrow = (vs == null || vs === 0) ? '' : (vs > 0 ? '▲' : '▼');
       const relAltFeet = (altDelta == null) ? null : Math.round(altDelta);
       const relAltFeetLabel = (relAltFeet == null) ? null : (relAltFeet >= 0 ? `+${relAltFeet} ft` : `${relAltFeet} ft`);
       const label = (relAltFeetLabel == null) ? null : (trendArrow ? `${relAltFeetLabel} ${trendArrow}` : relAltFeetLabel);
@@ -756,7 +838,7 @@
             : '';
 
           const vs = Number(closest.vvelFpm);
-          const trend = Number.isFinite(vs) ? (vs > 50 ? 'climbing' : (vs < -50 ? 'descending' : 'level')) : '';
+          const trend = (vs == null) ? '' : (vs > 0 ? 'climbing' : (vs < 0 ? 'descending' : 'level'));
 
           const parts = ['Traffic', `${clock} o\'clock`];
           if (distSpoken) parts.push(distSpoken);
@@ -955,12 +1037,12 @@
       const relAltStr = relAlt == null ? '' : (relAlt >= 0 ? `+${relAlt} ft` : `${relAlt} ft`);
       const relAltFeetLabel = (relAlt == null) ? null : (relAlt >= 0 ? `+${relAlt} ft` : `${relAlt} ft`);
 
-      const vs = Number(t?.vvel_fpm);
-      const trendArrow = Number.isFinite(vs) ? (vs > 50 ? '▲' : (vs < -50 ? '▼' : '')) : '';
-      const vsArrow = Number.isFinite(vs) ? (vs > 0 ? '▲' : (vs < 0 ? '▼' : '')) : '';
-      const vsStr = Number.isFinite(vs) && vs !== 0
-        ? `${Math.abs(Math.round(vs))}fpm${vsArrow ? ` ${vsArrow}` : ''}`
-        : '';
+      const vs = applyTrafficVsiUi(Number(t?.vvel_fpm));
+      const trendArrow = (vs == null || vs === 0) ? '' : (vs > 0 ? '▲' : '▼');
+      const vsArrow = trendArrow;
+      const vsStr = (vs == null || vs === 0)
+        ? ''
+        : `${Math.abs(vs)}fpm${vsArrow ? ` ${vsArrow}` : ''}`;
 
       const gs = Number(t?.ground_kt);
       const gsStr = Number.isFinite(gs) ? `${Math.round(gs)}kt` : '';
@@ -1273,7 +1355,8 @@
     setInput(stGpsAlt, gps.alt_feet == null ? '' : String(gps.alt_feet));
     setInput(stGpsGround, gps.ground_kt == null ? '' : String(gps.ground_kt));
     setInput(stGpsTrack, gps.track_deg == null ? '' : fmtNum(gps.track_deg, 1));
-    setInput(stGpsVSpeed, gps.vert_speed_fpm == null ? '' : String(gps.vert_speed_fpm));
+    const ownVs = (gps.vert_speed_fpm == null) ? null : applyOwnshipVsiUi(Number(gps.vert_speed_fpm));
+    setInput(stGpsVSpeed, ownVs == null ? '' : String(ownVs));
     setInput(stGpsError, gps.last_error || '');
 
     const fan = s?.fan || {};
@@ -2097,6 +2180,10 @@
     saveSettings();
   });
 
+  uiVsiTrafficDeadband?.addEventListener('change', persistVsiUiFromInputs);
+  uiVsiTrafficRounding?.addEventListener('change', persistVsiUiFromInputs);
+  uiVsiOwnshipRounding?.addEventListener('change', persistVsiUiFromInputs);
+
   poll();
   setInterval(poll, 1000);
   // Redraw the instrument a bit faster than the status poll so it stays crisp on resize/theme changes.
@@ -2205,6 +2292,13 @@
     // If storedMode is 'off' but enabledFlag isn't, still honor 'off'.
   }
   applyRadarControlStateToUI();
+
+  // Load persisted Web UI-only VSI settings.
+  vsiTrafficDeadbandFpm = clampInt(lsGetNumber(lsKeys.vsiTrafficDeadbandFpm, defaultVsiUi.trafficDeadbandFpm), 0, 5000, defaultVsiUi.trafficDeadbandFpm);
+  vsiTrafficRoundingFpm = clampInt(lsGetNumber(lsKeys.vsiTrafficRoundingFpm, defaultVsiUi.trafficRoundingFpm), 0, 5000, defaultVsiUi.trafficRoundingFpm);
+  vsiOwnshipRoundingFpm = clampInt(lsGetNumber(lsKeys.vsiOwnshipRoundingFpm, defaultVsiUi.ownshipRoundingFpm), 0, 5000, defaultVsiUi.ownshipRoundingFpm);
+  applyVsiUiControlStateToUI();
+  setVsiUiMessage('');
 
   // Arm audio on first user gesture.
   window.addEventListener('pointerdown', armAudioOnce, { once: true });
