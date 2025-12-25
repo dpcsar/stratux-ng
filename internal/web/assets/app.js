@@ -689,7 +689,12 @@
     };
 
     const list = Array.isArray(lastTraffic) ? lastTraffic : [];
-    let closest = null;
+    const alertsOn = radarAlertsMode !== 'off';
+
+    // When multiple targets meet alert criteria, rotate through them so the user
+    // gets visibility (and callouts) for each.
+    const alertRotateMs = 4000;
+    const alertCandidates = [];
     let visibleCount = 0;
 
     const drawTrafficArrow = (x, y, rotRad, fillStyle, strokeStyle) => {
@@ -743,18 +748,21 @@
       const altOK = Number.isFinite(alt);
       const altDelta = (altOK && Number.isFinite(ownAlt)) ? (alt - ownAlt) : null;
 
-      const isAlertCandidate = !stale && !t?.on_ground && altDelta != null && Math.abs(altDelta) <= radarAlertAltBandFeet;
+      const isAlertCandidate = alertsOn
+        && !stale
+        && !t?.on_ground
+        && altDelta != null
+        && Math.abs(altDelta) <= radarAlertAltBandFeet
+        && distNm <= radarAlertRangeNm;
       if (isAlertCandidate) {
-        if (!closest || distNm < closest.distNm) {
-          closest = {
-            distNm,
-            altDelta,
-            relDeg: rel,
-            vvelFpm: Number(t?.vvel_fpm),
-            tail: String(t?.tail || '').trim(),
-            icao: String(t?.icao || '').trim(),
-          };
-        }
+        alertCandidates.push({
+          distNm,
+          altDelta,
+          relDeg: rel,
+          vvelFpm: Number(t?.vvel_fpm),
+          tail: String(t?.tail || '').trim(),
+          icao: String(t?.icao || '').trim(),
+        });
       }
 
       // Icon + direction: match Map traffic marker.
@@ -780,10 +788,17 @@
 
     lastRadarVisibleCount = visibleCount;
 
+    // Choose which alert candidate to call out.
+    let closest = null;
+    if (alertCandidates.length > 0) {
+      alertCandidates.sort((a, b) => (a.distNm - b.distNm));
+      const idx = Math.floor(Date.now() / alertRotateMs) % alertCandidates.length;
+      closest = alertCandidates[idx];
+    }
+
     // Alerts (visual only): show when closest traffic is very near.
-    const alertsOn = radarAlertsMode !== 'off';
     if (radarAlert) {
-      if (alertsOn && closest && closest.distNm <= radarAlertRangeNm) {
+      if (closest) {
         const who = closest.tail || closest.icao || 'traffic';
         const dh = (closest.altDelta == null) ? '' : ` · ΔALT ${Math.round(closest.altDelta)}ft`;
         radarAlert.textContent = `TRAFFIC ${who} · ${fmtNum(closest.distNm, 1)}nm${dh}`;
@@ -793,7 +808,7 @@
     }
 
     // Audible alerts (beep + speech), gated on user gesture.
-    if (alertsOn && closest && closest.distNm <= radarAlertRangeNm) {
+    if (closest) {
       if (!audioState.armed || !audioState.ctx) {
         if (!audioState.prompted) {
           setRadarMessage('Tap once to enable audio alerts.');
