@@ -39,9 +39,9 @@ type Supervisor struct {
 	started atomic.Bool
 	closed  atomic.Bool
 
-	mu     sync.RWMutex
-	pid    int
-	state  string
+	mu      sync.RWMutex
+	pid     int
+	state   string
 	lastErr string
 
 	stdout *tailBuffer
@@ -52,11 +52,11 @@ type Supervisor struct {
 }
 
 type Snapshot struct {
-	Name      string `json:"name"`
-	Running   bool   `json:"running"`
-	PID       int    `json:"pid,omitempty"`
-	State     string `json:"state"`
-	LastError string `json:"last_error,omitempty"`
+	Name      string   `json:"name"`
+	Running   bool     `json:"running"`
+	PID       int      `json:"pid,omitempty"`
+	State     string   `json:"state"`
+	LastError string   `json:"last_error,omitempty"`
 	Stdout    []string `json:"stdout_tail,omitempty"`
 	Stderr    []string `json:"stderr_tail,omitempty"`
 }

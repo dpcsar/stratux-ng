@@ -1,0 +1,12 @@
+[Unit]
+Description=Stratux-NG Wi-Fi settings -> dnsmasq config
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+Environment=STRATUX_NG_CONFIG=/data/stratux-ng/config.yaml
+ExecStart=/usr/local/bin/stratux-ng-wifi-apply -out /etc/dnsmasq.d/stratux-ng.conf -restart-dnsmasq
+
+[Install]
+WantedBy=multi-user.target

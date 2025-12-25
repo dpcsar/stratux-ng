@@ -704,7 +704,7 @@ func TestBuildGDL90FramesWithGPS_AppendsLiveTrafficWhenSimTrafficDisabled(t *tes
 			Ownship: config.OwnshipSimConfig{
 				ICAO:     "F00001",
 				Callsign: "STRATUX",
-				AltFeet:   3500,
+				AltFeet:  3500,
 			},
 			Traffic: config.TrafficSimConfig{Enable: false},
 		},

@@ -10,7 +10,8 @@ const dump978UplinkBytes = 432
 // ParseDump978RawUplinkLine parses a dump978/dump978-fa raw uplink line.
 //
 // Expected format (prefix and trailing fields may vary):
-//   +<hex>;rs=<n>;ss=<n>;
+//
+//	+<hex>;rs=<n>;ss=<n>;
 //
 // It returns the 432-byte uplink payload (zero-padded if the input is short).
 //

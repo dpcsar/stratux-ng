@@ -10,6 +10,9 @@ install -d "${ROOTFS_DIR}/etc/udev/rules.d"
 install -d "${ROOTFS_DIR}/data/stratux-ng"
 
 install -m 0755 files/usr/local/bin/stratux-ng "${ROOTFS_DIR}/usr/local/bin/stratux-ng"
+if [[ -f files/usr/local/bin/stratux-ng-wifi-apply ]]; then
+  install -m 0755 files/usr/local/bin/stratux-ng-wifi-apply "${ROOTFS_DIR}/usr/local/bin/stratux-ng-wifi-apply"
+fi
 install -m 0644 files/etc/systemd/system/stratux-ng.service "${ROOTFS_DIR}/etc/systemd/system/stratux-ng.service"
 install -m 0644 files/etc/udev/rules.d/99-stratux-gps.rules "${ROOTFS_DIR}/etc/udev/rules.d/99-stratux-gps.rules"
 install -m 0644 files/data/stratux-ng/config.yaml "${ROOTFS_DIR}/data/stratux-ng/config.yaml"

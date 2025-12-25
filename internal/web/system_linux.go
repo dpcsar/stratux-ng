@@ -38,9 +38,9 @@ func snapshotNetwork(nowUTC time.Time) *NetworkSnapshot {
 	clients, leasesFile, err := readDHCPClients(nowUTC)
 
 	s := &NetworkSnapshot{
-		LocalAddrs:    addrs,
-		Clients:       clients,
-		ClientsCount:  len(clients),
+		LocalAddrs:     addrs,
+		Clients:        clients,
+		ClientsCount:   len(clients),
 		DHCPLeasesFile: leasesFile,
 	}
 	if err != nil {
@@ -131,7 +131,8 @@ func readDHCPClients(nowUTC time.Time) ([]DHCPClientSnapshot, string, error) {
 }
 
 // parseDNSMasqLeasesFile parses dnsmasq's lease file:
-//   expiry_epoch mac ip hostname clientid
+//
+//	expiry_epoch mac ip hostname clientid
 func parseDNSMasqLeasesFile(path string, nowUTC time.Time) ([]DHCPClientSnapshot, error) {
 	f, err := os.Open(path)
 	if err != nil {

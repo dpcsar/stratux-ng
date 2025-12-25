@@ -14,10 +14,10 @@ import (
 	"stratux-ng/internal/config"
 	"stratux-ng/internal/decoder"
 	"stratux-ng/internal/fancontrol"
-	"stratux-ng/internal/gps"
 	"stratux-ng/internal/gdl90"
-	"stratux-ng/internal/udp"
+	"stratux-ng/internal/gps"
 	"stratux-ng/internal/traffic"
+	"stratux-ng/internal/udp"
 	"stratux-ng/internal/web"
 )
 
@@ -29,12 +29,12 @@ type liveRuntime struct {
 	gpsSvc             *gps.Service
 	fanSvc             *fancontrol.Service
 
-	adsb1090Sup    *decoder.Supervisor
-	uat978Sup      *decoder.Supervisor
-	adsb1090File   *decoder.JSONFilePoller
-	uat978Stream   *decoder.NDJSONClient
-	uat978Raw      *decoder.LineClient
-	uat978UplinkQ  chan []byte
+	adsb1090Sup   *decoder.Supervisor
+	uat978Sup     *decoder.Supervisor
+	adsb1090File  *decoder.JSONFilePoller
+	uat978Stream  *decoder.NDJSONClient
+	uat978Raw     *decoder.LineClient
+	uat978UplinkQ chan []byte
 
 	trafficStore *traffic.Store
 
@@ -434,10 +434,10 @@ func (r *liveRuntime) ADSB1090DecoderSnapshot(nowUTC time.Time) (web.DecoderStat
 	}
 	jsonFile := strings.TrimSpace(cur.Decoder.JSONFile)
 	snap := web.DecoderStatusSnapshot{
-		Enabled:      true,
-		SerialTag:    strings.TrimSpace(cur.SDR.SerialTag),
-		Command:      strings.TrimSpace(cur.Decoder.Command),
-		JSONFile:     jsonFile,
+		Enabled:   true,
+		SerialTag: strings.TrimSpace(cur.SDR.SerialTag),
+		Command:   strings.TrimSpace(cur.Decoder.Command),
+		JSONFile:  jsonFile,
 	}
 	if r.adsb1090Sup != nil {
 		snap.Supervisor = r.adsb1090Sup.Snapshot()

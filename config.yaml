@@ -1,5 +1,5 @@
 gdl90:
-    dest: 192.168.1.255:4000
+    dest: 192.168.10.255:4000
     interval: 1s
     record:
         enable: false
@@ -59,6 +59,15 @@ fan:
     update_interval: 5s
 web:
     listen: :8080
+
+wifi:
+    subnet_cidr: 192.168.10.0/24
+    ap_ip: 192.168.10.1
+    dhcp_start: 192.168.10.50
+    dhcp_end: 192.168.10.150
+    uplink_enable: false
+    internet_passthrough_enable: false
+    client_networks: []
 
 # External decoders
 #

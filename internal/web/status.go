@@ -77,7 +77,7 @@ type DecoderStatusSnapshot struct {
 	RawEndpoint  string `json:"raw_endpoint,omitempty"`
 	JSONFile     string `json:"json_file,omitempty"`
 
-	Supervisor decoder.Snapshot         `json:"supervisor"`
+	Supervisor decoder.Snapshot          `json:"supervisor"`
 	Stream     *decoder.NDJSONSnapshot   `json:"stream,omitempty"`
 	RawStream  *decoder.LineSnapshot     `json:"raw_stream,omitempty"`
 	File       *decoder.JSONFileSnapshot `json:"file,omitempty"`
@@ -236,23 +236,23 @@ func (s *Status) MarkTick(nowUTC time.Time, framesSentThisTick int) {
 }
 
 type StatusSnapshot struct {
-	Service         string              `json:"service"`
-	NowUTC          string              `json:"now_utc"`
-	UptimeSec       int64               `json:"uptime_sec"`
-	GDL90Dest       string              `json:"gdl90_dest"`
-	Interval        string              `json:"interval"`
-	FramesSentTotal uint64              `json:"frames_sent_total"`
-	LastTickUTC     string              `json:"last_tick_utc,omitempty"`
-	Sim             map[string]any      `json:"sim"`
-	Attitude        AttitudeSnapshot    `json:"attitude"`
-	AHRSSensors     AHRSSensorsSnapshot `json:"ahrs"`
-	Fan             fancontrol.Snapshot `json:"fan"`
-	GPS             gps.Snapshot        `json:"gps"`
-	Traffic         []TrafficSnapshot   `json:"traffic"`
+	Service         string                `json:"service"`
+	NowUTC          string                `json:"now_utc"`
+	UptimeSec       int64                 `json:"uptime_sec"`
+	GDL90Dest       string                `json:"gdl90_dest"`
+	Interval        string                `json:"interval"`
+	FramesSentTotal uint64                `json:"frames_sent_total"`
+	LastTickUTC     string                `json:"last_tick_utc,omitempty"`
+	Sim             map[string]any        `json:"sim"`
+	Attitude        AttitudeSnapshot      `json:"attitude"`
+	AHRSSensors     AHRSSensorsSnapshot   `json:"ahrs"`
+	Fan             fancontrol.Snapshot   `json:"fan"`
+	GPS             gps.Snapshot          `json:"gps"`
+	Traffic         []TrafficSnapshot     `json:"traffic"`
 	ADSB1090        DecoderStatusSnapshot `json:"adsb1090"`
 	UAT978          DecoderStatusSnapshot `json:"uat978"`
-	Disk            *DiskSnapshot       `json:"disk,omitempty"`
-	Network         *NetworkSnapshot    `json:"network,omitempty"`
+	Disk            *DiskSnapshot         `json:"disk,omitempty"`
+	Network         *NetworkSnapshot      `json:"network,omitempty"`
 }
 
 func (s *Status) Snapshot(nowUTC time.Time) StatusSnapshot {

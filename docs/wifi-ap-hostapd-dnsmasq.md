@@ -4,7 +4,52 @@ This guide sets up Raspberry Pi OS (64-bit) to run as a Wi‑Fi Access Point (AP
 
 It is intentionally **host-managed**: the OS owns Wi‑Fi configuration, while Stratux-NG only needs a reachable interface to send **GDL90 UDP** and serve HTTP.
 
-> All values below are **examples**. Pick what fits your environment.
+## Stratux-NG defaults (first boot)
+
+Stratux-NG defaults its Wi‑Fi AP network to `192.168.10.0/24` on first boot.
+
+- AP subnet: `192.168.10.0/24`
+- AP IP: `192.168.10.1`
+- DHCP range: `192.168.10.50-192.168.10.150`
+- Default GDL90 broadcast destination: `192.168.10.255:4000`
+
+These values are editable in the web UI Settings page and stored in `config.yaml` under `wifi:` (`subnet_cidr`, `ap_ip`, `dhcp_start`, `dhcp_end`).
+
+Stratux-NG also supports configuring an optional upstream Wi‑Fi (hotspot) connection and internet pass-through in `config.yaml` under `wifi:`:
+
+- `uplink_enable`: whether to attempt connecting to an upstream Wi‑Fi network
+- `client_networks`: list of SSIDs/passwords (password optional for open networks)
+- `internet_passthrough_enable`: whether to enable IPv4 forwarding + NAT (masquerade) so AP clients can reach the internet
+
+Important: Stratux-NG still does not configure the OS network stack itself — you must apply the same values to hostapd/dnsmasq/NetworkManager (examples below).
+
+### Optional helper: generate dnsmasq config from `config.yaml`
+
+Stratux-NG ships an optional helper binary that renders a dnsmasq snippet from the Settings-backed `wifi:` values:
+
+```bash
+# Print to stdout
+STRATUX_NG_CONFIG=/data/stratux-ng/config.yaml \
+  /usr/local/bin/stratux-ng-wifi-apply
+
+# Write the dnsmasq config and restart dnsmasq (requires root)
+sudo STRATUX_NG_CONFIG=/data/stratux-ng/config.yaml \
+  /usr/local/bin/stratux-ng-wifi-apply \
+  -out /etc/dnsmasq.d/stratux-ng.conf \
+  -restart-dnsmasq
+
+# Apply uplink + internet pass-through (nmcli + ip_forward + iptables NAT)
+sudo STRATUX_NG_CONFIG=/data/stratux-ng/config.yaml \
+  /usr/local/bin/stratux-ng-wifi-apply \
+  -out /etc/dnsmasq.d/stratux-ng.conf \
+  -restart-dnsmasq \
+  -apply-internet
+```
+
+Example systemd oneshot units are provided at:
+
+- `configs/systemd/stratux-ng-apply-wifi-dnsmasq.service.example`
+- `configs/systemd/stratux-ng-apply-wifi-internet.service.example`
 
 ## What you want to achieve (two common modes)
 
@@ -36,10 +81,10 @@ Note: AP+STA requires driver support. If your hardware can’t do it, the fallba
 ## Assumptions
 
 - Raspberry Pi OS (arm64), with a Wi‑Fi interface named `wlan0`
-- You want a private Wi‑Fi network, e.g. `192.168.10.0/24`
+- You want a private Wi‑Fi network (Stratux-NG default: `192.168.10.0/24`)
 - You may want an upstream Wi‑Fi uplink on `wlan0`
 
-Example defaults used in this guide:
+Default values used in this guide:
 
 - AP interface: `ap0` (virtual interface created from `wlan0`)
 - Uplink interface: `wlan0`

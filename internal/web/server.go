@@ -193,6 +193,9 @@ func Handler(status *Status, settings SettingsStore, logs *LogBuffer, ahrsCtl AH
 		_, _ = w.Write([]byte("\n"))
 	})
 
+	// Wi-Fi scan API (best-effort; used by Settings UI).
+	mux.Handle("/api/wifi/scan", WiFiScanHandler())
+
 	// Settings API (read/write YAML config). Changes are applied immediately when supported.
 	// Kept intentionally small.
 	mux.Handle("/api/settings", settings.Handler())

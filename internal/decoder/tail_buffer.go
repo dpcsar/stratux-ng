@@ -3,10 +3,10 @@ package decoder
 import "sync"
 
 type tailBuffer struct {
-	mu          sync.Mutex
-	maxLines    int
+	mu           sync.Mutex
+	maxLines     int
 	maxLineBytes int
-	lines       []string
+	lines        []string
 }
 
 func newTailBuffer(maxLines int, maxLineBytes int) *tailBuffer {

@@ -162,13 +162,13 @@ func TestTrafficReplay_Dump1090AircraftJSON_EmitsGDL90Traffic(t *testing.T) {
 	gs := 80
 	trk := 123.0
 	gpsSnap := gps.Snapshot{
-		Enabled:  true,
-		Valid:    true,
-		LatDeg:   45.0,
-		LonDeg:   -122.0,
-		AltFeet:  &alt,
-		GroundKt: &gs,
-		TrackDeg: &trk,
+		Enabled:    true,
+		Valid:      true,
+		LatDeg:     45.0,
+		LonDeg:     -122.0,
+		AltFeet:    &alt,
+		GroundKt:   &gs,
+		TrackDeg:   &trk,
 		LastFixUTC: now.Format(time.RFC3339Nano),
 	}
 

@@ -19,6 +19,7 @@ type Config struct {
 	AHRS  AHRSConfig  `yaml:"ahrs"`
 	Fan   FanConfig   `yaml:"fan"`
 	Web   WebConfig   `yaml:"web"`
+	WiFi  WiFiConfig  `yaml:"wifi"`
 
 	// External decoder inputs (planned): 1090 and 978.
 	//  - 978 is typically ingested as NDJSON-over-TCP (dump978-fa JSON stream).
@@ -27,12 +28,48 @@ type Config struct {
 	UAT978   DecoderBandConfig `yaml:"uat978"`
 }
 
+// WiFiConfig describes the intended Wi-Fi AP network configuration.
+//
+// Stratux-NG currently treats Wi-Fi setup as host-managed (hostapd/dnsmasq,
+// NetworkManager, etc.). These settings are persisted in config.yaml so they
+// can be edited in the Web UI and used as a single source-of-truth for image
+// build scripts/templates.
+type WiFiConfig struct {
+	// SubnetCIDR is the AP subnet, e.g. "192.168.10.0/24".
+	SubnetCIDR string `yaml:"subnet_cidr"`
+	// APIp is the Pi's address on the AP subnet, e.g. "192.168.10.1".
+	APIp string `yaml:"ap_ip"`
+	// DHCPStart and DHCPEnd define the client range, e.g. 192.168.10.50-192.168.10.150.
+	DHCPStart string `yaml:"dhcp_start"`
+	DHCPEnd   string `yaml:"dhcp_end"`
+
+	// UplinkEnable enables connecting to an upstream Wi-Fi network (hotspot)
+	// on the same radio (AP+STA). This is intended to provide internet access
+	// to AP clients via NAT when InternetPassThroughEnabled is true.
+	UplinkEnable bool `yaml:"uplink_enable"`
+
+	// ClientNetworks is the list of upstream Wi-Fi networks (SSID + optional
+	// password) that Stratux-NG may connect to when UplinkEnable is true.
+	//
+	// Password may be empty for open networks.
+	ClientNetworks []WiFiClientNetwork `yaml:"client_networks"`
+
+	// InternetPassThroughEnabled enables IPv4 forwarding and NAT (masquerade)
+	// so AP clients can reach the internet via the uplink.
+	InternetPassThroughEnabled bool `yaml:"internet_passthrough_enable"`
+}
+
+type WiFiClientNetwork struct {
+	SSID     string `yaml:"ssid"`
+	Password string `yaml:"password"`
+}
+
 // DecoderBandConfig describes one RF band ingest path (e.g. 1090 or 978).
 //
 // Stratux-NG treats decoders as external processes and ingests their output via
 // either:
-//  - newline-delimited JSON (NDJSON) over TCP, or
-//  - a periodically-updated JSON file.
+//   - newline-delimited JSON (NDJSON) over TCP, or
+//   - a periodically-updated JSON file.
 type DecoderBandConfig struct {
 	Enable bool `yaml:"enable"`
 
@@ -307,6 +344,143 @@ func DefaultAndValidate(cfg *Config) error {
 	}
 	if cfg.GDL90.Interval <= 0 {
 		cfg.GDL90.Interval = 1 * time.Second
+	}
+
+	// Wi-Fi defaults + validation (single source-of-truth for appliance networking).
+	if strings.TrimSpace(cfg.WiFi.SubnetCIDR) == "" {
+		cfg.WiFi.SubnetCIDR = "192.168.10.0/24"
+	}
+	_, apNet, err := net.ParseCIDR(strings.TrimSpace(cfg.WiFi.SubnetCIDR))
+	if err != nil {
+		return fmt.Errorf("wifi.subnet_cidr must be a valid CIDR (e.g. 192.168.10.0/24): %w", err)
+	}
+	if apNet.IP.To4() == nil {
+		return fmt.Errorf("wifi.subnet_cidr must be an IPv4 CIDR")
+	}
+	ones, bits := apNet.Mask.Size()
+	if bits != 32 {
+		return fmt.Errorf("wifi.subnet_cidr must be an IPv4 CIDR")
+	}
+	if ones < 8 || ones > 30 {
+		return fmt.Errorf("wifi.subnet_cidr prefix must be between /8 and /30")
+	}
+	// Normalize network IP.
+	apNet.IP = apNet.IP.Mask(apNet.Mask)
+
+	// Helper conversions.
+	ipToU32 := func(ip net.IP) uint32 {
+		ip4 := ip.To4()
+		return (uint32(ip4[0]) << 24) | (uint32(ip4[1]) << 16) | (uint32(ip4[2]) << 8) | uint32(ip4[3])
+	}
+	u32ToIP := func(v uint32) net.IP {
+		return net.IPv4(byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
+	}
+	parseIPv4 := func(field, s string) (net.IP, error) {
+		ip := net.ParseIP(strings.TrimSpace(s))
+		if ip == nil || ip.To4() == nil {
+			return nil, fmt.Errorf("%s must be a valid IPv4 address", field)
+		}
+		return ip.To4(), nil
+	}
+	contains := func(n *net.IPNet, ip net.IP) bool {
+		return n.Contains(ip.To4())
+	}
+	addrCount := uint32(1) << uint32(32-ones)
+	if addrCount < 4 {
+		return fmt.Errorf("wifi.subnet_cidr is too small")
+	}
+	netU := ipToU32(apNet.IP)
+	bcastU := netU + (addrCount - 1)
+	firstHostU := netU + 1
+	lastHostU := bcastU - 1
+
+	if strings.TrimSpace(cfg.WiFi.APIp) == "" {
+		cfg.WiFi.APIp = u32ToIP(firstHostU).String()
+	}
+	apIP, err := parseIPv4("wifi.ap_ip", cfg.WiFi.APIp)
+	if err != nil {
+		return err
+	}
+	apU := ipToU32(apIP)
+	if !contains(apNet, apIP) {
+		return fmt.Errorf("wifi.ap_ip must be within wifi.subnet_cidr")
+	}
+	if apU == netU || apU == bcastU {
+		return fmt.Errorf("wifi.ap_ip must not be the network or broadcast address")
+	}
+
+	// Default DHCP range if missing.
+	if strings.TrimSpace(cfg.WiFi.DHCPStart) == "" || strings.TrimSpace(cfg.WiFi.DHCPEnd) == "" {
+		startOff := uint32(50)
+		endOff := uint32(150)
+		maxHostOff := addrCount - 2
+		if startOff > maxHostOff {
+			startOff = 2
+		}
+		if endOff > maxHostOff {
+			endOff = maxHostOff
+		}
+		if endOff < startOff {
+			endOff = startOff
+		}
+		cfg.WiFi.DHCPStart = u32ToIP(netU + startOff).String()
+		cfg.WiFi.DHCPEnd = u32ToIP(netU + endOff).String()
+	}
+	dhcpStartIP, err := parseIPv4("wifi.dhcp_start", cfg.WiFi.DHCPStart)
+	if err != nil {
+		return err
+	}
+	dhcpEndIP, err := parseIPv4("wifi.dhcp_end", cfg.WiFi.DHCPEnd)
+	if err != nil {
+		return err
+	}
+	if !contains(apNet, dhcpStartIP) || !contains(apNet, dhcpEndIP) {
+		return fmt.Errorf("wifi.dhcp_start and wifi.dhcp_end must be within wifi.subnet_cidr")
+	}
+	startU := ipToU32(dhcpStartIP)
+	endU := ipToU32(dhcpEndIP)
+	if startU == netU || startU == bcastU || endU == netU || endU == bcastU {
+		return fmt.Errorf("wifi.dhcp_start and wifi.dhcp_end must not be the network or broadcast address")
+	}
+	if startU > endU {
+		return fmt.Errorf("wifi.dhcp_start must be <= wifi.dhcp_end")
+	}
+	if startU < firstHostU || endU > lastHostU {
+		return fmt.Errorf("wifi.dhcp range must be within usable host addresses")
+	}
+	if apU >= startU && apU <= endU {
+		return fmt.Errorf("wifi.dhcp range must not include wifi.ap_ip")
+	}
+
+	// Uplink (hotspot) defaults + validation.
+	// Keep permissive and fail-safe: uplink is optional and defaults to off.
+	if cfg.WiFi.InternetPassThroughEnabled && !cfg.WiFi.UplinkEnable {
+		return fmt.Errorf("wifi.internet_passthrough_enable requires wifi.uplink_enable")
+	}
+	// Normalize networks: trim and drop empty SSIDs.
+	if len(cfg.WiFi.ClientNetworks) > 0 {
+		clean := make([]WiFiClientNetwork, 0, len(cfg.WiFi.ClientNetworks))
+		for _, n := range cfg.WiFi.ClientNetworks {
+			ssid := strings.TrimSpace(n.SSID)
+			pw := strings.TrimSpace(n.Password)
+			if ssid == "" {
+				// Drop empty entries.
+				continue
+			}
+			clean = append(clean, WiFiClientNetwork{SSID: ssid, Password: pw})
+		}
+		cfg.WiFi.ClientNetworks = clean
+	}
+	if cfg.WiFi.UplinkEnable {
+		if len(cfg.WiFi.ClientNetworks) == 0 {
+			return fmt.Errorf("wifi.client_networks must contain at least one SSID when wifi.uplink_enable is true")
+		}
+		for _, n := range cfg.WiFi.ClientNetworks {
+			if len(n.SSID) > 32 {
+				return fmt.Errorf("wifi.client_networks.ssid must be <= 32 characters")
+			}
+			// Password rules vary by security; we keep permissive and let nmcli/wpa_supplicant validate.
+		}
 	}
 
 	// Decoder band defaults / validation. Keep permissive for bring-up:

@@ -449,7 +449,7 @@ Per-app connection steps will be documented once defaults (UDP port/broadcast be
 ### Current defaults (Stratux-NG)
 
 - GDL90 UDP destination is configured via `gdl90.dest` in YAML.
-- `config.yaml` in this repo defaults to broadcast: `192.168.1.255:4000` (adjust for your subnet)
+- `config.yaml` in this repo defaults to broadcast: `192.168.10.255:4000` (adjust for your subnet)
 - Message transport: UDP, framed GDL90 (with CRC + byte-stuffing)
 
 Notes:

@@ -15,16 +15,21 @@ CMD_DIR := ./cmd/stratux-ng
 BIN_DIR := ./bin
 BIN := $(BIN_DIR)/$(APP_NAME)
 
+WIFI_APPLY_NAME := stratux-ng-wifi-apply
+WIFI_APPLY_CMD_DIR := ./cmd/stratux-ng-wifi-apply
+WIFI_APPLY_BIN := $(BIN_DIR)/$(WIFI_APPLY_NAME)
+
 # Default config for dev. Override with:
 #   CONFIG=/data/stratux-ng/config.yaml make run
 CONFIG ?= ./config.yaml
 
-.PHONY: help test build run fmt vet staticcheck tidy clean image image-clean
+.PHONY: help test build build-wifi-apply run fmt vet staticcheck tidy clean image image-clean
 
 help:
 	@printf "%s\n" "Targets:" \
 	  "  make test        Run unit tests" \
 	  "  make build       Build ./bin/stratux-ng" \
+	  "  make build-wifi-apply  Build ./bin/stratux-ng-wifi-apply" \
 	  "  make run         Run via go run (CONFIG=$(CONFIG))" \
 	  "  make fmt         gofmt all .go files" \
 	  "  make vet         go vet ./..." \
@@ -38,6 +43,10 @@ test:
 build:
 	mkdir -p $(BIN_DIR)
 	go build -o $(BIN) $(CMD_DIR)
+
+build-wifi-apply:
+	mkdir -p $(BIN_DIR)
+	go build -o $(WIFI_APPLY_BIN) $(WIFI_APPLY_CMD_DIR)
 
 run:
 	STRATUX_NG_CONFIG=$(CONFIG) go run $(CMD_DIR)

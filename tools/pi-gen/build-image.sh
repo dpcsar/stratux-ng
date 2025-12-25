@@ -35,6 +35,14 @@ BIN_OUT="${BUILD_DIR}/stratux-ng-linux-arm64"
   CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o "${BIN_OUT}" ./cmd/stratux-ng
 )
 
+# 1b) Build the Wi-Fi apply helper for arm64.
+WIFI_APPLY_BIN_OUT="${BUILD_DIR}/stratux-ng-wifi-apply-linux-arm64"
+(
+  cd "${ROOT_DIR}"
+  echo "==> building stratux-ng-wifi-apply (linux/arm64)"
+  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o "${WIFI_APPLY_BIN_OUT}" ./cmd/stratux-ng-wifi-apply
+)
+
 # 2) Clone pi-gen (or update it).
 if [[ ! -d "${PIGEN_DIR}/.git" ]]; then
   echo "==> cloning pi-gen into ${PIGEN_DIR}"
@@ -61,6 +69,7 @@ cp -a "${STAGE_SRC_DIR}" "${STAGE_DST_DIR}"
 # 4) Inject the freshly built binary + current repo config into the stage files.
 mkdir -p "${STAGE_DST_DIR}/files/usr/local/bin"
 install -m 0755 "${BIN_OUT}" "${STAGE_DST_DIR}/files/usr/local/bin/stratux-ng"
+install -m 0755 "${WIFI_APPLY_BIN_OUT}" "${STAGE_DST_DIR}/files/usr/local/bin/stratux-ng-wifi-apply"
 
 mkdir -p "${STAGE_DST_DIR}/files/data/stratux-ng"
 install -m 0644 "${ROOT_DIR}/config.yaml" "${STAGE_DST_DIR}/files/data/stratux-ng/config.yaml"

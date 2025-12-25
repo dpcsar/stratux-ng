@@ -21,12 +21,26 @@ type SettingsPayload struct {
 	GDL90Dest string `json:"gdl90_dest"`
 	Interval  string `json:"interval"`
 
+	WiFiSubnetCIDR string `json:"wifi_subnet_cidr"`
+	WiFiAPIp       string `json:"wifi_ap_ip"`
+	WiFiDHCPStart  string `json:"wifi_dhcp_start"`
+	WiFiDHCPEnd    string `json:"wifi_dhcp_end"`
+
+	WiFiUplinkEnable               bool                `json:"wifi_uplink_enable"`
+	WiFiClientNetworks             []WiFiClientNetwork `json:"wifi_client_networks"`
+	WiFiInternetPassThroughEnabled bool                `json:"wifi_internet_passthrough_enable"`
+
 	ScenarioEnable       bool   `json:"scenario_enable"`
 	ScenarioPath         string `json:"scenario_path"`
 	ScenarioStartTimeUTC string `json:"scenario_start_time_utc"`
 	ScenarioLoop         bool   `json:"scenario_loop"`
 
 	TrafficEnable bool `json:"traffic_enable"`
+}
+
+type WiFiClientNetwork struct {
+	SSID     string `json:"ssid"`
+	Password string `json:"password"`
 }
 
 // SettingsPayloadIn is the strict POST schema.
@@ -36,6 +50,15 @@ type SettingsPayload struct {
 type SettingsPayloadIn struct {
 	GDL90Dest *string `json:"gdl90_dest"`
 	Interval  *string `json:"interval"`
+
+	WiFiSubnetCIDR *string `json:"wifi_subnet_cidr"`
+	WiFiAPIp       *string `json:"wifi_ap_ip"`
+	WiFiDHCPStart  *string `json:"wifi_dhcp_start"`
+	WiFiDHCPEnd    *string `json:"wifi_dhcp_end"`
+
+	WiFiUplinkEnable               *bool                `json:"wifi_uplink_enable"`
+	WiFiClientNetworks             *[]WiFiClientNetwork `json:"wifi_client_networks"`
+	WiFiInternetPassThroughEnabled *bool                `json:"wifi_internet_passthrough_enable"`
 
 	ScenarioEnable       *bool   `json:"scenario_enable"`
 	ScenarioPath         *string `json:"scenario_path"`
@@ -48,6 +71,13 @@ type SettingsPayloadIn struct {
 var settingsPostKeys = []string{
 	"gdl90_dest",
 	"interval",
+	"wifi_subnet_cidr",
+	"wifi_ap_ip",
+	"wifi_dhcp_start",
+	"wifi_dhcp_end",
+	"wifi_uplink_enable",
+	"wifi_client_networks",
+	"wifi_internet_passthrough_enable",
 	"scenario_enable",
 	"scenario_path",
 	"scenario_start_time_utc",
@@ -138,6 +168,15 @@ func configToSettingsPayload(cfg config.Config) SettingsPayload {
 		GDL90Dest: cfg.GDL90.Dest,
 		Interval:  cfg.GDL90.Interval.String(),
 
+		WiFiSubnetCIDR: cfg.WiFi.SubnetCIDR,
+		WiFiAPIp:       cfg.WiFi.APIp,
+		WiFiDHCPStart:  cfg.WiFi.DHCPStart,
+		WiFiDHCPEnd:    cfg.WiFi.DHCPEnd,
+
+		WiFiUplinkEnable:               cfg.WiFi.UplinkEnable,
+		WiFiClientNetworks:             networksToPayload(cfg.WiFi.ClientNetworks),
+		WiFiInternetPassThroughEnabled: cfg.WiFi.InternetPassThroughEnabled,
+
 		ScenarioEnable:       cfg.Sim.Scenario.Enable,
 		ScenarioPath:         cfg.Sim.Scenario.Path,
 		ScenarioStartTimeUTC: cfg.Sim.Scenario.StartTimeUTC,
@@ -145,6 +184,22 @@ func configToSettingsPayload(cfg config.Config) SettingsPayload {
 
 		TrafficEnable: cfg.Sim.Traffic.Enable,
 	}
+}
+
+func networksToPayload(in []config.WiFiClientNetwork) []WiFiClientNetwork {
+	out := make([]WiFiClientNetwork, 0, len(in))
+	for _, n := range in {
+		out = append(out, WiFiClientNetwork{SSID: n.SSID, Password: n.Password})
+	}
+	return out
+}
+
+func networksFromPayload(in []WiFiClientNetwork) []config.WiFiClientNetwork {
+	out := make([]config.WiFiClientNetwork, 0, len(in))
+	for _, n := range in {
+		out = append(out, config.WiFiClientNetwork{SSID: n.SSID, Password: n.Password})
+	}
+	return out
 }
 
 func validateSettingsPayloadIn(p SettingsPayloadIn) error {
@@ -159,6 +214,57 @@ func validateSettingsPayloadIn(p SettingsPayloadIn) error {
 	}
 	if strings.TrimSpace(*p.Interval) == "" {
 		return errors.New("interval must be non-empty")
+	}
+	if p.WiFiSubnetCIDR == nil {
+		return errors.New("wifi_subnet_cidr is required")
+	}
+	if strings.TrimSpace(*p.WiFiSubnetCIDR) == "" {
+		return errors.New("wifi_subnet_cidr must be non-empty")
+	}
+	if p.WiFiAPIp == nil {
+		return errors.New("wifi_ap_ip is required")
+	}
+	if strings.TrimSpace(*p.WiFiAPIp) == "" {
+		return errors.New("wifi_ap_ip must be non-empty")
+	}
+	if p.WiFiDHCPStart == nil {
+		return errors.New("wifi_dhcp_start is required")
+	}
+	if strings.TrimSpace(*p.WiFiDHCPStart) == "" {
+		return errors.New("wifi_dhcp_start must be non-empty")
+	}
+	if p.WiFiDHCPEnd == nil {
+		return errors.New("wifi_dhcp_end is required")
+	}
+	if strings.TrimSpace(*p.WiFiDHCPEnd) == "" {
+		return errors.New("wifi_dhcp_end must be non-empty")
+	}
+	if p.WiFiUplinkEnable == nil {
+		return errors.New("wifi_uplink_enable is required")
+	}
+	if p.WiFiClientNetworks == nil {
+		return errors.New("wifi_client_networks is required")
+	}
+	if p.WiFiInternetPassThroughEnabled == nil {
+		return errors.New("wifi_internet_passthrough_enable is required")
+	}
+	if *p.WiFiInternetPassThroughEnabled && !*p.WiFiUplinkEnable {
+		return errors.New("wifi_internet_passthrough_enable requires wifi_uplink_enable")
+	}
+	if *p.WiFiUplinkEnable {
+		if len(*p.WiFiClientNetworks) == 0 {
+			return errors.New("wifi_client_networks must contain at least one network when wifi_uplink_enable is true")
+		}
+		hasSSID := false
+		for _, n := range *p.WiFiClientNetworks {
+			if strings.TrimSpace(n.SSID) != "" {
+				hasSSID = true
+				break
+			}
+		}
+		if !hasSSID {
+			return errors.New("wifi_client_networks must include at least one non-empty ssid when wifi_uplink_enable is true")
+		}
 	}
 	if p.ScenarioEnable == nil {
 		return errors.New("scenario_enable is required")
@@ -194,6 +300,15 @@ func applySettingsPayload(cfg *config.Config, p SettingsPayloadIn) error {
 		return fmt.Errorf("invalid interval %q: %w", intervalStr, err)
 	}
 	cfg.GDL90.Interval = d
+
+	cfg.WiFi.SubnetCIDR = strings.TrimSpace(*p.WiFiSubnetCIDR)
+	cfg.WiFi.APIp = strings.TrimSpace(*p.WiFiAPIp)
+	cfg.WiFi.DHCPStart = strings.TrimSpace(*p.WiFiDHCPStart)
+	cfg.WiFi.DHCPEnd = strings.TrimSpace(*p.WiFiDHCPEnd)
+
+	cfg.WiFi.UplinkEnable = *p.WiFiUplinkEnable
+	cfg.WiFi.InternetPassThroughEnabled = *p.WiFiInternetPassThroughEnabled
+	cfg.WiFi.ClientNetworks = networksFromPayload(*p.WiFiClientNetworks)
 
 	cfg.Sim.Scenario.Enable = *p.ScenarioEnable
 	cfg.Sim.Scenario.Path = strings.TrimSpace(*p.ScenarioPath)

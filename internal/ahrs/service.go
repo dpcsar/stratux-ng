@@ -391,7 +391,6 @@ func (s *Service) run(ctx context.Context) {
 	// transients don't get captured as MIN/MAX.
 	var gLoadWarmupUntil time.Time
 
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -931,7 +930,7 @@ func (s *Service) startupCal(ctx context.Context) {
 		setDeadline := time.NewTimer(setLevelMaxWait)
 		defer setDeadline.Stop()
 		// NOTE: Labeled break is intentional; the select's break would only break the select.
-		retrySetLevel:
+	retrySetLevel:
 		for {
 			if err := s.SetLevel(); err == nil {
 				break

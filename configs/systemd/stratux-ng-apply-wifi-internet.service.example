@@ -1,0 +1,13 @@
+[Unit]
+Description=Stratux-NG Wi-Fi uplink + internet pass-through (AP+client)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+Environment=STRATUX_NG_CONFIG=/data/stratux-ng/config.yaml
+# Writes dnsmasq config, restarts dnsmasq, and applies (best-effort) uplink/NAT.
+ExecStart=/usr/local/bin/stratux-ng-wifi-apply -out /etc/dnsmasq.d/stratux-ng.conf -restart-dnsmasq -apply-internet
+
+[Install]
+WantedBy=multi-user.target

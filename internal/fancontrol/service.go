@@ -38,7 +38,7 @@ type Config struct {
 }
 
 type Snapshot struct {
-	Enabled bool `json:"enabled"`
+	Enabled bool   `json:"enabled"`
 	Backend string `json:"backend,omitempty"`
 
 	CPUValid bool    `json:"cpu_valid"`
@@ -52,7 +52,7 @@ type Snapshot struct {
 }
 
 type Service struct {
-	cfg Config
+	cfg     Config
 	backend string
 
 	mu   sync.RWMutex
