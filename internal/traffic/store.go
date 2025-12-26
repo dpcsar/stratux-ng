@@ -28,6 +28,39 @@ type target struct {
 	seenAt  time.Time
 }
 
+type evictionCandidate struct {
+	ico  [3]byte
+	seen time.Time
+}
+
+func (s *Store) evictIfNeededLocked() {
+	if s == nil {
+		return
+	}
+	if s.cfg.MaxTargets <= 0 {
+		return
+	}
+	over := len(s.targets) - s.cfg.MaxTargets
+	if over <= 0 {
+		return
+	}
+
+	// Collect and evict oldest in one pass.
+	cands := make([]evictionCandidate, 0, len(s.targets))
+	for k, v := range s.targets {
+		cands = append(cands, evictionCandidate{ico: k, seen: v.seenAt})
+	}
+	sort.Slice(cands, func(i, j int) bool {
+		return cands[i].seen.Before(cands[j].seen)
+	})
+	if over > len(cands) {
+		over = len(cands)
+	}
+	for i := 0; i < over; i++ {
+		delete(s.targets, cands[i].ico)
+	}
+}
+
 func NewStore(cfg StoreConfig) *Store {
 	if cfg.MaxTargets <= 0 {
 		cfg.MaxTargets = 200
@@ -53,24 +86,7 @@ func (s *Store) Upsert(nowUTC time.Time, t gdl90.Traffic) {
 	defer s.mu.Unlock()
 
 	s.targets[t.ICAO] = target{traffic: t, seenAt: nowUTC.UTC()}
-	if len(s.targets) <= s.cfg.MaxTargets {
-		return
-	}
-
-	// Evict oldest until within limit.
-	for len(s.targets) > s.cfg.MaxTargets {
-		var oldestICAO [3]byte
-		var oldestAt time.Time
-		first := true
-		for k, v := range s.targets {
-			if first || v.seenAt.Before(oldestAt) {
-				oldestICAO = k
-				oldestAt = v.seenAt
-				first = false
-			}
-		}
-		delete(s.targets, oldestICAO)
-	}
+	s.evictIfNeededLocked()
 }
 
 func (s *Store) UpsertMany(nowUTC time.Time, targets []gdl90.Traffic) {
@@ -83,13 +99,20 @@ func (s *Store) UpsertMany(nowUTC time.Time, targets []gdl90.Traffic) {
 	if nowUTC.IsZero() {
 		nowUTC = time.Now().UTC()
 	}
+
+	nowUTC = nowUTC.UTC()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	for _, t := range targets {
 		// Skip obviously invalid targets.
 		if t.LatDeg == 0 && t.LonDeg == 0 {
 			continue
 		}
-		s.Upsert(nowUTC, t)
+		s.targets[t.ICAO] = target{traffic: t, seenAt: nowUTC}
 	}
+	s.evictIfNeededLocked()
 }
 
 func (s *Store) Snapshot(nowUTC time.Time) []gdl90.Traffic {

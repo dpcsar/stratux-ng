@@ -566,7 +566,6 @@ func main() {
 			}()
 		}
 
-		var seq uint64
 		hf := &headingFuser{}
 		for {
 			tickC := rt.TickChan()
@@ -582,7 +581,6 @@ func main() {
 					// Replay mode doesn't use the tick loop.
 					continue
 				}
-				seq++
 				sc := rt.Scenario()
 				var now time.Time
 				var frames [][]byte
@@ -688,7 +686,9 @@ func main() {
 					att.GMax = &gmax
 				}
 				status.SetAttitude(now.UTC(), att)
-				status.MarkTick(now.UTC(), len(frames))
+				// Always record a "tick" time even if we fail mid-send.
+				status.MarkTick(now.UTC(), 0)
+				sent := 0
 				for _, frame := range frames {
 					if rec != nil {
 						if err := rec.WriteFrame(now, frame); err != nil {
@@ -702,6 +702,7 @@ func main() {
 						cancel()
 						return
 					}
+					sent++
 				}
 				if rec != nil {
 					if err := rec.Flush(); err != nil {
@@ -710,6 +711,7 @@ func main() {
 						return
 					}
 				}
+				status.MarkTick(now.UTC(), sent)
 				if sc != nil && sc.scenario != nil {
 					sc.elapsed += curCfg.GDL90.Interval
 				}

@@ -264,25 +264,12 @@ func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
 }
 
 func restartService(name string) error {
-	// Avoid importing os/exec unless requested; use a small, explicit exec here.
-	// We keep this helper tiny and only used when explicitly enabled.
-	cmd := "/bin/systemctl"
-	if _, err := os.Stat(cmd); err != nil {
-		cmd = "systemctl"
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return fmt.Errorf("restartService: empty service name")
 	}
-
-	p, err := os.StartProcess(cmd, []string{cmd, "restart", name}, &os.ProcAttr{Files: []*os.File{os.Stdin, os.Stdout, os.Stderr}})
-	if err != nil {
-		return err
-	}
-	st, err := p.Wait()
-	if err != nil {
-		return err
-	}
-	if !st.Success() {
-		return fmt.Errorf("systemctl restart %s failed", name)
-	}
-	return nil
+	// Use exec.Command so PATH lookup works when systemctl isn't at /bin/systemctl.
+	return runCmd("systemctl", []string{"restart", name})
 }
 
 func exitErr(err error) {
