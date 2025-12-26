@@ -20,31 +20,37 @@ Stratux-NG also supports configuring an optional upstream Wi‑Fi (hotspot) conn
 - `uplink_enable`: whether to attempt connecting to an upstream Wi‑Fi network
 - `client_networks`: list of SSIDs/passwords (password optional for open networks)
 - `internet_passthrough_enable`: whether to enable IPv4 forwarding + NAT (masquerade) so AP clients can reach the internet
+- `mode`: choose `ap`, `ap_client`, or `client`
+- `ssid` / `passphrase` / `country` / `channel`: AP identity + regulatory settings
 
 Important: Stratux-NG still does not configure the OS network stack itself — you must apply the same values to hostapd/dnsmasq/NetworkManager (examples below).
 
-### Optional helper: generate dnsmasq config from `config.yaml`
+### Optional helper: manage hostapd/dnsmasq/mode from `config.yaml`
 
-Stratux-NG ships an optional helper binary that renders a dnsmasq snippet from the Settings-backed `wifi:` values:
+Stratux-NG ships an optional helper binary that renders hostapd + dnsmasq configs and (optionally) applies the requested Wi‑Fi mode:
 
 ```bash
-# Print to stdout
+# Print dnsmasq config to stdout (no host changes)
 STRATUX_NG_CONFIG=/data/stratux-ng/config.yaml \
-  /usr/local/bin/stratux-ng-wifi-apply
+  /usr/local/bin/stratux-ng-wifi-apply \
+  -out -
 
-# Write the dnsmasq config and restart dnsmasq (requires root)
+# Write both configs (requires root)
 sudo STRATUX_NG_CONFIG=/data/stratux-ng/config.yaml \
   /usr/local/bin/stratux-ng-wifi-apply \
+  -hostapd-out /etc/hostapd/hostapd.conf \
   -out /etc/dnsmasq.d/stratux-ng.conf \
-  -restart-dnsmasq
+  -apply
 
-# Apply uplink + internet pass-through (nmcli + ip_forward + iptables NAT)
+# Apply Wi‑Fi mode (AP/AP+client/Client) + uplink/NAT per config
 sudo STRATUX_NG_CONFIG=/data/stratux-ng/config.yaml \
   /usr/local/bin/stratux-ng-wifi-apply \
+  -hostapd-out /etc/hostapd/hostapd.conf \
   -out /etc/dnsmasq.d/stratux-ng.conf \
-  -restart-dnsmasq \
-  -apply-internet
+  -apply
 ```
+
+The Stratux-NG web UI automatically runs the helper with `-apply` after you save Settings, so manual invocations are only needed when editing `config.yaml` by hand or during advanced troubleshooting.
 
 Example systemd oneshot units are provided at:
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"errors"
@@ -11,12 +12,16 @@ import (
 	"math"
 	"net"
 	"os"
+	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
+
+	"gopkg.in/yaml.v3"
 
 	"stratux-ng/internal/ahrs"
 	"stratux-ng/internal/config"
@@ -266,6 +271,15 @@ type applyRequest struct {
 	resp chan error
 }
 
+const (
+	wifiApplyBinaryName     = "stratux-ng-wifi-apply"
+	wifiApplyBinaryFallback = "/usr/local/bin/stratux-ng-wifi-apply"
+	wifiHostapdConfigPath   = "/etc/hostapd/hostapd.conf"
+	wifiDNSMasqConfigPath   = "/etc/dnsmasq.d/stratux-ng.conf"
+	wifiAPInterface         = "ap0"
+	wifiUplinkInterface     = "wlan0"
+)
+
 type safeBroadcaster struct {
 	mu sync.Mutex
 	b  *udp.Broadcaster
@@ -479,8 +493,15 @@ func main() {
 	status := web.NewStatus()
 	status.SetStatic(cfg.GDL90.Dest, cfg.GDL90.Interval.String(), simInfoSnapshot(resolvedConfigPath, cfg))
 
+	currentCfg := cfg
+	var applyMu sync.Mutex
 	applyCh := make(chan applyRequest)
 	applyFunc := func(nextCfg config.Config) error {
+		applyMu.Lock()
+		defer applyMu.Unlock()
+		if err := applyWiFiConfig(ctx, nextCfg, resolvedConfigPath); err != nil {
+			return err
+		}
 		req := applyRequest{cfg: nextCfg, resp: make(chan error, 1)}
 		select {
 		case applyCh <- req:
@@ -489,10 +510,17 @@ func main() {
 		}
 		select {
 		case err := <-req.resp:
-			return err
+			if err != nil {
+				if rollbackErr := applyWiFiConfig(ctx, currentCfg, resolvedConfigPath); rollbackErr != nil {
+					log.Printf("wifi rollback failed: %v", rollbackErr)
+				}
+				return err
+			}
 		case <-ctx.Done():
 			return ctx.Err()
 		}
+		currentCfg = nextCfg
+		return nil
 	}
 
 	log.Printf("web ui enabled listen=%s", cfg.Web.Listen)
@@ -721,6 +749,84 @@ func main() {
 
 	<-ctx.Done()
 	log.Printf("stratux-ng stopping")
+}
+
+func applyWiFiConfig(ctx context.Context, cfg config.Config, configPath string) error {
+	bin, err := findWiFiApplyBinary()
+	if err != nil {
+		return err
+	}
+	tmpConfig, err := writeTempConfigCopy(cfg, configPath)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = os.Remove(tmpConfig)
+	}()
+	args := []string{
+		"-config", tmpConfig,
+		"-iface", wifiAPInterface,
+		"-uplink-iface", wifiUplinkInterface,
+		"-hostapd-out", wifiHostapdConfigPath,
+		"-out", wifiDNSMasqConfigPath,
+		"-apply",
+	}
+	var buf bytes.Buffer
+	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd.Stdout = &buf
+	cmd.Stderr = &buf
+	if err := cmd.Run(); err != nil {
+		out := strings.TrimSpace(buf.String())
+		if out == "" {
+			out = err.Error()
+		}
+		return fmt.Errorf("wifi apply failed: %s", out)
+	}
+	return nil
+}
+
+func findWiFiApplyBinary() (string, error) {
+	if path, err := exec.LookPath(wifiApplyBinaryName); err == nil {
+		return path, nil
+	}
+	if st, err := os.Stat(wifiApplyBinaryFallback); err == nil && !st.IsDir() {
+		return wifiApplyBinaryFallback, nil
+	}
+	return "", fmt.Errorf("%s not found; build with make build-wifi-apply", wifiApplyBinaryName)
+}
+
+func writeTempConfigCopy(cfg config.Config, basePath string) (string, error) {
+	b, err := yaml.Marshal(&cfg)
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Dir(basePath)
+	if dir == "" {
+		dir = "."
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil && !errors.Is(err, os.ErrExist) {
+		return "", err
+	}
+	tmp, err := os.CreateTemp(dir, filepath.Base(basePath)+".apply-*.yaml")
+	if err != nil {
+		return "", err
+	}
+	name := tmp.Name()
+	if _, err := tmp.Write(b); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(name)
+		return "", err
+	}
+	if err := tmp.Chmod(0o644); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(name)
+		return "", err
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(name)
+		return "", err
+	}
+	return name, nil
 }
 
 func runListen(ctx context.Context, addr string, dumpHex bool) error {

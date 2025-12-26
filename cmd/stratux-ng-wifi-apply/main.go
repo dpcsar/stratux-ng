@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"flag"
 	"fmt"
@@ -20,18 +21,24 @@ func main() {
 		iface          string
 		uplinkIface    string
 		outPath        string
+		hostapdOut     string
 		leaseStr       string
 		restartDnsmasq bool
+		restartHostapd bool
 		applyInternet  bool
+		applyMode      bool
 	)
 
 	flag.StringVar(&configPath, "config", "", "Path to config.yaml (defaults to STRATUX_NG_CONFIG or /data/stratux-ng/config.yaml)")
 	flag.StringVar(&iface, "iface", "ap0", "AP interface name to bind dnsmasq to")
 	flag.StringVar(&uplinkIface, "uplink-iface", "wlan0", "Uplink interface for internet pass-through (NAT)")
 	flag.StringVar(&outPath, "out", "", "Write dnsmasq config to this path (default: stdout)")
+	flag.StringVar(&hostapdOut, "hostapd-out", "", "Write hostapd config to this path (default: disabled)")
 	flag.StringVar(&leaseStr, "lease", "12h", "DHCP lease duration (e.g. 12h)")
 	flag.BoolVar(&restartDnsmasq, "restart-dnsmasq", false, "Restart dnsmasq after writing -out")
-	flag.BoolVar(&applyInternet, "apply-internet", false, "Apply uplink + internet pass-through (nmcli connect, ip_forward, iptables NAT). Best-effort; intended for root-run units.")
+	flag.BoolVar(&restartHostapd, "restart-hostapd", false, "Restart hostapd after writing -hostapd-out")
+	flag.BoolVar(&applyInternet, "apply-internet", false, "Apply uplink + internet pass-through (legacy flag; implied by -apply when config enables it).")
+	flag.BoolVar(&applyMode, "apply", false, "Apply wifi.mode (AP/client services, interface IPs, uplink, NAT)")
 	flag.Parse()
 
 	leaseStr = strings.TrimSpace(leaseStr)
@@ -46,6 +53,13 @@ func main() {
 	if err != nil {
 		exitErr(err)
 	}
+	hostapdOut = strings.TrimSpace(hostapdOut)
+	if applyMode && hostapdOut == "" {
+		hostapdOut = "/etc/hostapd/hostapd.conf"
+	}
+	if restartHostapd && hostapdOut == "" {
+		exitErr(errors.New("-restart-hostapd requires -hostapd-out"))
+	}
 
 	iface = strings.TrimSpace(iface)
 	if iface == "" {
@@ -55,6 +69,7 @@ func main() {
 	if uplinkIface == "" {
 		exitErr(errors.New("-uplink-iface must be non-empty"))
 	}
+	outPath = strings.TrimSpace(outPath)
 
 	_, apNet, err := net.ParseCIDR(strings.TrimSpace(cfg.WiFi.SubnetCIDR))
 	if err != nil {
@@ -76,6 +91,7 @@ func main() {
 	if startIP == nil || endIP == nil {
 		exitErr(errors.New("wifi.dhcp_start and wifi.dhcp_end must be valid IPv4 addresses"))
 	}
+	runAP := cfg.WiFi.Mode == "ap" || cfg.WiFi.Mode == "ap_client"
 
 	// DHCP options: mirror Stratux behavior.
 	// Only advertise gateway/DNS when internet pass-through is enabled.
@@ -113,8 +129,14 @@ func main() {
 		"",
 	)
 	content := strings.Join(lines, "\n")
+	if hostapdOut != "" {
+		hostapdCfg := renderHostapdConfig(cfg, iface, resolvedPath)
+		if err := writeFileAtomic(hostapdOut, []byte(hostapdCfg), 0o600); err != nil {
+			exitErr(err)
+		}
+	}
 
-	if strings.TrimSpace(outPath) == "" {
+	if outPath == "" {
 		if restartDnsmasq {
 			exitErr(errors.New("-restart-dnsmasq requires -out"))
 		}
@@ -130,18 +152,85 @@ func main() {
 	}
 
 	if restartDnsmasq {
-		if err := restartService("dnsmasq"); err != nil {
+		if !runAP {
+			fmt.Fprintln(os.Stderr, "info: skipping dnsmasq restart because wifi.mode=client")
+		} else if err := restartService("dnsmasq"); err != nil {
+			exitErr(err)
+		}
+	}
+	if restartHostapd {
+		if !runAP {
+			fmt.Fprintln(os.Stderr, "info: skipping hostapd restart because wifi.mode=client")
+		} else if err := restartService("hostapd"); err != nil {
 			exitErr(err)
 		}
 	}
 
-	if applyInternet {
+	ranUplink := false
+	if applyMode {
+		var err error
+		ranUplink, err = applyWiFiMode(cfg, iface, uplinkIface, apNet, apIP)
+		if err != nil {
+			// Best-effort by design: return a clear error so systemd logs it.
+			exitErr(err)
+		}
+	}
+	if applyInternet && !ranUplink {
 		if err := applyUplinkAndNAT(cfg, iface, uplinkIface); err != nil {
 			// Best-effort by design: return a clear error so systemd logs it,
 			// but callers can prefix the unit ExecStart with '-' to ignore.
 			exitErr(err)
 		}
 	}
+}
+
+var errServiceMissing = errors.New("systemd service missing")
+
+func applyWiFiMode(cfg config.Config, apIface, uplinkIface string, apNet *net.IPNet, apIP net.IP) (bool, error) {
+	mode := cfg.WiFi.Mode
+	runAP := mode == "ap" || mode == "ap_client"
+	if runAP {
+		if err := configureAPInterface(apIface, apIP, apNet); err != nil {
+			return false, err
+		}
+		if err := setServiceState("hostapd.service", true, true); err != nil {
+			return false, err
+		}
+		if err := setServiceState("dnsmasq.service", true, true); err != nil {
+			return false, err
+		}
+	} else {
+		if err := teardownAPInterface(apIface, apIP, apNet); err != nil {
+			return false, err
+		}
+		if err := setServiceState("hostapd.service", false, true); err != nil && !errors.Is(err, errServiceMissing) {
+			return false, err
+		}
+		if err := setServiceState("dnsmasq.service", false, true); err != nil && !errors.Is(err, errServiceMissing) {
+			return false, err
+		}
+	}
+
+	needNM := mode == "ap_client" || mode == "client"
+	if needNM {
+		if err := setServiceState("NetworkManager.service", true, false); err != nil {
+			return false, err
+		}
+	} else {
+		if err := setServiceState("NetworkManager.service", false, false); err != nil && !errors.Is(err, errServiceMissing) {
+			return false, err
+		}
+	}
+
+	ranUplink := false
+	if cfg.WiFi.UplinkEnable || cfg.WiFi.InternetPassThroughEnabled {
+		if err := applyUplinkAndNAT(cfg, apIface, uplinkIface); err != nil {
+			return false, err
+		}
+		ranUplink = true
+	}
+
+	return ranUplink, nil
 }
 
 func applyUplinkAndNAT(cfg config.Config, apIface, uplinkIface string) error {
@@ -194,6 +283,116 @@ func applyUplinkAndNAT(cfg config.Config, apIface, uplinkIface string) error {
 		}
 	}
 
+	return nil
+}
+
+func renderHostapdConfig(cfg config.Config, iface, source string) string {
+	var b strings.Builder
+	b.WriteString("# Generated by stratux-ng-wifi-apply\n")
+	if source != "" {
+		b.WriteString("# Source: " + source + "\n")
+	}
+	b.WriteString("#\n")
+	b.WriteString("interface=" + iface + "\n")
+	b.WriteString("driver=nl80211\n")
+	b.WriteString("country_code=" + cfg.WiFi.Country + "\n")
+	b.WriteString("ssid=" + cfg.WiFi.SSID + "\n")
+	b.WriteString("hw_mode=g\n")
+	b.WriteString(fmt.Sprintf("channel=%d\n", cfg.WiFi.Channel))
+	b.WriteString("ieee80211n=1\n")
+	b.WriteString("wmm_enabled=1\n")
+	if cfg.WiFi.Passphrase == "" {
+		b.WriteString("auth_algs=1\n")
+	} else {
+		b.WriteString("wpa=2\n")
+		b.WriteString("wpa_key_mgmt=WPA-PSK\n")
+		b.WriteString("rsn_pairwise=CCMP\n")
+		b.WriteString("wpa_passphrase=" + cfg.WiFi.Passphrase + "\n")
+	}
+	b.WriteString("\n")
+	return b.String()
+}
+
+func configureAPInterface(iface string, apIP net.IP, apNet *net.IPNet) error {
+	if iface == "" {
+		return fmt.Errorf("configureAPInterface: empty interface")
+	}
+	if apIP == nil || apNet == nil {
+		return fmt.Errorf("configureAPInterface: missing IP or network")
+	}
+	if _, err := net.InterfaceByName(iface); err != nil {
+		return fmt.Errorf("interface %s not found (ensure stratux-ng-create-ap0.service succeeded): %w", iface, err)
+	}
+	ones, _ := apNet.Mask.Size()
+	cidr := fmt.Sprintf("%s/%d", apIP.String(), ones)
+	if err := runCmd("ip", []string{"link", "set", iface, "up"}); err != nil {
+		return fmt.Errorf("failed to bring %s up: %w", iface, err)
+	}
+	if err := runCmd("ip", []string{"addr", "replace", cidr, "dev", iface}); err != nil {
+		return fmt.Errorf("failed to assign %s to %s: %w", cidr, iface, err)
+	}
+	return nil
+}
+
+func teardownAPInterface(iface string, apIP net.IP, apNet *net.IPNet) error {
+	if iface == "" || apIP == nil || apNet == nil {
+		return nil
+	}
+	if _, err := net.InterfaceByName(iface); err != nil {
+		return nil
+	}
+	ones, _ := apNet.Mask.Size()
+	cidr := fmt.Sprintf("%s/%d", apIP.String(), ones)
+	_ = runCmd("ip", []string{"addr", "del", cidr, "dev", iface})
+	_ = runCmd("ip", []string{"link", "set", iface, "down"})
+	return nil
+}
+
+func setServiceState(service string, enable bool, maskWhenDisable bool) error {
+	service = strings.TrimSpace(service)
+	if service == "" {
+		return fmt.Errorf("setServiceState: empty service name")
+	}
+	if enable {
+		if err := systemctlCmd(service, []string{"unmask"}); err != nil {
+			return err
+		}
+		if err := systemctlCmd(service, []string{"enable", "--now"}); err != nil {
+			return err
+		}
+		return nil
+	}
+	if err := systemctlCmd(service, []string{"stop"}); err != nil && !errors.Is(err, errServiceMissing) {
+		return err
+	}
+	if err := systemctlCmd(service, []string{"disable"}); err != nil && !errors.Is(err, errServiceMissing) {
+		return err
+	}
+	if maskWhenDisable {
+		if err := systemctlCmd(service, []string{"mask"}); err != nil && !errors.Is(err, errServiceMissing) {
+			return err
+		}
+	}
+	return nil
+}
+
+func systemctlCmd(service string, args []string) error {
+	cmdArgs := append(args, service)
+	var stderr bytes.Buffer
+	cmd := exec.Command("systemctl", cmdArgs...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		msg := strings.TrimSpace(stderr.String())
+		lower := strings.ToLower(msg)
+		if strings.Contains(lower, "could not be found") || strings.Contains(lower, "not found") || strings.Contains(lower, "not loaded") {
+			return fmt.Errorf("%w: %s", errServiceMissing, service)
+		}
+		if msg == "" {
+			msg = err.Error()
+		}
+		return fmt.Errorf("systemctl %s failed: %s", strings.Join(cmdArgs, " "), msg)
+	}
 	return nil
 }
 
@@ -268,8 +467,7 @@ func restartService(name string) error {
 	if name == "" {
 		return fmt.Errorf("restartService: empty service name")
 	}
-	// Use exec.Command so PATH lookup works when systemctl isn't at /bin/systemctl.
-	return runCmd("systemctl", []string{"restart", name})
+	return systemctlCmd(name, []string{"restart"})
 }
 
 func exitErr(err error) {

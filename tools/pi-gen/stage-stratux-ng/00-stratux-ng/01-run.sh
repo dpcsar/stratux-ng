@@ -12,6 +12,8 @@ install -d "${ROOTFS_DIR}/etc/hostapd"
 install -d "${ROOTFS_DIR}/etc/default"
 install -d "${ROOTFS_DIR}/etc/dnsmasq.d"
 install -d "${ROOTFS_DIR}/etc/modules-load.d"
+install -d "${ROOTFS_DIR}/etc/network"
+install -d "${ROOTFS_DIR}/etc/network/interfaces.d"
 install -d "${ROOTFS_DIR}/data/stratux-ng"
 
 install -m 0755 files/usr/local/bin/stratux-ng "${ROOTFS_DIR}/usr/local/bin/stratux-ng"
@@ -25,12 +27,14 @@ install -m 0644 files/etc/systemd/system/stratux-ng.service "${ROOTFS_DIR}/etc/s
 install -m 0644 files/etc/systemd/system/stratux-ng-apply-wifi-dnsmasq.service "${ROOTFS_DIR}/etc/systemd/system/stratux-ng-apply-wifi-dnsmasq.service"
 install -m 0644 files/etc/systemd/system/stratux-ng-apply-wifi-internet.service "${ROOTFS_DIR}/etc/systemd/system/stratux-ng-apply-wifi-internet.service"
 install -m 0644 files/etc/systemd/system/stratux-ng-create-ap0.service "${ROOTFS_DIR}/etc/systemd/system/stratux-ng-create-ap0.service"
+install -m 0644 files/etc/systemd/system/stratux-ng-wifi.service "${ROOTFS_DIR}/etc/systemd/system/stratux-ng-wifi.service"
 install -m 0644 files/etc/udev/rules.d/99-stratux-gps.rules "${ROOTFS_DIR}/etc/udev/rules.d/99-stratux-gps.rules"
 install -m 0644 files/data/stratux-ng/config.yaml "${ROOTFS_DIR}/data/stratux-ng/config.yaml"
 install -m 0644 files/etc/hostapd/hostapd.conf "${ROOTFS_DIR}/etc/hostapd/hostapd.conf"
 install -m 0644 files/etc/default/hostapd "${ROOTFS_DIR}/etc/default/hostapd"
 install -m 0644 files/etc/dnsmasq.d/stratux-ng.conf "${ROOTFS_DIR}/etc/dnsmasq.d/stratux-ng.conf"
 install -m 0644 files/etc/modules-load.d/stratux-ng.conf "${ROOTFS_DIR}/etc/modules-load.d/stratux-ng.conf"
+install -m 0644 files/etc/network/interfaces "${ROOTFS_DIR}/etc/network/interfaces"
 
 # Blacklist the DVB driver that commonly grabs RTL-SDR devices.
 cat >"${ROOTFS_DIR}/etc/modprobe.d/rtl-sdr-blacklist.conf" <<'EOF'
@@ -57,7 +61,12 @@ systemctl enable stratux-ng
 systemctl enable stratux-ng-create-ap0.service
 systemctl enable hostapd
 systemctl enable dnsmasq
-systemctl enable stratux-ng-apply-wifi-dnsmasq.service
+systemctl enable stratux-ng-wifi.service
+
+systemctl disable --now wpa_supplicant.service || true
+systemctl disable --now "wpa_supplicant@wlan0.service" || true
+systemctl disable --now NetworkManager.service || true
+systemctl disable --now dhcpcd.service || true
 
 # Ensure I2C is enabled for AHRS hardware.
 if ! grep -q '^dtparam=i2c_arm=on' /boot/firmware/config.txt 2>/dev/null; then

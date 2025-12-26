@@ -1,13 +1,15 @@
 [Unit]
-Description=Stratux-NG Wi-Fi uplink + internet pass-through (AP+client)
-Wants=network-online.target
-After=network-online.target
+Description=Stratux-NG Wi-Fi configuration
+DefaultDependencies=no
+After=systemd-udev-settle.service network-pre.target
+Before=network.target hostapd.service dnsmasq.service
+Wants=network-pre.target
 
 [Service]
 Type=oneshot
 Environment=STRATUX_NG_CONFIG=/data/stratux-ng/config.yaml
-# Writes hostapd + dnsmasq configs and applies (best-effort) Wi-Fi mode + uplink/NAT.
 ExecStart=/usr/local/bin/stratux-ng-wifi-apply -iface ap0 -uplink-iface wlan0 -out /etc/dnsmasq.d/stratux-ng.conf -hostapd-out /etc/hostapd/hostapd.conf -apply
+RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target

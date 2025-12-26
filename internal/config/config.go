@@ -35,6 +35,14 @@ type Config struct {
 // can be edited in the Web UI and used as a single source-of-truth for image
 // build scripts/templates.
 type WiFiConfig struct {
+	// Mode selects the operating mode: "ap", "ap_client", or "client".
+	Mode string `yaml:"mode"`
+	// SSID/Passphrase/Country/Channel configure the AP when enabled.
+	SSID       string `yaml:"ssid"`
+	Passphrase string `yaml:"passphrase"`
+	Country    string `yaml:"country"`
+	Channel    int    `yaml:"channel"`
+
 	// SubnetCIDR is the AP subnet, e.g. "192.168.10.0/24".
 	SubnetCIDR string `yaml:"subnet_cidr"`
 	// APIp is the Pi's address on the AP subnet, e.g. "192.168.10.1".
@@ -347,6 +355,69 @@ func DefaultAndValidate(cfg *Config) error {
 	}
 
 	// Wi-Fi defaults + validation (single source-of-truth for appliance networking).
+	mode := strings.TrimSpace(strings.ToLower(cfg.WiFi.Mode))
+	if mode == "" {
+		mode = "ap"
+	}
+	switch mode {
+	case "ap", "ap_client", "client":
+		cfg.WiFi.Mode = mode
+	default:
+		return fmt.Errorf("wifi.mode must be one of 'ap', 'ap_client', or 'client'")
+	}
+	needsUplink := mode == "ap_client" || mode == "client"
+	if mode == "ap" {
+		if cfg.WiFi.UplinkEnable {
+			return fmt.Errorf("wifi.uplink_enable must be false when wifi.mode is 'ap'")
+		}
+		if cfg.WiFi.InternetPassThroughEnabled {
+			return fmt.Errorf("wifi.internet_passthrough_enable requires wifi.mode 'ap_client'")
+		}
+	}
+	if needsUplink && !cfg.WiFi.UplinkEnable {
+		return fmt.Errorf("wifi.uplink_enable must be true when wifi.mode is '%s'", mode)
+	}
+	if mode == "client" && cfg.WiFi.InternetPassThroughEnabled {
+		return fmt.Errorf("wifi.internet_passthrough_enable is only supported when wifi.mode is 'ap_client'")
+	}
+	ssid := strings.TrimSpace(cfg.WiFi.SSID)
+	if ssid == "" {
+		ssid = "stratux-ng"
+	}
+	if len(ssid) > 32 {
+		return fmt.Errorf("wifi.ssid must be <= 32 characters")
+	}
+	if strings.ContainsAny(ssid, "\r\n") {
+		return fmt.Errorf("wifi.ssid must not contain control characters")
+	}
+	cfg.WiFi.SSID = ssid
+	country := strings.ToUpper(strings.TrimSpace(cfg.WiFi.Country))
+	if country == "" {
+		country = "US"
+	}
+	if len(country) != 2 {
+		return fmt.Errorf("wifi.country must be a 2-letter ISO code")
+	}
+	cfg.WiFi.Country = country
+	if cfg.WiFi.Channel <= 0 {
+		cfg.WiFi.Channel = 6
+	}
+	if cfg.WiFi.Channel < 1 || cfg.WiFi.Channel > 11 {
+		return fmt.Errorf("wifi.channel must be between 1 and 11")
+	}
+	pass := cfg.WiFi.Passphrase
+	if strings.TrimSpace(pass) == "" {
+		cfg.WiFi.Passphrase = ""
+	} else {
+		if len(pass) < 8 || len(pass) > 63 {
+			return fmt.Errorf("wifi.passphrase must be 8-63 characters or empty for open AP")
+		}
+		if strings.ContainsAny(pass, "\r\n") {
+			return fmt.Errorf("wifi.passphrase must not contain control characters")
+		}
+		cfg.WiFi.Passphrase = pass
+	}
+
 	if strings.TrimSpace(cfg.WiFi.SubnetCIDR) == "" {
 		cfg.WiFi.SubnetCIDR = "192.168.10.0/24"
 	}
@@ -454,9 +525,6 @@ func DefaultAndValidate(cfg *Config) error {
 
 	// Uplink (hotspot) defaults + validation.
 	// Keep permissive and fail-safe: uplink is optional and defaults to off.
-	if cfg.WiFi.InternetPassThroughEnabled && !cfg.WiFi.UplinkEnable {
-		return fmt.Errorf("wifi.internet_passthrough_enable requires wifi.uplink_enable")
-	}
 	// Normalize networks: trim and drop empty SSIDs.
 	if len(cfg.WiFi.ClientNetworks) > 0 {
 		clean := make([]WiFiClientNetwork, 0, len(cfg.WiFi.ClientNetworks))

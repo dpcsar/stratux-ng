@@ -53,6 +53,70 @@ func TestLoad_DefaultsApplied(t *testing.T) {
 	}
 }
 
+func TestLoad_WiFiModeValidation(t *testing.T) {
+	cases := []struct {
+		name  string
+		extra string
+		want  string
+	}{
+		{
+			name:  "ApRejectsUplink",
+			extra: "wifi:\n  mode: ap\n  uplink_enable: true\n",
+			want:  "wifi.uplink_enable must be false when wifi.mode is 'ap'",
+		},
+		{
+			name:  "ApClientRequiresUplink",
+			extra: "wifi:\n  mode: ap_client\n  uplink_enable: false\n",
+			want:  "wifi.uplink_enable must be true when wifi.mode is 'ap_client'",
+		},
+		{
+			name:  "ClientRequiresUplink",
+			extra: "wifi:\n  mode: client\n  uplink_enable: false\n",
+			want:  "wifi.uplink_enable must be true when wifi.mode is 'client'",
+		},
+		{
+			name:  "ClientRejectsPassthrough",
+			extra: "wifi:\n  mode: client\n  uplink_enable: true\n  internet_passthrough_enable: true\n",
+			want:  "wifi.internet_passthrough_enable is only supported when wifi.mode is 'ap_client'",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			body := "gdl90:\n  dest: '127.0.0.1:4000'\n" + tc.extra
+			path := writeTempConfig(t, body)
+			_, err := Load(path)
+			requireErrEq(t, err, tc.want)
+		})
+	}
+}
+
+func TestLoad_WiFiControlCharsRejected(t *testing.T) {
+	cases := []struct {
+		name  string
+		extra string
+		want  string
+	}{
+		{
+			name:  "SSID",
+			extra: "wifi:\n  ssid: \"bad\\nssid\"\n",
+			want:  "wifi.ssid must not contain control characters",
+		},
+		{
+			name:  "Passphrase",
+			extra: "wifi:\n  passphrase: \"bad\\npass\"\n",
+			want:  "wifi.passphrase must not contain control characters",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			body := "gdl90:\n  dest: '127.0.0.1:4000'\n" + tc.extra
+			path := writeTempConfig(t, body)
+			_, err := Load(path)
+			requireErrEq(t, err, tc.want)
+		})
+	}
+}
+
 func TestLoad_RecordRequiresPath(t *testing.T) {
 	path := writeTempConfig(t, "gdl90:\n  dest: '127.0.0.1:4000'\n  record:\n    enable: true\n")
 	_, err := Load(path)
