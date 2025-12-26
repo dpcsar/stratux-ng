@@ -14,6 +14,12 @@ PIGEN_REF="${PIGEN_REF:-arm64}"
 PIGEN_RELEASE="${PIGEN_RELEASE:-trixie}"
 PIGEN_ARCH="${PIGEN_ARCH:-arm64}"
 
+# FlightAware decoder sources (overridable via environment variables).
+FLIGHTAWARE_DUMP1090_REPO="${FLIGHTAWARE_DUMP1090_REPO:-https://github.com/flightaware/dump1090.git}"
+FLIGHTAWARE_DUMP1090_REF="${FLIGHTAWARE_DUMP1090_REF:-v10.2}"
+FLIGHTAWARE_DUMP978_REPO="${FLIGHTAWARE_DUMP978_REPO:-https://github.com/flightaware/dump978.git}"
+FLIGHTAWARE_DUMP978_REF="${FLIGHTAWARE_DUMP978_REF:-v10.2}"
+
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || {
     echo "error: missing required command: $1" >&2
@@ -98,6 +104,14 @@ if [[ -f "${STAGE_DST_DIR}/prerun.sh" ]]; then
 fi
 find "${STAGE_DST_DIR}" -type f -name '*-run.sh' -exec chmod +x {} + || true
 
+# Record decoder versions for the stage scripts.
+cat >"${STAGE_DST_DIR}/00-stratux-ng/flightaware-versions.env" <<EOF
+FLIGHTAWARE_DUMP1090_REPO=${FLIGHTAWARE_DUMP1090_REPO@Q}
+FLIGHTAWARE_DUMP1090_REF=${FLIGHTAWARE_DUMP1090_REF@Q}
+FLIGHTAWARE_DUMP978_REPO=${FLIGHTAWARE_DUMP978_REPO@Q}
+FLIGHTAWARE_DUMP978_REF=${FLIGHTAWARE_DUMP978_REF@Q}
+EOF
+
 # 4) Inject the freshly built binary + current repo config into the stage files.
 mkdir -p "${STAGE_DST_DIR}/00-stratux-ng/files/usr/local/bin"
 install -m 0755 "${BIN_OUT}" "${STAGE_DST_DIR}/00-stratux-ng/files/usr/local/bin/stratux-ng"
@@ -118,7 +132,7 @@ WPA_COUNTRY="US"
 ARCH="${PIGEN_ARCH}"
 STAGE_LIST="stage0 stage1 stage2 stage-stratux-ng"
 FIRST_USER_NAME="pi"
-FIRST_USER_PASS="raspberry"
+FIRST_USER_PASS="pi"
 DISABLE_FIRST_BOOT_USER_RENAME="1"
 ENABLE_SSH="1"
 EOF

@@ -5,17 +5,32 @@
 # and run commands inside the target rootfs via on_chroot.
 
 install -d "${ROOTFS_DIR}/usr/local/bin"
+install -d "${ROOTFS_DIR}/usr/local/sbin"
 install -d "${ROOTFS_DIR}/etc/systemd/system"
 install -d "${ROOTFS_DIR}/etc/udev/rules.d"
+install -d "${ROOTFS_DIR}/etc/hostapd"
+install -d "${ROOTFS_DIR}/etc/default"
+install -d "${ROOTFS_DIR}/etc/dnsmasq.d"
+install -d "${ROOTFS_DIR}/etc/modules-load.d"
 install -d "${ROOTFS_DIR}/data/stratux-ng"
 
 install -m 0755 files/usr/local/bin/stratux-ng "${ROOTFS_DIR}/usr/local/bin/stratux-ng"
 if [[ -f files/usr/local/bin/stratux-ng-wifi-apply ]]; then
   install -m 0755 files/usr/local/bin/stratux-ng-wifi-apply "${ROOTFS_DIR}/usr/local/bin/stratux-ng-wifi-apply"
 fi
+if [[ -f files/usr/local/sbin/stratux-ng-create-ap0 ]]; then
+  install -m 0755 files/usr/local/sbin/stratux-ng-create-ap0 "${ROOTFS_DIR}/usr/local/sbin/stratux-ng-create-ap0"
+fi
 install -m 0644 files/etc/systemd/system/stratux-ng.service "${ROOTFS_DIR}/etc/systemd/system/stratux-ng.service"
+install -m 0644 files/etc/systemd/system/stratux-ng-apply-wifi-dnsmasq.service "${ROOTFS_DIR}/etc/systemd/system/stratux-ng-apply-wifi-dnsmasq.service"
+install -m 0644 files/etc/systemd/system/stratux-ng-apply-wifi-internet.service "${ROOTFS_DIR}/etc/systemd/system/stratux-ng-apply-wifi-internet.service"
+install -m 0644 files/etc/systemd/system/stratux-ng-create-ap0.service "${ROOTFS_DIR}/etc/systemd/system/stratux-ng-create-ap0.service"
 install -m 0644 files/etc/udev/rules.d/99-stratux-gps.rules "${ROOTFS_DIR}/etc/udev/rules.d/99-stratux-gps.rules"
 install -m 0644 files/data/stratux-ng/config.yaml "${ROOTFS_DIR}/data/stratux-ng/config.yaml"
+install -m 0644 files/etc/hostapd/hostapd.conf "${ROOTFS_DIR}/etc/hostapd/hostapd.conf"
+install -m 0644 files/etc/default/hostapd "${ROOTFS_DIR}/etc/default/hostapd"
+install -m 0644 files/etc/dnsmasq.d/stratux-ng.conf "${ROOTFS_DIR}/etc/dnsmasq.d/stratux-ng.conf"
+install -m 0644 files/etc/modules-load.d/stratux-ng.conf "${ROOTFS_DIR}/etc/modules-load.d/stratux-ng.conf"
 
 # Blacklist the DVB driver that commonly grabs RTL-SDR devices.
 cat >"${ROOTFS_DIR}/etc/modprobe.d/rtl-sdr-blacklist.conf" <<'EOF'
@@ -39,4 +54,13 @@ chown -R stratuxng:stratuxng /data/stratux-ng
 
 # Enable service.
 systemctl enable stratux-ng
+systemctl enable stratux-ng-create-ap0.service
+systemctl enable hostapd
+systemctl enable dnsmasq
+systemctl enable stratux-ng-apply-wifi-dnsmasq.service
+
+# Ensure I2C is enabled for AHRS hardware.
+if ! grep -q '^dtparam=i2c_arm=on' /boot/firmware/config.txt 2>/dev/null; then
+  printf '\n# Stratux-NG\ndtparam=i2c_arm=on\n' >> /boot/firmware/config.txt
+fi
 EOF

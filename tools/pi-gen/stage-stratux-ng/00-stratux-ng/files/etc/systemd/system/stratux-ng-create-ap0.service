@@ -1,0 +1,12 @@
+[Unit]
+Description=Create ap0 virtual interface for Stratux-NG
+Wants=network-pre.target
+Before=network-pre.target hostapd.service dnsmasq.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/stratux-ng-create-ap0
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

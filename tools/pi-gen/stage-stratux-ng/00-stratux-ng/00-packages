@@ -24,3 +24,8 @@ libusb-1.0-0-dev
 zlib1g-dev
 libncurses-dev
 libboost-all-dev
+libfftw3-dev
+libsoapysdr-dev
+fakeroot
+debhelper
+dpkg-dev
