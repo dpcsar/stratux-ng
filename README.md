@@ -90,7 +90,7 @@ Web UI/status API:
 Port 80 note (Linux): binding to ports <1024 usually requires root or capabilities.
 If you see a "permission denied" error when using `:80`, fix it by either:
 
-- Running as root (simple but not ideal), or
+- Running as root (this is what the provided systemd unit does), or
 - Granting the binary `CAP_NET_BIND_SERVICE`:
   - `sudo setcap 'cap_net_bind_service=+ep' $(readlink -f ./stratux-ng)`
   - (systemd) set `AmbientCapabilities=CAP_NET_BIND_SERVICE` in the unit.
@@ -177,9 +177,9 @@ When you move from development (`go run ...`) to a flashable SD image, these are
   - Install/enable `gpsd` in the image and set `gps.source: gpsd` (default address: `127.0.0.1:2947`)
 - Service management (recommended)
   - Install and enable the systemd unit: `configs/systemd/stratux-ng.service.example`
-  - Ensure the service can read serial devices (typically `dialout`; the example unit uses `SupplementaryGroups=dialout`)
+  - Ensure the service can read serial devices (typically group `dialout` if running unprivileged)
 - Port binding
-  - If you want `web.listen: :80`, use capabilities (or systemd `AmbientCapabilities`) rather than running everything as root
+  - The default `web.listen: :80` works if the service runs as root (as in the provided systemd unit). If you prefer running unprivileged, use capabilities (or systemd `AmbientCapabilities`).
 
 For pi-gen image planning and what to bake into the SD image, see:
 

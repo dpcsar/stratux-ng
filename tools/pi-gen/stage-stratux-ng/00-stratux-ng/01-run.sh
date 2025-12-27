@@ -24,17 +24,8 @@ EOF
 on_chroot <<'EOF'
 set -euo pipefail
 
-# Create a dedicated service user/group.
-if ! getent group stratuxng >/dev/null; then
-  groupadd --system stratuxng
-fi
-if ! id stratuxng >/dev/null 2>&1; then
-  useradd --system --gid stratuxng --home /nonexistent --shell /usr/sbin/nologin stratuxng
-fi
-
 # Ensure /data exists (real appliance images typically mount /data as a separate partition).
 mkdir -p /data/stratux-ng
-chown -R stratuxng:stratuxng /data/stratux-ng
 
 # Enable service.
 systemctl enable stratux-ng

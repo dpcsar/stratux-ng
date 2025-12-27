@@ -27,13 +27,6 @@ ExecStart=/usr/local/bin/stratux-ng
 Restart=on-failure
 RestartSec=1
 
-# Run unprivileged if you create a user; otherwise remove these two lines.
-User=stratuxng
-Group=stratuxng
-
-# Allow access to serial devices like /dev/ttyACM* (GPS). Most distros use the dialout group.
-SupplementaryGroups=dialout
-
 # Hardening: keep the filesystem mostly read-only and explicitly allow /data.
 NoNewPrivileges=true
 PrivateTmp=true
