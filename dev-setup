@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+
+sudo apt update && sudo apt upgrade -y
+
+sudo apt install -y neovim zsh git curl 
+
+git clone git@github.com:dpcsar/stratux-ng.git
+
+sudo apt install -y build-essential pkg-config golang-go
+
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+
+git clone https://github.com/zsh-users/zsh-autosuggestions ~/.oh-my-zsh/custom/plugins/zsh-autosuggestions 
+
+git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ~/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting 
+
+git clone https://github.com/zsh-users/zsh-completions ~/.oh-my-zsh/custom/plugins/zsh-completions
+
+git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k
+
+ZSH_THEME="powerlevel10k/powerlevel10k"
+plugins=(git gh vi-mode zsh-autosuggestions zsh-syntax-highlighting zsh-completions)
+
+bash <(curl --proto '=https' --tlsv1.2 -sSf https://setup.atuin.sh)
+
+sudo apt install -y docker.io docker-buildx docker-compose
+
+sudo usermod -aG docker $USER
+
+sudo reboot
