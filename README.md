@@ -1,6 +1,6 @@
 # Stratux-NG (Next Gen)
 
-Stratux-NG is a modern, Raspberry Pi–focused, 64-bit-first avionics data appliance inspired by Stratux, designed to run on Raspberry Pi 3/4/5 and provide **GDL90** traffic/weather-style outputs over Wi‑Fi to EFB apps.
+Stratux-NG is a modern, Raspberry Pi–focused, 64-bit-first avionics data appliance inspired by Stratux, designed to run on Raspberry Pi 3/4/5 and provide **GDL90** traffic/weather-style outputs over UDP to EFB apps.
 
 ## Status
 
@@ -18,7 +18,6 @@ Working now:
 Not yet:
 - “Pretty” decoded FIS-B product visualization in the web UI (later milestone)
 - “Towers” page (UAT ground stations / GBTs): the UI entry exists but is currently a placeholder; implementing this requires decoding/deriving ground-station identity + signal stats from 978 UAT uplinks and exposing it via the status/API.
-- Setup page: show Wi‑Fi AP/client connection info (SSID/IP + connected clients) and how to connect an EFB
 - Flashable SD image build pipeline (pi-gen stage implementation; see [docs/pi-gen.md](docs/pi-gen.md))
 
 Web UI note:
@@ -35,8 +34,6 @@ This is a **new implementation** (new repository) with a modular architecture an
   - **AHRS/IMU** (Stratux AHRS 2.0–class I2C sensors: ICM-20948 + BMP280)
 - **Outputs**
   - **GDL90 over UDP** for EFB compatibility (initial focus: **Garmin Pilot** and **enRoute Flight Navigation**; enRoute will be primary test target early)
-- **Networking**
-  - Stratux-like Wi‑Fi behavior (AP mode, known SSID, DHCP) suitable for an “appliance” image people can flash to an SD card
 
 ## Goals
 
@@ -72,8 +69,6 @@ Decoder I/O convention:
 SDR serial tag note (Stratux-style):
 - Many Stratux-tagged RTL-SDRs report USB serial strings like `stx:1090:0` and `stx:978:0` (as seen in `lsusb -v`).
 - Use the exact string reported by your dongle when passing `dump1090-fa --device-type soapy --device driver=rtlsdr,serial=<serial>` or `dump978-fa --sdr driver=rtlsdr,serial=<serial>`.
-
-Wi‑Fi AP configuration is initially handled on the host (systemd + hostapd/dnsmasq or NetworkManager), to keep hardware/network control robust and simple on Raspberry Pi.
 
 ## Development (Raspberry Pi 3/4/5 + VS Code)
 
@@ -125,11 +120,6 @@ Web UI notes:
 - Mobile-first layout intended for phone/tablet use.
 - Bottom navigation switches between: Attitude, Radar, Map (placeholders for now).
 - The menu button opens a small “More” drawer.
-
-Then:
-
-- Bring up the Wi‑Fi AP (see [docs/wifi-ap-hostapd-dnsmasq.md](docs/wifi-ap-hostapd-dnsmasq.md))
-- Connect your tablet/phone (EFB device) to the Pi Wi‑Fi
 
 ### Installing decoders (Raspberry Pi OS trixie, arm64)
 
@@ -209,8 +199,6 @@ When you move from development (`go run ...`) to a flashable SD image, these are
 - Service management (recommended)
   - Install and enable the systemd unit: `configs/systemd/stratux-ng.service.example`
   - Ensure the service can read serial devices (typically `dialout`; the example unit uses `SupplementaryGroups=dialout`)
-- Network / Wi‑Fi AP
-  - Set up AP services per: [docs/wifi-ap-hostapd-dnsmasq.md](docs/wifi-ap-hostapd-dnsmasq.md)
 - Port binding
   - If you want `web.listen: :80`, use capabilities (or systemd `AmbientCapabilities`) rather than running everything as root
 
@@ -397,25 +385,15 @@ Troubleshooting (fan PWM not available):
 Image build note (pi-gen):
 - When we build a flashable SD image with pi-gen, bake `dtoverlay=pwm-2chan` into the image’s boot config by ensuring the generated `/boot/firmware/config.txt` includes that line.
 
-## Networking / Wi‑Fi AP
-
-Stratux-NG is intended to behave like an “appliance” on a Raspberry Pi: you power it on, connect your tablet/phone to its Wi‑Fi network, and your EFB receives **GDL90 over UDP**.
-
-To keep networking reliable on Raspberry Pi, **AP configuration is host-managed** initially:
-
-
-Setup guide + templates:
-
 ## Prebuilt SD image (persistence)
 
 For power-loss resilience and SD-card write minimization strategies for a prebuilt SD image, see:
 
 - [docs/sd-image-persistence.md](docs/sd-image-persistence.md)
-- `configs/wifi/dnsmasq-stratux-ng.conf.example`
 
 Stratux-NG itself focuses on:
 
-- Binding/broadcasting GDL90 UDP on the Pi’s Wi‑Fi interface (details configurable; exact ports/addresses TBD)
+- Binding/broadcasting GDL90 UDP on the configured network interface (details configurable; exact ports/addresses TBD)
 - Serving an HTTP API + minimal web UI (for status/config)
 
 ### SD image layout (planned)
@@ -466,10 +444,10 @@ Per-app connection steps will be documented once defaults (UDP port/broadcast be
 - Message transport: UDP, framed GDL90 (with CRC + byte-stuffing)
 
 Notes:
-- Broadcast is typically the easiest choice on a Wi‑Fi AP subnet.
+- Broadcast is typically the easiest choice on a dedicated subnet.
 - For local testing on one machine, you can use unicast `127.0.0.1:4000`.
 
-### Listen mode (no Wi‑Fi/AP required)
+### Listen mode (local test)
 
 Listen mode binds a local UDP socket and dumps received frames (message ID + CRC status) so you can verify what’s being sent.
 
@@ -490,11 +468,6 @@ EFB setup guides live in `docs/efb/`:
 - General guidance (any EFB): [docs/efb/other-efbs.md](docs/efb/other-efbs.md)
 - ForeFlight: [docs/efb/foreflight.md](docs/efb/foreflight.md)
 - Garmin Pilot: [docs/efb/garmin-pilot.md](docs/efb/garmin-pilot.md)
-
-Reference subnets used in this repo’s default setup:
-
-- Pi AP: `192.168.10.1/24` (broadcast `192.168.10.255`)
-- Home Wi‑Fi: `192.168.0.0/24` (broadcast `192.168.0.255`)
 
 ## Configuration
 Stratux-NG supports both:

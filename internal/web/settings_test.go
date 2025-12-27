@@ -48,28 +48,14 @@ func TestSettingsPOST_AppliesAndSaves(t *testing.T) {
 	scenarioStart := ""
 	scenarioLoop := false
 	trafficEnable := false
-	wifiSubnet := "192.168.10.0/24"
-	wifiApIP := "192.168.10.1"
-	wifiDhcpStart := "192.168.10.50"
-	wifiDhcpEnd := "192.168.10.150"
-	wifiUplinkEnable := false
-	wifiClientNetworks := []WiFiClientNetwork{}
-	wifiInetPassthrough := false
 	payload := SettingsPayloadIn{
-		GDL90Dest:                      &dest,
-		Interval:                       &interval,
-		WiFiSubnetCIDR:                 &wifiSubnet,
-		WiFiAPIp:                       &wifiApIP,
-		WiFiDHCPStart:                  &wifiDhcpStart,
-		WiFiDHCPEnd:                    &wifiDhcpEnd,
-		WiFiUplinkEnable:               &wifiUplinkEnable,
-		WiFiClientNetworks:             &wifiClientNetworks,
-		WiFiInternetPassThroughEnabled: &wifiInetPassthrough,
-		ScenarioEnable:                 &scenarioEnable,
-		ScenarioPath:                   &scenarioPath,
-		ScenarioStartTimeUTC:           &scenarioStart,
-		ScenarioLoop:                   &scenarioLoop,
-		TrafficEnable:                  &trafficEnable,
+		GDL90Dest:            &dest,
+		Interval:             &interval,
+		ScenarioEnable:       &scenarioEnable,
+		ScenarioPath:         &scenarioPath,
+		ScenarioStartTimeUTC: &scenarioStart,
+		ScenarioLoop:         &scenarioLoop,
+		TrafficEnable:        &trafficEnable,
 	}
 	b, _ := json.Marshal(payload)
 
@@ -133,28 +119,14 @@ func TestSettingsPOST_ApplyFailureDoesNotSave(t *testing.T) {
 	scenarioStart := ""
 	scenarioLoop := false
 	trafficEnable := false
-	wifiSubnet := "192.168.10.0/24"
-	wifiApIP := "192.168.10.1"
-	wifiDhcpStart := "192.168.10.50"
-	wifiDhcpEnd := "192.168.10.150"
-	wifiUplinkEnable := false
-	wifiClientNetworks := []WiFiClientNetwork{}
-	wifiInetPassthrough := false
 	payload := SettingsPayloadIn{
-		GDL90Dest:                      &dest,
-		Interval:                       &interval,
-		WiFiSubnetCIDR:                 &wifiSubnet,
-		WiFiAPIp:                       &wifiApIP,
-		WiFiDHCPStart:                  &wifiDhcpStart,
-		WiFiDHCPEnd:                    &wifiDhcpEnd,
-		WiFiUplinkEnable:               &wifiUplinkEnable,
-		WiFiClientNetworks:             &wifiClientNetworks,
-		WiFiInternetPassThroughEnabled: &wifiInetPassthrough,
-		ScenarioEnable:                 &scenarioEnable,
-		ScenarioPath:                   &scenarioPath,
-		ScenarioStartTimeUTC:           &scenarioStart,
-		ScenarioLoop:                   &scenarioLoop,
-		TrafficEnable:                  &trafficEnable,
+		GDL90Dest:            &dest,
+		Interval:             &interval,
+		ScenarioEnable:       &scenarioEnable,
+		ScenarioPath:         &scenarioPath,
+		ScenarioStartTimeUTC: &scenarioStart,
+		ScenarioLoop:         &scenarioLoop,
+		TrafficEnable:        &trafficEnable,
 	}
 	b, _ := json.Marshal(payload)
 
@@ -195,28 +167,14 @@ func TestSettingsPOST_MissingIntervalRejected(t *testing.T) {
 	scenarioStart := ""
 	scenarioLoop := false
 	trafficEnable := false
-	wifiSubnet := "192.168.10.0/24"
-	wifiApIP := "192.168.10.1"
-	wifiDhcpStart := "192.168.10.50"
-	wifiDhcpEnd := "192.168.10.150"
-	wifiUplinkEnable := false
-	wifiClientNetworks := []WiFiClientNetwork{}
-	wifiInetPassthrough := false
 	payload := SettingsPayloadIn{
-		GDL90Dest:                      &dest,
-		Interval:                       nil,
-		WiFiSubnetCIDR:                 &wifiSubnet,
-		WiFiAPIp:                       &wifiApIP,
-		WiFiDHCPStart:                  &wifiDhcpStart,
-		WiFiDHCPEnd:                    &wifiDhcpEnd,
-		WiFiUplinkEnable:               &wifiUplinkEnable,
-		WiFiClientNetworks:             &wifiClientNetworks,
-		WiFiInternetPassThroughEnabled: &wifiInetPassthrough,
-		ScenarioEnable:                 &scenarioEnable,
-		ScenarioPath:                   &scenarioPath,
-		ScenarioStartTimeUTC:           &scenarioStart,
-		ScenarioLoop:                   &scenarioLoop,
-		TrafficEnable:                  &trafficEnable,
+		GDL90Dest:            &dest,
+		Interval:             nil,
+		ScenarioEnable:       &scenarioEnable,
+		ScenarioPath:         &scenarioPath,
+		ScenarioStartTimeUTC: &scenarioStart,
+		ScenarioLoop:         &scenarioLoop,
+		TrafficEnable:        &trafficEnable,
 	}
 	b, _ := json.Marshal(payload)
 
@@ -254,13 +212,6 @@ func TestSettingsPOST_DuplicateKeysRejected(t *testing.T) {
   "gdl90_dest": "127.0.0.1:5000",
   "gdl90_dest": "127.0.0.1:6000",
   "interval": "1s",
-	"wifi_subnet_cidr": "192.168.10.0/24",
-	"wifi_ap_ip": "192.168.10.1",
-	"wifi_dhcp_start": "192.168.10.50",
-	"wifi_dhcp_end": "192.168.10.150",
-	"wifi_uplink_enable": false,
-	"wifi_client_networks": [],
-	"wifi_internet_passthrough_enable": false,
   "scenario_enable": false,
   "scenario_path": "",
   "scenario_start_time_utc": "",

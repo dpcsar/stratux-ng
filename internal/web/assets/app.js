@@ -23,8 +23,6 @@
   const stLastTick = document.getElementById('st-last-tick');
 
   const stNetLocalAddrs = document.getElementById('st-net-local-addrs');
-  const stNetClientsCount = document.getElementById('st-net-clients-count');
-  const stNetClients = document.getElementById('st-net-clients');
 
   const stDiskTotal = document.getElementById('st-disk-total');
   const stDiskAvail = document.getElementById('st-disk-avail');
@@ -391,20 +389,6 @@
   const setGDL90Dest = document.getElementById('set-gdl90-dest');
   const setIntervalInput = document.getElementById('set-interval');
 
-  const setWiFiSubnet = document.getElementById('set-wifi-subnet');
-  const setWiFiApIp = document.getElementById('set-wifi-ap-ip');
-  const setWiFiDhcpStart = document.getElementById('set-wifi-dhcp-start');
-  const setWiFiDhcpEnd = document.getElementById('set-wifi-dhcp-end');
-
-  const setWiFiUplinkEnable = document.getElementById('set-wifi-uplink-enable');
-  const setWiFiInetPassthrough = document.getElementById('set-wifi-inet-passthrough');
-  const wifiClientNetworksRoot = document.getElementById('wifi-client-networks');
-  const btnWiFiAddNetwork = document.getElementById('btn-wifi-add-network');
-  const btnWiFiScan = document.getElementById('btn-wifi-scan');
-  const wifiScanSelect = document.getElementById('wifi-scan-select');
-  const btnWiFiAddScanned = document.getElementById('btn-wifi-add-scanned');
-  const wifiScanMsg = document.getElementById('wifi-scan-msg');
-
   const setTrafficEnable = document.getElementById('set-traffic-enable');
   const setScenarioEnable = document.getElementById('set-scenario-enable');
   const setScenarioPath = document.getElementById('set-scenario-path');
@@ -423,148 +407,6 @@
 
   if (subtitle) subtitle.textContent = 'Connecting…';
 
-  let wifiClientNetworksState = [];
-
-  function normalizeWiFiClientNetworks(list) {
-    const inList = Array.isArray(list) ? list : [];
-    const out = [];
-    for (const n of inList) {
-      const ssid = String(n?.ssid || '');
-      const password = String(n?.password || '');
-      out.push({ ssid, password });
-    }
-    return out;
-  }
-
-  function renderWiFiClientNetworks() {
-    if (!wifiClientNetworksRoot) return;
-
-    wifiClientNetworksRoot.innerHTML = '';
-    if (!wifiClientNetworksState.length) {
-      const p = document.createElement('p');
-      p.className = 'muted';
-      p.textContent = 'No saved uplink networks.';
-      wifiClientNetworksRoot.appendChild(p);
-      return;
-    }
-
-    for (let i = 0; i < wifiClientNetworksState.length; i++) {
-      const n = wifiClientNetworksState[i];
-
-      const rowSsid = document.createElement('div');
-      rowSsid.className = 'st-row st-field';
-
-      const labelSsid = document.createElement('label');
-      labelSsid.className = 'st-key';
-      labelSsid.textContent = `SSID #${i + 1}`;
-
-      const inputSsid = document.createElement('input');
-      inputSsid.type = 'text';
-      inputSsid.placeholder = 'MyHotspot';
-      inputSsid.value = String(n?.ssid || '');
-      inputSsid.dataset.wifiIndex = String(i);
-      inputSsid.dataset.wifiField = 'ssid';
-      inputSsid.addEventListener('input', () => {
-        const idx = Number(inputSsid.dataset.wifiIndex);
-        if (!Number.isFinite(idx) || idx < 0 || idx >= wifiClientNetworksState.length) return;
-        wifiClientNetworksState[idx].ssid = String(inputSsid.value || '');
-      });
-
-      rowSsid.appendChild(labelSsid);
-      rowSsid.appendChild(inputSsid);
-
-      const rowPass = document.createElement('div');
-      rowPass.className = 'st-row st-field';
-
-      const labelPass = document.createElement('label');
-      labelPass.className = 'st-key';
-      labelPass.textContent = `Password #${i + 1}`;
-
-      const inputPass = document.createElement('input');
-      inputPass.type = 'text';
-      inputPass.placeholder = '(optional for open networks)';
-      inputPass.value = String(n?.password || '');
-      inputPass.dataset.wifiIndex = String(i);
-      inputPass.dataset.wifiField = 'password';
-      inputPass.addEventListener('input', () => {
-        const idx = Number(inputPass.dataset.wifiIndex);
-        if (!Number.isFinite(idx) || idx < 0 || idx >= wifiClientNetworksState.length) return;
-        wifiClientNetworksState[idx].password = String(inputPass.value || '');
-      });
-
-      rowPass.appendChild(labelPass);
-      rowPass.appendChild(inputPass);
-
-      const rowRemove = document.createElement('div');
-      rowRemove.className = 'st-row';
-
-      const spacer = document.createElement('div');
-      spacer.className = 'st-key';
-      spacer.textContent = '';
-
-      const btnRemove = document.createElement('button');
-      btnRemove.type = 'button';
-      btnRemove.className = 'secondary';
-      btnRemove.textContent = 'Remove';
-      btnRemove.addEventListener('click', () => {
-        wifiClientNetworksState.splice(i, 1);
-        renderWiFiClientNetworks();
-      });
-
-      rowRemove.appendChild(spacer);
-      rowRemove.appendChild(btnRemove);
-
-      wifiClientNetworksRoot.appendChild(rowSsid);
-      wifiClientNetworksRoot.appendChild(rowPass);
-      wifiClientNetworksRoot.appendChild(rowRemove);
-    }
-  }
-
-  function addWiFiClientNetwork(ssid, password) {
-    const s = String(ssid || '');
-    const p = String(password || '');
-    wifiClientNetworksState.push({ ssid: s, password: p });
-    renderWiFiClientNetworks();
-  }
-
-  function setWiFiScanMessage(s) {
-    if (!wifiScanMsg) return;
-    wifiScanMsg.textContent = String(s || '');
-  }
-
-  async function scanWiFiSSIDs() {
-    setWiFiScanMessage('Scanning…');
-    if (wifiScanSelect) wifiScanSelect.innerHTML = '';
-    try {
-      const resp = await fetch('/api/wifi/scan', { cache: 'no-store' });
-      if (!resp.ok) throw new Error(`scan ${resp.status}`);
-      const j = await resp.json();
-      const nets = Array.isArray(j?.networks) ? j.networks : [];
-      if (wifiScanSelect) {
-        const placeholder = document.createElement('option');
-        placeholder.value = '';
-        placeholder.textContent = '(select SSID)';
-        wifiScanSelect.appendChild(placeholder);
-
-        for (const n of nets) {
-          const ssid = String(n?.ssid || '').trim();
-          if (!ssid) continue;
-          const signal = Number(n?.signal);
-          const sec = String(n?.security || '').trim();
-          const opt = document.createElement('option');
-          opt.value = ssid;
-          const sig = Number.isFinite(signal) ? ` (${Math.round(signal)}%)` : '';
-          const secSuffix = sec ? ` [${sec}]` : '';
-          opt.textContent = `${ssid}${sig}${secSuffix}`;
-          wifiScanSelect.appendChild(opt);
-        }
-      }
-      const le = String(j?.last_error || '').trim();
-      setWiFiScanMessage(le ? `Scan warning: ${le}` : 'Scan complete.');
-    } catch (e) {
-      setWiFiScanMessage(`Scan failed: ${String(e)}`);
-    }
-  }
 
   function timeNow() {
     try {
@@ -1455,29 +1297,7 @@
 
     const netErr = netw?.last_error ? ` (${netw.last_error})` : '';
     const addrs = Array.isArray(netw?.local_addrs) ? netw.local_addrs : [];
-    setInput(stNetLocalAddrs, addrs.length ? addrs.join(' | ') : (netw ? `-` + netErr : ''));
-
-    const clients = Array.isArray(netw?.clients) ? netw.clients : [];
-    const cc = Number.isFinite(Number(netw?.clients_count)) ? Number(netw.clients_count) : clients.length;
-    setInput(stNetClientsCount, netw ? `${cc}${netErr}` : '');
-
-    if (stNetClients) {
-      if (!netw) {
-        stNetClients.value = '';
-      } else if (!clients.length) {
-        stNetClients.value = netErr ? netErr.trim() : '';
-      } else {
-        stNetClients.value = clients
-          .map((c) => {
-            const host = (c?.hostname || '').trim();
-            const ip = (c?.ip || '').trim();
-            if (host && ip) return `${host}  ${ip}`;
-            return ip || host || '';
-          })
-          .filter(Boolean)
-          .join('\n');
-      }
-    }
+    setInput(stNetLocalAddrs, netw ? (addrs.length ? addrs.join(' | ') : `-${netErr}`) : '');
 
     const diskErr = disk?.last_error ? ` (${disk.last_error})` : '';
     setInput(stDiskTotal, disk ? `${fmtBytes(disk.root_total_bytes)}${diskErr}` : '');
@@ -2281,18 +2101,6 @@
       setGDL90Dest.value = p.gdl90_dest || '';
       if (setIntervalInput) setIntervalInput.value = p.interval || '';
 
-      if (setWiFiSubnet) setWiFiSubnet.value = p.wifi_subnet_cidr || '';
-      if (setWiFiApIp) setWiFiApIp.value = p.wifi_ap_ip || '';
-      if (setWiFiDhcpStart) setWiFiDhcpStart.value = p.wifi_dhcp_start || '';
-      if (setWiFiDhcpEnd) setWiFiDhcpEnd.value = p.wifi_dhcp_end || '';
-
-      if (setWiFiUplinkEnable) setWiFiUplinkEnable.checked = !!p.wifi_uplink_enable;
-      if (setWiFiInetPassthrough) setWiFiInetPassthrough.checked = !!p.wifi_internet_passthrough_enable;
-
-      const nets = Array.isArray(p.wifi_client_networks) ? p.wifi_client_networks : [];
-      wifiClientNetworksState = normalizeWiFiClientNetworks(nets);
-      renderWiFiClientNetworks();
-
       setTrafficEnable.checked = !!p.traffic_enable;
       setScenarioEnable.checked = !!p.scenario_enable;
       if (setScenarioPath) setScenarioPath.value = p.scenario_path || '';
@@ -2305,30 +2113,9 @@
 
   async function saveSettings() {
     saveMsg.textContent = 'Saving…';
-
-    const uplinkEnabled = !!(setWiFiUplinkEnable && setWiFiUplinkEnable.checked);
-    const raw = normalizeWiFiClientNetworks(wifiClientNetworksState);
-    const clientNetworks = raw
-      .map((n) => ({ ssid: String(n.ssid || ''), password: String(n.password || '') }))
-      .filter((n) => n.ssid.trim() !== '');
-
-    if (uplinkEnabled && clientNetworks.length === 0) {
-      saveMsg.textContent = 'Save failed: uplink requires at least one SSID.';
-      return;
-    }
-
     const payload = {
-      gdl90_dest: setGDL90Dest.value,
+      gdl90_dest: setGDL90Dest ? setGDL90Dest.value : '',
       interval: setIntervalInput ? setIntervalInput.value : '',
-
-  wifi_subnet_cidr: setWiFiSubnet ? setWiFiSubnet.value : '',
-  wifi_ap_ip: setWiFiApIp ? setWiFiApIp.value : '',
-  wifi_dhcp_start: setWiFiDhcpStart ? setWiFiDhcpStart.value : '',
-  wifi_dhcp_end: setWiFiDhcpEnd ? setWiFiDhcpEnd.value : '',
-
-  wifi_uplink_enable: uplinkEnabled,
-      wifi_client_networks: clientNetworks,
-      wifi_internet_passthrough_enable: !!(setWiFiInetPassthrough && setWiFiInetPassthrough.checked),
 
       traffic_enable: !!setTrafficEnable.checked,
       scenario_enable: !!setScenarioEnable.checked,
@@ -2386,27 +2173,6 @@
   settingsForm?.addEventListener('submit', (e) => {
     e.preventDefault();
     saveSettings();
-  });
-
-  btnWiFiAddNetwork?.addEventListener('click', () => {
-    addWiFiClientNetwork('', '');
-  });
-
-  setWiFiUplinkEnable?.addEventListener('change', () => {
-    // If the user enables uplink and has no entries yet, pre-create one row.
-    if (setWiFiUplinkEnable.checked && wifiClientNetworksState.length === 0) {
-      addWiFiClientNetwork('', '');
-    }
-  });
-
-  btnWiFiScan?.addEventListener('click', scanWiFiSSIDs);
-  btnWiFiAddScanned?.addEventListener('click', () => {
-    const ssid = wifiScanSelect ? String(wifiScanSelect.value || '').trim() : '';
-    if (!ssid) return;
-    const exists = wifiClientNetworksState.some((n) => String(n?.ssid || '').trim() === ssid);
-    if (!exists) {
-      addWiFiClientNetwork(ssid, '');
-    }
   });
 
   uiVsiTrafficDeadband?.addEventListener('change', persistVsiUiFromInputs);

@@ -89,17 +89,12 @@ Optional: run decoders as separate services (instead of Stratux-NG supervising t
 **Udev rules (recommended)**
 - GPS stable symlink: `configs/udev/99-stratux-gps.rules.example` → `/etc/udev/rules.d/99-stratux-gps.rules`
 
-**Wi-Fi AP**
-- Bring-up is currently done via host configuration (systemd + hostapd/dnsmasq).
-- See: [docs/wifi-ap-hostapd-dnsmasq.md](wifi-ap-hostapd-dnsmasq.md)
-
 ### Suggested pi-gen structure
 
 Create a separate repo (or sibling folder) that contains pi-gen with a custom stage, for example:
 
 - `stage2+` base Raspberry Pi OS (arm64)
 - `stage-stratux-ng/01-packages/00-packages`:
-  - `hostapd`, `dnsmasq`, `iw`, `rfkill`
   - `gpsd` + `gpsd-clients` (optional)
   - SDR dependencies:
     - `rtl-sdr` (or at least `librtlsdr0` + udev rules)

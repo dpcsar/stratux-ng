@@ -3,7 +3,7 @@
 This folder contains a minimal **pi-gen custom stage** that turns a base Raspberry Pi OS image into a Stratux-NG appliance image.
 
 What it does:
-- Installs runtime dependencies (Wi‑Fi AP tooling, gpsd optional deps, SDR libs)
+- Installs runtime dependencies (gpsd optional deps, SDR libs)
 - Builds/installs FlightAware decoders (`dump1090-fa`, `dump978-fa`)
 - Installs `stratux-ng` + a systemd unit
 - Seeds `/data/stratux-ng/config.yaml` (for first boot; persistence is handled separately)

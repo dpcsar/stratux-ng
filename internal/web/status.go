@@ -17,19 +17,9 @@ type DiskSnapshot struct {
 	LastError      string `json:"last_error,omitempty"`
 }
 
-type DHCPClientSnapshot struct {
-	IP         string `json:"ip"`
-	MAC        string `json:"mac,omitempty"`
-	Hostname   string `json:"hostname,omitempty"`
-	ExpiresUTC string `json:"expires_utc,omitempty"`
-}
-
 type NetworkSnapshot struct {
-	LocalAddrs     []string             `json:"local_addrs,omitempty"`
-	Clients        []DHCPClientSnapshot `json:"clients,omitempty"`
-	ClientsCount   int                  `json:"clients_count,omitempty"`
-	DHCPLeasesFile string               `json:"dhcp_leases_file,omitempty"`
-	LastError      string               `json:"last_error,omitempty"`
+	LocalAddrs []string `json:"local_addrs,omitempty"`
+	LastError  string   `json:"last_error,omitempty"`
 }
 
 type Status struct {

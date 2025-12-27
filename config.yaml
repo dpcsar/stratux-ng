@@ -60,20 +60,6 @@ fan:
 web:
     listen: :8080
 
-wifi:
-    mode: ap
-    ssid: stratux-ng
-    passphrase: ""
-    country: US
-    channel: 6
-    subnet_cidr: 192.168.10.0/24
-    ap_ip: 192.168.10.1
-    dhcp_start: 192.168.10.50
-    dhcp_end: 192.168.10.150
-    uplink_enable: false
-    internet_passthrough_enable: false
-    client_networks: []
-
 # External decoders
 #
 # Stratux-NG can ingest:

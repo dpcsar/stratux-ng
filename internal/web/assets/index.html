@@ -145,8 +145,6 @@
           <div class="st-section" aria-label="Network">
             <div class="st-head">Network</div>
             <div class="st-row"><div class="st-key">Local addrs</div><div id="st-net-local-addrs" class="st-val"></div></div>
-            <div class="st-row"><div class="st-key">Clients (DHCP)</div><div id="st-net-clients-count" class="st-val"></div></div>
-            <div class="st-row st-row-multiline"><div class="st-key">Client list</div><pre id="st-net-clients" class="st-pre" aria-label="Client list"></pre></div>
           </div>
 
           <div class="st-section" aria-label="Disk">
@@ -324,62 +322,6 @@
             <div class="st-row st-field">
               <label class="st-key" for="set-interval">Interval (e.g. 1s)</label>
               <input id="set-interval" type="text" placeholder="1s" />
-            </div>
-
-            <div class="st-subhead">Wi‑Fi AP (host-managed)</div>
-
-            <div class="st-body">
-              <p class="muted">These values are written to config.yaml. Wi‑Fi/AP configuration is currently applied by the OS (hostapd/dnsmasq/NetworkManager) using these as the intended defaults.</p>
-            </div>
-
-            <div class="st-row st-field">
-              <label class="st-key" for="set-wifi-subnet">AP subnet (CIDR)</label>
-              <input id="set-wifi-subnet" type="text" placeholder="192.168.10.0/24" />
-            </div>
-
-            <div class="st-row st-field">
-              <label class="st-key" for="set-wifi-ap-ip">AP IP address</label>
-              <input id="set-wifi-ap-ip" type="text" placeholder="192.168.10.1" />
-            </div>
-
-            <div class="st-row st-field">
-              <label class="st-key" for="set-wifi-dhcp-start">DHCP start</label>
-              <input id="set-wifi-dhcp-start" type="text" placeholder="192.168.10.50" />
-            </div>
-
-            <div class="st-row st-field">
-              <label class="st-key" for="set-wifi-dhcp-end">DHCP end</label>
-              <input id="set-wifi-dhcp-end" type="text" placeholder="192.168.10.150" />
-            </div>
-
-            <div class="st-subhead">Wi‑Fi internet uplink (hotspot)</div>
-
-            <div class="st-body">
-              <p class="muted">Optional AP+client mode: connect Stratux-NG to an upstream Wi‑Fi network and (optionally) enable NAT so clients on the AP can reach the internet. These values are written to config.yaml; applying them requires OS tooling.</p>
-            </div>
-
-            <div class="st-row">
-              <label class="st-key" for="set-wifi-uplink-enable">Enable uplink</label>
-              <input id="set-wifi-uplink-enable" type="checkbox" />
-            </div>
-
-            <div class="st-row">
-              <label class="st-key" for="set-wifi-inet-passthrough">Enable internet pass-through (NAT)</label>
-              <input id="set-wifi-inet-passthrough" type="checkbox" />
-            </div>
-
-            <div class="st-body st-buttons" aria-label="Wi-Fi scan">
-              <button id="btn-wifi-scan" type="button" class="secondary">Scan</button>
-              <select id="wifi-scan-select" aria-label="Scanned SSIDs"></select>
-              <button id="btn-wifi-add-scanned" type="button" class="secondary">Add</button>
-              <span id="wifi-scan-msg" class="muted"></span>
-            </div>
-
-            <div class="st-subhead">Saved uplink networks</div>
-            <div id="wifi-client-networks" class="st-body" aria-label="Wi-Fi client networks"></div>
-
-            <div class="st-body st-buttons">
-              <button id="btn-wifi-add-network" type="button" class="secondary">Add network</button>
             </div>
 
             <div class="st-row">

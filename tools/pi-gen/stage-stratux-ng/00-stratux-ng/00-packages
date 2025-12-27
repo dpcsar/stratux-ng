@@ -1,11 +1,5 @@
 # Packages installed into the image for Stratux-NG appliance use.
 
-# Wi-Fi AP building blocks (if you configure AP mode)
-hostapd
-dnsmasq
-iw
-rfkill
-
 # GPS (optional; recommended for broader USB GPS support)
 gpsd
 gpsd-clients

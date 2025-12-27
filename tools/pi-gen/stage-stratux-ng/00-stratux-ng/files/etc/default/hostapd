@@ -1,2 +1,0 @@
-# Stratux-NG: point hostapd at our managed configuration
-DAEMON_CONF="/etc/hostapd/hostapd.conf"

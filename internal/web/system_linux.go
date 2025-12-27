@@ -3,13 +3,8 @@
 package web
 
 import (
-	"bufio"
-	"errors"
 	"net"
-	"os"
 	"sort"
-	"strconv"
-	"strings"
 	"syscall"
 	"time"
 )
@@ -33,20 +28,10 @@ func snapshotDisk(_ time.Time) *DiskSnapshot {
 	}
 }
 
-func snapshotNetwork(nowUTC time.Time) *NetworkSnapshot {
-	addrs := localInterfaceAddrs()
-	clients, leasesFile, err := readDHCPClients(nowUTC)
 
-	s := &NetworkSnapshot{
-		LocalAddrs:     addrs,
-		Clients:        clients,
-		ClientsCount:   len(clients),
-		DHCPLeasesFile: leasesFile,
-	}
-	if err != nil {
-		s.LastError = err.Error()
-	}
-	return s
+func snapshotNetwork(_ time.Time) *NetworkSnapshot {
+	addrs := localInterfaceAddrs()
+	return &NetworkSnapshot{LocalAddrs: addrs}
 }
 
 func localInterfaceAddrs() []string {
@@ -97,104 +82,4 @@ func localInterfaceAddrs() []string {
 
 	sort.Strings(out)
 	return out
-}
-
-type dhcpLeaseCandidate struct {
-	expires time.Time
-	client  DHCPClientSnapshot
-}
-
-func readDHCPClients(nowUTC time.Time) ([]DHCPClientSnapshot, string, error) {
-	paths := []string{
-		"/var/lib/misc/dnsmasq.leases",
-		"/var/lib/dnsmasq/dnsmasq.leases",
-	}
-
-	var lastErr error
-	for _, p := range paths {
-		clients, err := parseDNSMasqLeasesFile(p, nowUTC)
-		if err == nil {
-			return clients, p, nil
-		}
-		if errors.Is(err, os.ErrNotExist) {
-			lastErr = err
-			continue
-		}
-		// If the file exists but can't be parsed, return error and the file.
-		return nil, p, err
-	}
-	// If no lease file exists, AP/DHCP likely isn't enabled; that's not an error.
-	if errors.Is(lastErr, os.ErrNotExist) {
-		return nil, "", nil
-	}
-	return nil, "", lastErr
-}
-
-// parseDNSMasqLeasesFile parses dnsmasq's lease file:
-//
-//	expiry_epoch mac ip hostname clientid
-func parseDNSMasqLeasesFile(path string, nowUTC time.Time) ([]DHCPClientSnapshot, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	scanner := bufio.NewScanner(f)
-	candidates := make([]dhcpLeaseCandidate, 0, 16)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) < 4 {
-			continue
-		}
-		expSec, err := strconv.ParseInt(fields[0], 10, 64)
-		if err != nil {
-			continue
-		}
-		expires := time.Unix(expSec, 0).UTC()
-		// Only show active leases as "connected clients".
-		if !expires.After(nowUTC.UTC()) {
-			continue
-		}
-
-		mac := strings.ToLower(fields[1])
-		ip := fields[2]
-		host := fields[3]
-		if host == "*" {
-			host = ""
-		}
-
-		candidates = append(candidates, dhcpLeaseCandidate{
-			expires: expires,
-			client: DHCPClientSnapshot{
-				MAC:        mac,
-				IP:         ip,
-				Hostname:   host,
-				ExpiresUTC: expires.Format(time.RFC3339),
-			},
-		})
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-
-	sort.Slice(candidates, func(i, j int) bool {
-		// Prefer hostname, then IP.
-		hi := candidates[i].client.Hostname
-		hj := candidates[j].client.Hostname
-		if hi != hj {
-			return hi < hj
-		}
-		return candidates[i].client.IP < candidates[j].client.IP
-	})
-
-	out := make([]DHCPClientSnapshot, 0, len(candidates))
-	for _, c := range candidates {
-		out = append(out, c.client)
-	}
-	return out, nil
 }

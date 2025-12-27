@@ -4,18 +4,12 @@ This guide aims to be exact, but ForeFlight UI labels can vary by iOS version an
 
 ## Network
 
-### Pi AP (192.168.10.1/24)
-
-- Set `gdl90.dest: "192.168.10.255:4000"`.
-
-### Home Wi‑Fi (192.168.0.0/24)
-
-- Prefer unicast: `gdl90.dest: "<your iPad/iPhone IP>:4000"`.
-- Broadcast fallback: `gdl90.dest: "192.168.0.255:4000"`.
+- For broadcast-style setups, point `gdl90.dest` at your subnet broadcast (example: `192.168.10.255:4000`).
+- For per-device delivery, set `gdl90.dest: "<iPad_or_iPhone_IP>:4000"`.
 
 ## ForeFlight steps (typical)
 
-1) Connect the iPad/iPhone to the same Wi‑Fi as Stratux-NG (Pi AP or home Wi‑Fi).
+1) Connect the iPad/iPhone to the same IP network as Stratux-NG.
 2) On iOS, ensure ForeFlight has **Local Network** permission enabled.
 3) In ForeFlight:
    - Open **More** → **Devices**.
@@ -29,5 +23,5 @@ This guide aims to be exact, but ForeFlight UI labels can vary by iOS version an
 
 - Run listen mode on the sender machine to confirm valid frames:
   - `go run ./cmd/stratux-ng --listen --listen-addr :4000`
-- On home Wi‑Fi, switch from broadcast to unicast to your iPad/iPhone.
+- If broadcasts are filtered on your network, switch to unicast targeting your iPad/iPhone.
 - Disable iOS VPN and any “Private Relay”/filtering features temporarily.
