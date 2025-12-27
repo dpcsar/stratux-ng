@@ -8,7 +8,6 @@ import (
 	"stratux-ng/internal/config"
 	"stratux-ng/internal/gdl90"
 	"stratux-ng/internal/gps"
-	"stratux-ng/internal/sim"
 )
 
 func unframeForMsg(t *testing.T, frame []byte) []byte {
@@ -46,35 +45,55 @@ func unframeForMsg(t *testing.T, frame []byte) []byte {
 	return msg
 }
 
-func TestBuildGDL90Frames_SimOwnshipAndTrafficMessageSet(t *testing.T) {
+func mustParseICAO(t *testing.T, hex string) [3]byte {
+	t.Helper()
+	icao, err := gdl90.ParseICAOHex(hex)
+	if err != nil {
+		t.Fatalf("ParseICAOHex %q: %v", hex, err)
+	}
+	return icao
+}
+
+func TestBuildGDL90FramesWithGPS_MessageSet(t *testing.T) {
 	cfg := config.Config{
-		GDL90: config.GDL90Config{
-			Dest:     "127.0.0.1:4000",
-			Interval: 1 * time.Second,
+		GDL90: config.GDL90Config{Dest: "127.0.0.1:4000", Interval: 1 * time.Second},
+		GPS:   config.GPSConfig{Enable: true, HorizontalAccuracyM: 10},
+		Ownship: config.OwnshipConfig{
+			ICAO:     "F00001",
+			Callsign: "STRATUX",
 		},
-		Sim: config.SimConfig{
-			Ownship: config.OwnshipSimConfig{
-				CenterLatDeg: 45.541,
-				CenterLonDeg: -122.949,
-				AltFeet:      3500,
-				GroundKt:     90,
-				RadiusNm:     0.5,
-				Period:       120 * time.Second,
-				ICAO:         "F00001",
-				Callsign:     "STRATUX",
-			},
-			Traffic: config.TrafficSimConfig{
-				Enable:   true,
-				Count:    3,
-				RadiusNm: 2.0,
-				Period:   90 * time.Second,
-				GroundKt: 120,
-			},
-		},
+		AHRS: config.AHRSConfig{Enable: true},
 	}
 
 	now := time.Date(2025, 12, 20, 19, 0, 0, 0, time.UTC)
-	frames := buildGDL90Frames(cfg, now, false, ahrs.Snapshot{})
+	alt := 4800
+	ground := 140
+	track := 45.0
+	vv := 0
+	gpsSnap := gps.Snapshot{
+		Enabled:      true,
+		Valid:        true,
+		LatDeg:       45.5,
+		LonDeg:       -122.9,
+		AltFeet:      &alt,
+		GroundKt:     &ground,
+		TrackDeg:     &track,
+		VertSpeedFPM: &vv,
+		LastFixUTC:   now.UTC().Format(time.RFC3339Nano),
+	}
+
+	liveTraffic := []gdl90.Traffic{
+		{AddrType: 0x00, ICAO: mustParseICAO(t, "ABC001"), LatDeg: 45.6, LonDeg: -122.8, AltFeet: 5200, NIC: 8, NACp: 8, GroundKt: 150, TrackDeg: 90, VvelFpm: 0, OnGround: false, Tail: "N00001", EmitterCategory: 0x01},
+		{AddrType: 0x00, ICAO: mustParseICAO(t, "ABC002"), LatDeg: 45.4, LonDeg: -122.7, AltFeet: 4100, NIC: 8, NACp: 7, GroundKt: 120, TrackDeg: 180, VvelFpm: -256, OnGround: false, Tail: "N00002", EmitterCategory: 0x02},
+	}
+
+	frames := buildGDL90FramesWithGPS(cfg, now, true, ahrs.Snapshot{
+		Valid:            true,
+		PressureAltValid: true,
+		PressureAltFeet:  4700,
+		RollDeg:          1.0,
+		PitchDeg:         -0.5,
+	}, true, gpsSnap, &headingFuser{}, liveTraffic)
 	if len(frames) == 0 {
 		t.Fatalf("expected frames")
 	}
@@ -89,7 +108,6 @@ func TestBuildGDL90Frames_SimOwnshipAndTrafficMessageSet(t *testing.T) {
 		}
 	}
 
-	// Baseline: heartbeat + stratux hb + ForeFlight messages.
 	if counts[0x00] != 1 {
 		t.Fatalf("expected 1 heartbeat (0x00), got %d", counts[0x00])
 	}
@@ -102,68 +120,53 @@ func TestBuildGDL90Frames_SimOwnshipAndTrafficMessageSet(t *testing.T) {
 	if ffSub[0x01] != 1 {
 		t.Fatalf("expected 1 AHRS message (0x65/0x01), got %d", ffSub[0x01])
 	}
-
-	// Ownship + geo-alt.
 	if counts[0x0A] != 1 {
 		t.Fatalf("expected 1 ownship report (0x0A), got %d", counts[0x0A])
 	}
 	if counts[0x0B] != 1 {
 		t.Fatalf("expected 1 ownship geometric alt (0x0B), got %d", counts[0x0B])
 	}
-
-	// Traffic targets.
-	ts := sim.TrafficSim{
-		CenterLatDeg: cfg.Sim.Ownship.CenterLatDeg,
-		CenterLonDeg: cfg.Sim.Ownship.CenterLonDeg,
-		BaseAltFeet:  cfg.Sim.Ownship.AltFeet,
-		GroundKt:     cfg.Sim.Traffic.GroundKt,
-		RadiusNm:     cfg.Sim.Traffic.RadiusNm,
-		Period:       cfg.Sim.Traffic.Period,
-	}
-	visible := 0
-	for _, tgt := range ts.Targets(now, cfg.Sim.Traffic.Count) {
-		if tgt.Visible {
-			visible++
-		}
-	}
-	if counts[0x14] != visible {
-		t.Fatalf("expected %d visible traffic reports (0x14), got %d", visible, counts[0x14])
+	if counts[0x14] != len(liveTraffic) {
+		t.Fatalf("expected %d traffic reports (0x14), got %d", len(liveTraffic), counts[0x14])
 	}
 }
 
 func TestBuildGDL90Frames_OwnshipAltitudePrefersBaroPressureAltitude(t *testing.T) {
 	cfg := config.Config{
-		GDL90: config.GDL90Config{
-			Dest:     "127.0.0.1:4000",
-			Interval: 1 * time.Second,
-		},
-		AHRS: config.AHRSConfig{Enable: true},
-		Sim: config.SimConfig{
-			Ownship: config.OwnshipSimConfig{
-				CenterLatDeg: 45.541,
-				CenterLonDeg: -122.949,
-				AltFeet:      3500,
-				GroundKt:     90,
-				RadiusNm:     0.5,
-				Period:       120 * time.Second,
-				ICAO:         "F00001",
-				Callsign:     "STRATUX",
-			},
+		GDL90: config.GDL90Config{Dest: "127.0.0.1:4000", Interval: 1 * time.Second},
+		GPS:   config.GPSConfig{Enable: true, HorizontalAccuracyM: 10},
+		AHRS:  config.AHRSConfig{Enable: true},
+		Ownship: config.OwnshipConfig{
+			ICAO:     "F00001",
+			Callsign: "STRATUX",
 		},
 	}
 
 	now := time.Date(2025, 12, 20, 19, 0, 0, 0, time.UTC)
+	alt := 3500
+	ground := 90
+	track := 90.0
+	gpsSnap := gps.Snapshot{
+		Enabled:    true,
+		Valid:      true,
+		LatDeg:     45.5,
+		LonDeg:     -122.9,
+		AltFeet:    &alt,
+		GroundKt:   &ground,
+		TrackDeg:   &track,
+		LastFixUTC: now.UTC().Format(time.RFC3339Nano),
+	}
 
 	// Provide a baro pressure altitude that differs from the sim GPS altitude.
 	// Use a 25-ft-aligned value to avoid GDL90 quantization ambiguity.
 	baroAltFeet := 4150.0
-	frames := buildGDL90Frames(cfg, now, true, ahrs.Snapshot{
+	frames := buildGDL90FramesWithGPS(cfg, now, true, ahrs.Snapshot{
 		Valid:            true,
 		IMUDetected:      true,
 		BaroDetected:     true,
 		PressureAltFeet:  baroAltFeet,
 		PressureAltValid: true,
-	})
+	}, true, gpsSnap, &headingFuser{}, nil)
 
 	var ownshipMsg []byte
 	for _, f := range frames {
@@ -194,26 +197,29 @@ func TestBuildGDL90Frames_OwnshipAltitudePrefersBaroPressureAltitude(t *testing.
 
 func TestBuildGDL90Frames_DoesNotAdvertiseGPSValidWithoutOwnship(t *testing.T) {
 	cfg := config.Config{
-		GDL90: config.GDL90Config{
-			Dest:     "127.0.0.1:4000",
-			Interval: 1 * time.Second,
-		},
-		Sim: config.SimConfig{
-			Ownship: config.OwnshipSimConfig{
-				CenterLatDeg: 45.541,
-				CenterLonDeg: -122.949,
-				AltFeet:      3500,
-				GroundKt:     90,
-				RadiusNm:     0.5,
-				Period:       120 * time.Second,
-				ICAO:         "BADICAO",
-				Callsign:     "STRATUX",
-			},
+		GDL90: config.GDL90Config{Dest: "127.0.0.1:4000", Interval: 1 * time.Second},
+		GPS:   config.GPSConfig{Enable: true, HorizontalAccuracyM: 10},
+		Ownship: config.OwnshipConfig{
+			ICAO:     "BADICAO",
+			Callsign: "STRATUX",
 		},
 	}
 
 	now := time.Date(2025, 12, 20, 19, 0, 0, 0, time.UTC)
-	frames := buildGDL90Frames(cfg, now, false, ahrs.Snapshot{})
+	alt := 4000
+	ground := 100
+	track := 270.0
+	gpsSnap := gps.Snapshot{
+		Enabled:    true,
+		Valid:      true,
+		LatDeg:     45.5,
+		LonDeg:     -122.9,
+		AltFeet:    &alt,
+		GroundKt:   &ground,
+		TrackDeg:   &track,
+		LastFixUTC: now.UTC().Format(time.RFC3339Nano),
+	}
+	frames := buildGDL90FramesWithGPS(cfg, now, false, ahrs.Snapshot{}, true, gpsSnap, &headingFuser{}, nil)
 	if len(frames) == 0 {
 		t.Fatalf("expected frames")
 	}
@@ -258,18 +264,9 @@ func TestBuildGDL90FramesWithGPS_OwnshipVerticalSpeedFromGPS(t *testing.T) {
 	cfg := config.Config{
 		GDL90: config.GDL90Config{Dest: "127.0.0.1:4000", Interval: 1 * time.Second},
 		GPS:   config.GPSConfig{Enable: true, HorizontalAccuracyM: 10},
-		Sim: config.SimConfig{
-			Ownship: config.OwnshipSimConfig{
-				CenterLatDeg: 45.541,
-				CenterLonDeg: -122.949,
-				AltFeet:      3500,
-				GroundKt:     90,
-				RadiusNm:     0.5,
-				Period:       120 * time.Second,
-				ICAO:         "F00001",
-				Callsign:     "STRATUX",
-			},
-			Traffic: config.TrafficSimConfig{Enable: false},
+		Ownship: config.OwnshipConfig{
+			ICAO:     "F00001",
+			Callsign: "STRATUX",
 		},
 	}
 
@@ -316,18 +313,9 @@ func TestBuildGDL90FramesWithGPS_OwnshipVerticalSpeedNegativeFromGPS(t *testing.
 	cfg := config.Config{
 		GDL90: config.GDL90Config{Dest: "127.0.0.1:4000", Interval: 1 * time.Second},
 		GPS:   config.GPSConfig{Enable: true, HorizontalAccuracyM: 10},
-		Sim: config.SimConfig{
-			Ownship: config.OwnshipSimConfig{
-				CenterLatDeg: 45.541,
-				CenterLonDeg: -122.949,
-				AltFeet:      3500,
-				GroundKt:     90,
-				RadiusNm:     0.5,
-				Period:       120 * time.Second,
-				ICAO:         "F00001",
-				Callsign:     "STRATUX",
-			},
-			Traffic: config.TrafficSimConfig{Enable: false},
+		Ownship: config.OwnshipConfig{
+			ICAO:     "F00001",
+			Callsign: "STRATUX",
 		},
 	}
 
@@ -374,18 +362,9 @@ func TestBuildGDL90FramesWithGPS_OwnshipVerticalSpeedUnknownWhenAbsent(t *testin
 	cfg := config.Config{
 		GDL90: config.GDL90Config{Dest: "127.0.0.1:4000", Interval: 1 * time.Second},
 		GPS:   config.GPSConfig{Enable: true, HorizontalAccuracyM: 10},
-		Sim: config.SimConfig{
-			Ownship: config.OwnshipSimConfig{
-				CenterLatDeg: 45.541,
-				CenterLonDeg: -122.949,
-				AltFeet:      3500,
-				GroundKt:     90,
-				RadiusNm:     0.5,
-				Period:       120 * time.Second,
-				ICAO:         "F00001",
-				Callsign:     "STRATUX",
-			},
-			Traffic: config.TrafficSimConfig{Enable: false},
+		Ownship: config.OwnshipConfig{
+			ICAO:     "F00001",
+			Callsign: "STRATUX",
 		},
 	}
 
@@ -431,18 +410,9 @@ func TestBuildGDL90FramesWithGPS_AHRSLEVerticalSpeedFromGPS(t *testing.T) {
 		GDL90: config.GDL90Config{Dest: "127.0.0.1:4000", Interval: 1 * time.Second},
 		GPS:   config.GPSConfig{Enable: true, HorizontalAccuracyM: 10},
 		AHRS:  config.AHRSConfig{Enable: false},
-		Sim: config.SimConfig{
-			Ownship: config.OwnshipSimConfig{
-				CenterLatDeg: 45.541,
-				CenterLonDeg: -122.949,
-				AltFeet:      3500,
-				GroundKt:     90,
-				RadiusNm:     0.5,
-				Period:       120 * time.Second,
-				ICAO:         "F00001",
-				Callsign:     "STRATUX",
-			},
-			Traffic: config.TrafficSimConfig{Enable: false},
+		Ownship: config.OwnshipConfig{
+			ICAO:     "F00001",
+			Callsign: "STRATUX",
 		},
 	}
 
@@ -510,18 +480,9 @@ func TestBuildGDL90FramesWithGPS_HeadingUsesYawForShortTurnsAndGPSForAccuracy(t 
 		GDL90: config.GDL90Config{Dest: "127.0.0.1:4000", Interval: 200 * time.Millisecond},
 		GPS:   config.GPSConfig{Enable: true, HorizontalAccuracyM: 10},
 		AHRS:  config.AHRSConfig{Enable: true},
-		Sim: config.SimConfig{
-			Ownship: config.OwnshipSimConfig{
-				CenterLatDeg: 45.541,
-				CenterLonDeg: -122.949,
-				AltFeet:      3500,
-				GroundKt:     90,
-				RadiusNm:     0.5,
-				Period:       120 * time.Second,
-				ICAO:         "F00001",
-				Callsign:     "STRATUX",
-			},
-			Traffic: config.TrafficSimConfig{Enable: false},
+		Ownship: config.OwnshipConfig{
+			ICAO:     "F00001",
+			Callsign: "STRATUX",
 		},
 	}
 
@@ -541,8 +502,8 @@ func TestBuildGDL90FramesWithGPS_HeadingUsesYawForShortTurnsAndGPSForAccuracy(t 
 	}
 
 	hf := &headingFuser{}
-	if _, err := gdl90.ParseICAOHex(cfg.Sim.Ownship.ICAO); err != nil {
-		t.Fatalf("test config ICAO=%q invalid: %v", cfg.Sim.Ownship.ICAO, err)
+	if _, err := gdl90.ParseICAOHex(cfg.Ownship.ICAO); err != nil {
+		t.Fatalf("test config ICAO=%q invalid: %v", cfg.Ownship.ICAO, err)
 	}
 	if gpsSnap.LastFixUTC == "" {
 		t.Fatalf("test gpsSnap.LastFixUTC empty")
@@ -594,18 +555,9 @@ func TestBuildGDL90FramesWithGPS_DoesNotCorrectWhenFixModeInvalid(t *testing.T) 
 		GDL90: config.GDL90Config{Dest: "127.0.0.1:4000", Interval: 200 * time.Millisecond},
 		GPS:   config.GPSConfig{Enable: true, HorizontalAccuracyM: 10},
 		AHRS:  config.AHRSConfig{Enable: true},
-		Sim: config.SimConfig{
-			Ownship: config.OwnshipSimConfig{
-				CenterLatDeg: 45.541,
-				CenterLonDeg: -122.949,
-				AltFeet:      3500,
-				GroundKt:     90,
-				RadiusNm:     0.5,
-				Period:       120 * time.Second,
-				ICAO:         "F00001",
-				Callsign:     "STRATUX",
-			},
-			Traffic: config.TrafficSimConfig{Enable: false},
+		Ownship: config.OwnshipConfig{
+			ICAO:     "F00001",
+			Callsign: "STRATUX",
 		},
 	}
 
@@ -696,17 +648,13 @@ func TestHeadingFuser_DoesNotCorrectWhenGPSTrackInvalid(t *testing.T) {
 	}
 }
 
-func TestBuildGDL90FramesWithGPS_AppendsLiveTrafficWhenSimTrafficDisabled(t *testing.T) {
+func TestBuildGDL90FramesWithGPS_AppendsLiveTraffic(t *testing.T) {
 	cfg := config.Config{
 		GDL90: config.GDL90Config{Dest: "127.0.0.1:4000", Interval: 1 * time.Second},
 		GPS:   config.GPSConfig{Enable: true, HorizontalAccuracyM: 10},
-		Sim: config.SimConfig{
-			Ownship: config.OwnshipSimConfig{
-				ICAO:     "F00001",
-				Callsign: "STRATUX",
-				AltFeet:  3500,
-			},
-			Traffic: config.TrafficSimConfig{Enable: false},
+		Ownship: config.OwnshipConfig{
+			ICAO:     "F00001",
+			Callsign: "STRATUX",
 		},
 	}
 

@@ -8,7 +8,6 @@ This repository is in active bring-up, but the core “useful on real hardware�
 
 Working now:
 - **GDL90 over UDP** (heartbeat + ownship + traffic + device ID + Stratux heartbeat)
-- **Simulator** for ownship + traffic (for hardware-free development)
 - **Web UI + status API** (including decoder health)
 - **AHRS (ICM-20948 + BMP280)** + **fan control**
 - **1090** ingest from FlightAware `dump1090-fa` (`aircraft.json` polling) → **real GDL90 Traffic (0x14)**
@@ -39,7 +38,7 @@ This is a **new implementation** (new repository) with a modular architecture an
 
 ### MVP (hardware-independent)
 1. Run on **Raspberry Pi OS 64-bit (arm64)** on Pi 5 (and compatible with Pi 3/4).
-2. Produce valid **GDL90** output over UDP from **simulated** ownship + traffic.
+2. Produce valid **GDL90** output over UDP from live ownship + traffic data.
 3. Provide a minimal **HTTP API + web UI** for status and configuration.
 4. Provide a path to building a **bootable image** (later milestone).
 
@@ -52,7 +51,7 @@ This is a **new implementation** (new repository) with a modular architecture an
 ## Architecture (high level)
 
 - `stratux-ng` (Go) is the core:
-  - starts/configures inputs (sim, dump1090-fa, dump978, gps, ahrs)
+  - starts/configures inputs (dump1090-fa, dump978, gps, ahrs)
   - maintains an in-memory “traffic + ownship” state
   - outputs **GDL90 UDP**
   - serves an HTTP API + web UI for status/config
@@ -72,29 +71,9 @@ SDR serial tag note (Stratux-style):
 
 ## Development (Raspberry Pi 3/4/5 + VS Code)
 
-You can develop without SDR/GPS/AHRS hardware using the built-in simulator:
-
-- Simulated ownship (moving track)
-- Simulated traffic targets
-- GDL90 broadcast over UDP so EFBs can connect and display traffic/position
-
-### Deterministic scenario scripts (repeatable EFB testing)
-
-For precise, repeatable EFB behavior testing (edge cases, regression repros), you can run a deterministic “scenario script” instead of the procedural sim.
-
-- Enable `sim.scenario.enable: true` in your YAML config
-- Set `sim.scenario.path` to a scenario file (see `configs/scenarios/`)
-- Optionally set `sim.scenario.start_time_utc` to a fixed RFC3339 time (defaults to `2020-01-01T00:00:00Z` when scenario is enabled)
-
-Sample scripts:
-
-- `configs/scenarios/edgecases.yaml` (near poles, high/negative altitude, zero ground speed, abrupt heading changes, higher traffic count)
-- `configs/scenarios/heading-wrap.yaml` (isolated track/heading wrap test: 350 → 10 → 350)
-- `configs/scenarios/altitude-invalid.yaml` (isolated altitude invalid/sentinel transitions)
-
 ### Quick start
 
-Run Stratux-NG (sends framed GDL90 over UDP from simulated ownship + traffic):
+Run Stratux-NG (broadcasts framed GDL90 over UDP):
 
 - `go run ./cmd/stratux-ng --config ./config.yaml`
 
@@ -218,7 +197,6 @@ Stratux-NG can record the *framed* GDL90 UDP packets it emits, then replay them 
 
 Notes:
 - Record and replay are mutually exclusive.
-- When `sim.scenario.enable: true`, recording timestamps are derived from the scenario time base (relative to the first emitted frame), so replays preserve scenario timing.
 
 ### CLI overrides
 
@@ -284,7 +262,7 @@ Notes:
 - If `ahrs.enable` is true and the IMU cannot be initialized, Stratux-NG continues running but marks AHRS invalid.
 - If the baro (BMP280) is missing or not responding at startup, Stratux-NG continues running (IMU-only) and periodically re-attempts baro detection.
 - Baro address: Stratux AHRS 2.0 boards commonly use `0x77` (and sometimes `0x76`). Stratux-NG will probe both `0x77` and `0x76` even if `ahrs.baro_addr` is set to just one.
-- Initial bring-up computes roll/pitch from accelerometer (gravity vector). Heading remains derived from the simulator until GPS/magnetometer integration is added.
+- Initial bring-up computes roll/pitch from accelerometer (gravity vector). Heading fuses gyro yaw rate with GPS track until magnetometer integration is added.
 
 GDL90 altitude semantics (Stratux-compatible):
 - Ownship Report (0x0A) altitude is treated as **pressure altitude** when available.
@@ -424,12 +402,12 @@ Common EFBs that typically support GDL90/Stratux-style receivers:
 
 ### Message set (current)
 
-When simulator is enabled, Stratux-NG currently emits these GDL90 message IDs:
+Stratux-NG currently emits these GDL90 message IDs:
 
 - `0x00` Heartbeat
 - `0x0A` Ownship Report
 - `0x0B` Ownship Geometric Altitude
-- `0x14` Traffic Report (simulated targets)
+- `0x14` Traffic Report (decoder-ingested targets)
 - `0x65` Device ID / Capabilities ("ForeFlight ID")
 - `0xCC` Stratux Heartbeat
 
@@ -477,7 +455,6 @@ Stratux-NG supports both:
 ## Roadmap (initial milestones)
 - [x] Core Go service skeleton + config
 - [x] GDL90 encoder + UDP broadcaster
-- [x] Simulator input (ownship + traffic)
 - [x] HTTP API + minimal UI
 - [x] Process supervision + stream reconnect for `dump1090-fa` / `dump978-fa`
 - [x] Record/replay mode for *GDL90 output frames* (repeatable EFB testing)
@@ -490,7 +467,6 @@ If you want to help early, the highest-value next steps are:
 
 - Establish the initial Go module + `cmd/stratux-ng` entrypoint
 - Define the YAML config schema and defaults
-- Implement a minimal simulator producing ownship + a few traffic targets
 - Implement a first-pass GDL90 encoder + UDP broadcaster
 
 If you tell me your preferred direction (core Go skeleton vs networking/AP scripts vs UI/API), I can start by scaffolding that structure next.

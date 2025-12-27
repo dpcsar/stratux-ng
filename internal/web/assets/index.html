@@ -161,10 +161,11 @@
             <div class="st-row"><div class="st-key">Frames sent</div><div id="st-frames" class="st-val"></div></div>
           </div>
 
-          <div class="st-section" aria-label="Modes">
-            <div class="st-head">Modes</div>
-            <div class="st-row"><div class="st-key">Scenario enabled</div><input id="st-sim-scenario" class="st-led" type="checkbox" disabled /></div>
-            <div class="st-row"><div class="st-key">Sim traffic enabled</div><input id="st-sim-traffic" class="st-led" type="checkbox" disabled /></div>
+          <div class="st-section" aria-label="System">
+            <div class="st-head">System</div>
+            <div class="st-row"><div class="st-key">Config path</div><div id="st-config-path" class="st-val"></div></div>
+            <div class="st-row"><div class="st-key">Ownship ICAO</div><div id="st-ownship-icao" class="st-val"></div></div>
+            <div class="st-row"><div class="st-key">Ownship callsign</div><div id="st-ownship-callsign" class="st-val"></div></div>
             <div class="st-row"><div class="st-key">Recording enabled</div><input id="st-record" class="st-led" type="checkbox" disabled /></div>
             <div class="st-row"><div class="st-key">Replay enabled</div><input id="st-replay" class="st-led" type="checkbox" disabled /></div>
           </div>
@@ -324,33 +325,14 @@
               <input id="set-interval" type="text" placeholder="1s" />
             </div>
 
-            <div class="st-row">
-              <label class="st-key" for="set-traffic-enable">Sim traffic enabled</label>
-              <input id="set-traffic-enable" type="checkbox" />
-            </div>
-
-            <div class="st-subhead">Scenario</div>
-
-            <div class="st-row">
-              <label class="st-key" for="set-scenario-enable">Scenario simulation enabled</label>
-              <input id="set-scenario-enable" type="checkbox" />
+            <div class="st-row st-field">
+              <label class="st-key" for="set-ownship-icao">Ownship ICAO (hex)</label>
+              <input id="set-ownship-icao" type="text" placeholder="F00000" />
             </div>
 
             <div class="st-row st-field">
-              <label class="st-key" for="set-scenario-path">Scenario path</label>
-              <select id="set-scenario-path">
-                <option value="">(select a scenario)</option>
-              </select>
-            </div>
-
-            <div class="st-row st-field">
-              <label class="st-key" for="set-scenario-start">Scenario start time (RFC3339 UTC)</label>
-              <input id="set-scenario-start" type="text" placeholder="2020-01-01T00:00:00Z" />
-            </div>
-
-            <div class="st-row">
-              <label class="st-key" for="set-scenario-loop">Scenario loop</label>
-              <input id="set-scenario-loop" type="checkbox" />
+              <label class="st-key" for="set-ownship-callsign">Ownship callsign</label>
+              <input id="set-ownship-callsign" type="text" placeholder="STRATUX" />
             </div>
 
             <div class="st-actions">

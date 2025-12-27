@@ -15,7 +15,7 @@ import (
 type Config struct {
 	GDL90 GDL90Config `yaml:"gdl90"`
 	GPS   GPSConfig   `yaml:"gps"`
-	Sim   SimConfig   `yaml:"sim"`
+	Ownship OwnshipConfig `yaml:"ownship"`
 	AHRS  AHRSConfig  `yaml:"ahrs"`
 	Fan   FanConfig   `yaml:"fan"`
 	Web   WebConfig   `yaml:"web"`
@@ -177,41 +177,9 @@ type ReplayConfig struct {
 	Loop   bool    `yaml:"loop"`
 }
 
-type SimConfig struct {
-	Ownship  OwnshipSimConfig  `yaml:"ownship"`
-	Traffic  TrafficSimConfig  `yaml:"traffic"`
-	Scenario ScenarioSimConfig `yaml:"scenario"`
-}
-
-// ScenarioSimConfig enables deterministic, script-driven simulation.
-//
-// When enabled, the normal `sim.ownship` and `sim.traffic` generators are
-// ignored and frames are built from the scenario script.
-type ScenarioSimConfig struct {
-	Enable       bool   `yaml:"enable"`
-	Path         string `yaml:"path"`
-	StartTimeUTC string `yaml:"start_time_utc"`
-	Loop         bool   `yaml:"loop"`
-}
-
-type TrafficSimConfig struct {
-	Enable   bool          `yaml:"enable"`
-	Count    int           `yaml:"count"`
-	RadiusNm float64       `yaml:"radius_nm"`
-	Period   time.Duration `yaml:"period"`
-	GroundKt int           `yaml:"ground_kt"`
-}
-
-type OwnshipSimConfig struct {
-	CenterLatDeg           float64       `yaml:"center_lat_deg"`
-	CenterLonDeg           float64       `yaml:"center_lon_deg"`
-	AltFeet                int           `yaml:"alt_feet"`
-	GroundKt               int           `yaml:"ground_kt"`
-	GPSHorizontalAccuracyM float64       `yaml:"gps_horizontal_accuracy_m"`
-	RadiusNm               float64       `yaml:"radius_nm"`
-	Period                 time.Duration `yaml:"period"`
-	ICAO                   string        `yaml:"icao"`
-	Callsign               string        `yaml:"callsign"`
+type OwnshipConfig struct {
+	ICAO     string `yaml:"icao"`
+	Callsign string `yaml:"callsign"`
 }
 
 // DefaultPath is the canonical appliance config path.
@@ -457,56 +425,11 @@ func DefaultAndValidate(cfg *Config) error {
 		return fmt.Errorf("gps.horizontal_accuracy_m must be >= 0")
 	}
 
-	// Simulator defaults (safe even if disabled).
-	if cfg.Sim.Ownship.Period <= 0 {
-		cfg.Sim.Ownship.Period = 120 * time.Second
+	if strings.TrimSpace(cfg.Ownship.ICAO) == "" {
+		cfg.Ownship.ICAO = "F00000"
 	}
-	if cfg.Sim.Ownship.RadiusNm <= 0 {
-		cfg.Sim.Ownship.RadiusNm = 0.5
-	}
-	if cfg.Sim.Ownship.GroundKt <= 0 {
-		cfg.Sim.Ownship.GroundKt = 90
-	}
-	if cfg.Sim.Ownship.AltFeet == 0 {
-		cfg.Sim.Ownship.AltFeet = 3000
-	}
-	if cfg.Sim.Ownship.ICAO == "" {
-		cfg.Sim.Ownship.ICAO = "F00000"
-	}
-	if cfg.Sim.Ownship.Callsign == "" {
-		cfg.Sim.Ownship.Callsign = "STRATUX"
-	}
-	if cfg.Sim.Ownship.GPSHorizontalAccuracyM == 0 {
-		// 50m maps to NACp=8 in Stratux.
-		cfg.Sim.Ownship.GPSHorizontalAccuracyM = 50
-	}
-
-	// Traffic simulator defaults.
-	if cfg.Sim.Traffic.Count <= 0 {
-		cfg.Sim.Traffic.Count = 3
-	}
-	if cfg.Sim.Traffic.RadiusNm <= 0 {
-		cfg.Sim.Traffic.RadiusNm = 2.0
-	}
-	if cfg.Sim.Traffic.Period <= 0 {
-		cfg.Sim.Traffic.Period = 90 * time.Second
-	}
-	if cfg.Sim.Traffic.GroundKt <= 0 {
-		cfg.Sim.Traffic.GroundKt = 120
-	}
-
-	// Scenario defaults + validation.
-	if cfg.Sim.Scenario.Enable {
-		if cfg.Sim.Scenario.Path == "" {
-			return fmt.Errorf("sim.scenario.path is required when sim.scenario.enable is true")
-		}
-		if strings.TrimSpace(cfg.Sim.Scenario.StartTimeUTC) == "" {
-			// Fixed start time keeps scenario runs reproducible.
-			cfg.Sim.Scenario.StartTimeUTC = "2020-01-01T00:00:00Z"
-		}
-		if _, err := time.Parse(time.RFC3339, cfg.Sim.Scenario.StartTimeUTC); err != nil {
-			return fmt.Errorf("sim.scenario.start_time_utc must be RFC3339 (e.g. 2020-01-01T00:00:00Z): %w", err)
-		}
+	if strings.TrimSpace(cfg.Ownship.Callsign) == "" {
+		cfg.Ownship.Callsign = "STRATUX"
 	}
 
 	// AHRS defaults + validation.

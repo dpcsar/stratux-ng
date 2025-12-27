@@ -17,7 +17,8 @@ import "math"
 // When Valid is false, fields are encoded with Stratux invalid sentinels.
 // Note: Stratux will still emit these messages even when invalid.
 //
-// This is simulator-focused; it does not attempt to model a full AHRS.
+// This focuses on Stratux-compatible AHRS framing; it does not attempt to
+// model a full AHRS.
 //
 // References:
 // - ForeFlight AHRS: stratux/main/gps.go makeFFAHRSMessage()

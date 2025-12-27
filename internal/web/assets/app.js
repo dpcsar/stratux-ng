@@ -30,8 +30,9 @@
   const stGDL90Dest = document.getElementById('st-gdl90-dest');
   const stInterval = document.getElementById('st-interval');
   const stFrames = document.getElementById('st-frames');
-  const stScenario = document.getElementById('st-sim-scenario');
-  const stTraffic = document.getElementById('st-sim-traffic');
+  const stConfigPath = document.getElementById('st-config-path');
+  const stOwnshipICAO = document.getElementById('st-ownship-icao');
+  const stOwnshipCallsign = document.getElementById('st-ownship-callsign');
   const stRecord = document.getElementById('st-record');
   const stReplay = document.getElementById('st-replay');
 
@@ -388,12 +389,8 @@
   const saveMsg = document.getElementById('save-msg');
   const setGDL90Dest = document.getElementById('set-gdl90-dest');
   const setIntervalInput = document.getElementById('set-interval');
-
-  const setTrafficEnable = document.getElementById('set-traffic-enable');
-  const setScenarioEnable = document.getElementById('set-scenario-enable');
-  const setScenarioPath = document.getElementById('set-scenario-path');
-  const setScenarioStart = document.getElementById('set-scenario-start');
-  const setScenarioLoop = document.getElementById('set-scenario-loop');
+  const setOwnshipICAO = document.getElementById('set-ownship-icao');
+  const setOwnshipCallsign = document.getElementById('set-ownship-callsign');
 
   const uiVsiTrafficDeadband = document.getElementById('ui-vsi-traffic-deadband');
   const uiVsiTrafficRounding = document.getElementById('ui-vsi-traffic-rounding');
@@ -1304,11 +1301,12 @@
     setInput(stDiskAvail, disk ? `${fmtBytes(disk.root_avail_bytes)}${diskErr}` : '');
     setInput(stDiskFree, disk ? `${fmtBytes(disk.root_free_bytes)}${diskErr}` : '');
 
-    const sim = s?.sim || {};
-    setChecked(stScenario, !!sim.scenario);
-    setChecked(stTraffic, !!sim.traffic);
-    setChecked(stRecord, !!sim.record);
-    setChecked(stReplay, !!sim.replay);
+    const info = s?.info || {};
+    setInput(stConfigPath, info.config_path || '');
+    setInput(stOwnshipICAO, info.ownship_icao || '');
+    setInput(stOwnshipCallsign, info.ownship_callsign || '');
+    setChecked(stRecord, !!info.record);
+    setChecked(stReplay, !!info.replay);
 
     const gps = s?.gps || {};
 
@@ -2055,57 +2053,10 @@
       if (!resp.ok) throw new Error(`settings ${resp.status}`);
       const p = await resp.json();
 
-      // Populate scenario list (best-effort).
-      try {
-        const sresp = await fetch('/api/scenarios', { cache: 'no-store' });
-        if (sresp.ok) {
-          const sj = await sresp.json();
-          const paths = Array.isArray(sj?.paths) ? sj.paths : [];
-
-          if (setScenarioPath) {
-            const current = p.scenario_path || '';
-
-            // Preserve the placeholder option.
-            const placeholder = setScenarioPath.querySelector('option[value=""]');
-            setScenarioPath.innerHTML = '';
-            if (placeholder) {
-              setScenarioPath.appendChild(placeholder);
-            } else {
-              const opt = document.createElement('option');
-              opt.value = '';
-              opt.textContent = '(select a scenario)';
-              setScenarioPath.appendChild(opt);
-            }
-
-            for (const path of paths) {
-              const opt = document.createElement('option');
-              opt.value = String(path);
-              const parts = String(path).split('/');
-              opt.textContent = parts[parts.length - 1] || String(path);
-              setScenarioPath.appendChild(opt);
-            }
-
-            // If config points at a path not in the list, keep it selectable.
-            if (current && !paths.includes(current)) {
-              const opt = document.createElement('option');
-              opt.value = current;
-              opt.textContent = current;
-              setScenarioPath.appendChild(opt);
-            }
-          }
-        }
-      } catch {
-        // ignore
-      }
-
       setGDL90Dest.value = p.gdl90_dest || '';
       if (setIntervalInput) setIntervalInput.value = p.interval || '';
-
-      setTrafficEnable.checked = !!p.traffic_enable;
-      setScenarioEnable.checked = !!p.scenario_enable;
-      if (setScenarioPath) setScenarioPath.value = p.scenario_path || '';
-      setScenarioStart.value = p.scenario_start_time_utc || '';
-      setScenarioLoop.checked = !!p.scenario_loop;
+      if (setOwnshipICAO) setOwnshipICAO.value = p.ownship_icao || '';
+      if (setOwnshipCallsign) setOwnshipCallsign.value = p.ownship_callsign || '';
     } catch (e) {
       saveMsg.textContent = `Settings unavailable (${String(e)})`;
     }
@@ -2116,12 +2067,8 @@
     const payload = {
       gdl90_dest: setGDL90Dest ? setGDL90Dest.value : '',
       interval: setIntervalInput ? setIntervalInput.value : '',
-
-      traffic_enable: !!setTrafficEnable.checked,
-      scenario_enable: !!setScenarioEnable.checked,
-      scenario_path: setScenarioPath.value,
-      scenario_start_time_utc: setScenarioStart.value,
-      scenario_loop: !!setScenarioLoop.checked,
+      ownship_icao: setOwnshipICAO ? setOwnshipICAO.value : '',
+      ownship_callsign: setOwnshipCallsign ? setOwnshipCallsign.value : '',
     };
     try {
       const resp = await fetch('/api/settings', {

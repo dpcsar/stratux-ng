@@ -7,10 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
-	"os"
 	"path"
-	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 )
@@ -144,53 +141,6 @@ func Handler(status *Status, settings SettingsStore, logs *LogBuffer, ahrsCtl AH
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte("{\"ok\":true}\n"))
-	})
-
-	// Scenario list API (used by the Settings UI).
-	// Returns paths like "./configs/scenarios/edgecases.yaml".
-	mux.HandleFunc("/api/scenarios", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			w.Header().Set("Allow", http.MethodGet)
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
-		base := filepath.FromSlash("configs/scenarios")
-		entries, err := os.ReadDir(base)
-		if err != nil {
-			// If the directory isn't present (e.g., minimal appliance build), return an empty list.
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte("{\"paths\":[]}\n"))
-			return
-		}
-
-		paths := make([]string, 0, len(entries))
-		for _, e := range entries {
-			if e.IsDir() {
-				continue
-			}
-			name := e.Name()
-			lower := strings.ToLower(name)
-			if !(strings.HasSuffix(lower, ".yaml") || strings.HasSuffix(lower, ".yml")) {
-				continue
-			}
-			// Keep the returned value stable across platforms and consistent with config examples.
-			paths = append(paths, "./configs/scenarios/"+name)
-		}
-		sort.Strings(paths)
-
-		resp := struct {
-			Paths []string `json:"paths"`
-		}{Paths: paths}
-
-		b, err := json.MarshalIndent(resp, "", "  ")
-		if err != nil {
-			http.Error(w, "marshal failed", http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write(b)
-		_, _ = w.Write([]byte("\n"))
 	})
 
 	// Settings API (read/write YAML config). Changes are applied immediately when supported.

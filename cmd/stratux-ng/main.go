@@ -23,7 +23,6 @@ import (
 	"stratux-ng/internal/gdl90"
 	"stratux-ng/internal/gps"
 	"stratux-ng/internal/replay"
-	"stratux-ng/internal/sim"
 	"stratux-ng/internal/udp"
 	"stratux-ng/internal/web"
 )
@@ -301,72 +300,14 @@ func (s *safeBroadcaster) Close() {
 	s.mu.Unlock()
 }
 
-type scenarioRuntime struct {
-	scenario    *sim.Scenario
-	startUTC    time.Time
-	ownshipICAO [3]byte
-	trafficICAO [][3]byte
-	elapsed     time.Duration
-}
-
-func simInfoSnapshot(resolvedConfigPath string, cfg config.Config) map[string]any {
+func staticInfoSnapshot(resolvedConfigPath string, cfg config.Config) map[string]any {
 	return map[string]any{
-		"config_path": resolvedConfigPath,
-		"scenario":    cfg.Sim.Scenario.Enable,
-		"traffic":     cfg.Sim.Traffic.Enable,
-		"record":      cfg.GDL90.Record.Enable,
-		"replay":      cfg.GDL90.Replay.Enable,
+		"config_path":      resolvedConfigPath,
+		"record":           cfg.GDL90.Record.Enable,
+		"replay":           cfg.GDL90.Replay.Enable,
+		"ownship_icao":     cfg.Ownship.ICAO,
+		"ownship_callsign": cfg.Ownship.Callsign,
 	}
-}
-
-func loadScenarioFromConfig(cfg config.Config) (scenarioRuntime, error) {
-	var rt scenarioRuntime
-	if !cfg.Sim.Scenario.Enable {
-		return rt, nil
-	}
-	startUTC, err := time.Parse(time.RFC3339, cfg.Sim.Scenario.StartTimeUTC)
-	if err != nil {
-		return scenarioRuntime{}, fmt.Errorf("scenario start_time_utc parse failed: %w", err)
-	}
-	script, err := sim.LoadScenarioScript(cfg.Sim.Scenario.Path)
-	if err != nil {
-		return scenarioRuntime{}, fmt.Errorf("scenario load failed: %w", err)
-	}
-	sc, err := sim.NewScenario(script)
-	if err != nil {
-		return scenarioRuntime{}, fmt.Errorf("scenario validate failed: %w", err)
-	}
-
-	rt.scenario = sc
-	rt.startUTC = startUTC
-
-	ownICAO := strings.TrimSpace(script.Ownship.ICAO)
-	if ownICAO == "" {
-		ownICAO = "F00000"
-	}
-	icao, err := gdl90.ParseICAOHex(ownICAO)
-	if err != nil {
-		return scenarioRuntime{}, fmt.Errorf("scenario invalid ownship icao %q: %w", ownICAO, err)
-	}
-	rt.ownshipICAO = icao
-
-	rt.trafficICAO = make([][3]byte, len(script.Traffic))
-	for i := range script.Traffic {
-		icaoStr := strings.TrimSpace(script.Traffic[i].ICAO)
-		if icaoStr == "" {
-			// Deterministic, non-zero ICAO for each target.
-			// Keep it in the "self assigned" range (not necessarily valid ICAO).
-			rt.trafficICAO[i] = [3]byte{0xF1, 0x00, byte(i + 1)}
-			continue
-		}
-		p, err := gdl90.ParseICAOHex(icaoStr)
-		if err != nil {
-			return scenarioRuntime{}, fmt.Errorf("scenario invalid traffic[%d] icao %q: %w", i, icaoStr, err)
-		}
-		rt.trafficICAO[i] = p
-	}
-
-	return rt, nil
 }
 
 func runReplay(ctx context.Context, cfg config.Config, open replayOpener, send frameSender) error {
@@ -477,7 +418,7 @@ func main() {
 	log.SetOutput(io.MultiWriter(os.Stdout, logBuf))
 
 	status := web.NewStatus()
-	status.SetStatic(cfg.GDL90.Dest, cfg.GDL90.Interval.String(), simInfoSnapshot(resolvedConfigPath, cfg))
+	status.SetStatic(cfg.GDL90.Dest, cfg.GDL90.Interval.String(), staticInfoSnapshot(resolvedConfigPath, cfg))
 
 	applyCh := make(chan applyRequest)
 	applyFunc := func(nextCfg config.Config) error {
@@ -536,11 +477,7 @@ func main() {
 
 	log.Printf("stratux-ng starting")
 	log.Printf("udp dest=%s interval=%s", cfg.GDL90.Dest, cfg.GDL90.Interval)
-	if cfg.Sim.Scenario.Enable {
-		log.Printf("sim scenario enabled path=%s start_time_utc=%s loop=%t", cfg.Sim.Scenario.Path, cfg.Sim.Scenario.StartTimeUTC, cfg.Sim.Scenario.Loop)
-	} else {
-		log.Printf("sim ownship enabled center=(%.6f,%.6f)", cfg.Sim.Ownship.CenterLatDeg, cfg.Sim.Ownship.CenterLonDeg)
-	}
+	log.Printf("ownship icao=%s callsign=%s", cfg.Ownship.ICAO, cfg.Ownship.Callsign)
 
 	go func() {
 		rt, err := newLiveRuntime(ctx, cfg, resolvedConfigPath, status, sender)
@@ -581,89 +518,74 @@ func main() {
 					// Replay mode doesn't use the tick loop.
 					continue
 				}
-				sc := rt.Scenario()
-				var now time.Time
 				var frames [][]byte
 				var snap ahrs.Snapshot
 				var haveAHRS bool
-				if sc != nil && sc.scenario != nil {
-					now = sc.startUTC.Add(sc.elapsed)
-					if ds, ok := rt.ADSB1090DecoderSnapshot(now.UTC()); ok {
-						status.SetADSB1090Decoder(now.UTC(), ds)
-					}
-					if ds, ok := rt.UAT978DecoderSnapshot(now.UTC()); ok {
-						status.SetUAT978Decoder(now.UTC(), ds)
-					}
-					// Scenario mode is deterministic and currently does not use live GPS.
-					status.SetGPS(now.UTC(), gps.Snapshot{Enabled: false})
-					frames = buildGDL90FramesFromScenario(curCfg, now.UTC(), sc.elapsed, sc.scenario, sc.ownshipICAO, sc.trafficICAO)
-				} else {
-					now = time.Now()
-					if ds, ok := rt.ADSB1090DecoderSnapshot(now.UTC()); ok {
-						status.SetADSB1090Decoder(now.UTC(), ds)
-					}
-					if ds, ok := rt.UAT978DecoderSnapshot(now.UTC()); ok {
-						status.SetUAT978Decoder(now.UTC(), ds)
-					}
-					var gpsSnap gps.Snapshot
-					var haveGPS bool
-					if fanSnap, haveFan := rt.FanSnapshot(); haveFan {
-						status.SetFan(now.UTC(), fanSnap)
-					}
-					if curCfg.GPS.Enable {
-						gpsSnap, haveGPS = rt.GPSSnapshot()
-						if haveGPS {
-							if gpsSnap.LastFixUTC != "" {
-								if tFix, perr := time.Parse(time.RFC3339Nano, gpsSnap.LastFixUTC); perr == nil {
-									age := now.UTC().Sub(tFix.UTC()).Seconds()
-									if age < 0 {
-										age = 0
-									}
-									gpsSnap.FixAgeSec = age
-									gpsSnap.FixStale = age > 3.0
+				now := time.Now()
+				if ds, ok := rt.ADSB1090DecoderSnapshot(now.UTC()); ok {
+					status.SetADSB1090Decoder(now.UTC(), ds)
+				}
+				if ds, ok := rt.UAT978DecoderSnapshot(now.UTC()); ok {
+					status.SetUAT978Decoder(now.UTC(), ds)
+				}
+				var gpsSnap gps.Snapshot
+				var haveGPS bool
+				if fanSnap, haveFan := rt.FanSnapshot(); haveFan {
+					status.SetFan(now.UTC(), fanSnap)
+				}
+				if curCfg.GPS.Enable {
+					gpsSnap, haveGPS = rt.GPSSnapshot()
+					if haveGPS {
+						if gpsSnap.LastFixUTC != "" {
+							if tFix, perr := time.Parse(time.RFC3339Nano, gpsSnap.LastFixUTC); perr == nil {
+								age := now.UTC().Sub(tFix.UTC()).Seconds()
+								if age < 0 {
+									age = 0
 								}
+								gpsSnap.FixAgeSec = age
+								gpsSnap.FixStale = age > 3.0
 							}
-							status.SetGPS(now.UTC(), gpsSnap)
-						} else {
-							status.SetGPS(now.UTC(), gps.Snapshot{Enabled: true, Valid: false})
 						}
+						status.SetGPS(now.UTC(), gpsSnap)
 					} else {
-						status.SetGPS(now.UTC(), gps.Snapshot{Enabled: false})
+						status.SetGPS(now.UTC(), gps.Snapshot{Enabled: true, Valid: false})
 					}
-					if curCfg.AHRS.Enable {
-						snap, haveAHRS = rt.AHRSSnapshot()
-						// Publish AHRS sensor health for the Status page.
-						nowUTC := now.UTC()
-						imuWorking := haveAHRS && snap.IMUDetected && !snap.IMULastUpdateAt.IsZero() && nowUTC.Sub(snap.IMULastUpdateAt.UTC()) <= 2*time.Second
-						baroWorking := haveAHRS && snap.BaroDetected && !snap.BaroLastUpdateAt.IsZero() && nowUTC.Sub(snap.BaroLastUpdateAt.UTC()) <= 5*time.Second
-						ah := web.AHRSSensorsSnapshot{
-							Enabled:        true,
-							IMUDetected:    haveAHRS && snap.IMUDetected,
-							BaroDetected:   haveAHRS && snap.BaroDetected,
-							IMUWorking:     imuWorking,
-							BaroWorking:    baroWorking,
-							OrientationSet: snap.OrientationSet,
-							ForwardAxis:    snap.OrientationForwardAxis,
-							LastError:      snap.LastError,
-						}
-						if !snap.IMULastUpdateAt.IsZero() {
-							ah.IMULastUpdateUTC = snap.IMULastUpdateAt.UTC().Format(time.RFC3339Nano)
-						}
-						if !snap.BaroLastUpdateAt.IsZero() {
-							ah.BaroLastUpdateUTC = snap.BaroLastUpdateAt.UTC().Format(time.RFC3339Nano)
-						}
-						status.SetAHRSSensors(nowUTC, ah)
-					} else {
-						status.SetAHRSSensors(now.UTC(), web.AHRSSensorsSnapshot{Enabled: false})
+				} else {
+					status.SetGPS(now.UTC(), gps.Snapshot{Enabled: false})
+				}
+				if curCfg.AHRS.Enable {
+					snap, haveAHRS = rt.AHRSSnapshot()
+					// Publish AHRS sensor health for the Status page.
+					nowUTC := now.UTC()
+					imuWorking := haveAHRS && snap.IMUDetected && !snap.IMULastUpdateAt.IsZero() && nowUTC.Sub(snap.IMULastUpdateAt.UTC()) <= 2*time.Second
+					baroWorking := haveAHRS && snap.BaroDetected && !snap.BaroLastUpdateAt.IsZero() && nowUTC.Sub(snap.BaroLastUpdateAt.UTC()) <= 5*time.Second
+					ah := web.AHRSSensorsSnapshot{
+						Enabled:        true,
+						IMUDetected:    haveAHRS && snap.IMUDetected,
+						BaroDetected:   haveAHRS && snap.BaroDetected,
+						IMUWorking:     imuWorking,
+						BaroWorking:    baroWorking,
+						OrientationSet: snap.OrientationSet,
+						ForwardAxis:    snap.OrientationForwardAxis,
+						LastError:      snap.LastError,
 					}
-					if curCfg.GPS.Enable {
-						frames = buildGDL90FramesWithGPS(curCfg, now.UTC(), haveAHRS, snap, haveGPS, gpsSnap, hf, rt.TrafficTargets(now.UTC()))
-					} else {
-						frames = buildGDL90Frames(curCfg, now.UTC(), haveAHRS, snap)
+					if !snap.IMULastUpdateAt.IsZero() {
+						ah.IMULastUpdateUTC = snap.IMULastUpdateAt.UTC().Format(time.RFC3339Nano)
 					}
-					if extra := rt.DrainUAT978UplinkFrames(50); len(extra) > 0 {
-						frames = append(frames, extra...)
+					if !snap.BaroLastUpdateAt.IsZero() {
+						ah.BaroLastUpdateUTC = snap.BaroLastUpdateAt.UTC().Format(time.RFC3339Nano)
 					}
+					status.SetAHRSSensors(nowUTC, ah)
+				} else {
+					status.SetAHRSSensors(now.UTC(), web.AHRSSensorsSnapshot{Enabled: false})
+				}
+				if curCfg.GPS.Enable {
+					frames = buildGDL90FramesWithGPS(curCfg, now.UTC(), haveAHRS, snap, haveGPS, gpsSnap, hf, rt.TrafficTargets(now.UTC()))
+				} else {
+					frames = buildGDL90FramesNoGPS(curCfg, now.UTC(), haveAHRS, snap)
+				}
+				if extra := rt.DrainUAT978UplinkFrames(50); len(extra) > 0 {
+					frames = append(frames, extra...)
 				}
 				att := decodeAttitudeFromFrames(frames)
 				status.SetTraffic(now.UTC(), decodeTrafficFromFrames(frames))
@@ -712,9 +634,6 @@ func main() {
 					}
 				}
 				status.MarkTick(now.UTC(), sent)
-				if sc != nil && sc.scenario != nil {
-					sc.elapsed += curCfg.GDL90.Interval
-				}
 			}
 		}
 	}()
@@ -770,155 +689,55 @@ func runListen(ctx context.Context, addr string, dumpHex bool) error {
 	}
 }
 
-func buildGDL90Frames(cfg config.Config, now time.Time, haveAHRS bool, ahrsSnap ahrs.Snapshot) [][]byte {
-	// Ownship sim is always enabled (unless scenario mode is driving frames).
-	// Some EFBs will error if we claim GPS-valid but never send ownship (0x0A),
-	// so only advertise GPS-valid when we can actually emit ownship.
-	icao, err := gdl90.ParseICAOHex(cfg.Sim.Ownship.ICAO)
-	ownshipOK := err == nil
-	if err != nil {
-		log.Printf("sim ownship invalid sim.ownship.icao: %v", err)
-	}
-
-	gpsValid := ownshipOK
+func buildGDL90FramesNoGPS(cfg config.Config, now time.Time, haveAHRS bool, ahrsSnap ahrs.Snapshot) [][]byte {
+	gpsValid := false
 	ahrsValid := true
 	if cfg.AHRS.Enable {
 		ahrsValid = haveAHRS && ahrsSnap.Valid
 	}
 
-	frames := make([][]byte, 0, 16)
+	frames := make([][]byte, 0, 8)
 	frames = append(frames,
 		gdl90.HeartbeatFrameAt(now, gpsValid, false),
 		gdl90.StratuxHeartbeatFrame(gpsValid, ahrsValid),
 	)
-
-	// Identify as a Stratux-like device for apps that key off 0x65.
 	frames = append(frames, gdl90.ForeFlightIDFrame("Stratux", "Stratux-NG"))
-	if !ownshipOK {
-		// Without ownship, skip geo-alt and traffic to avoid confusing clients.
+
+	if !cfg.AHRS.Enable || !haveAHRS {
 		return frames
 	}
 
-	s := sim.OwnshipSim{
-		CenterLatDeg: cfg.Sim.Ownship.CenterLatDeg,
-		CenterLonDeg: cfg.Sim.Ownship.CenterLonDeg,
-		AltFeet:      cfg.Sim.Ownship.AltFeet,
-		GroundKt:     cfg.Sim.Ownship.GroundKt,
-		RadiusNm:     cfg.Sim.Ownship.RadiusNm,
-		Period:       cfg.Sim.Ownship.Period,
+	pressureAltFeet := 0.0
+	if ahrsSnap.PressureAltValid {
+		pressureAltFeet = ahrsSnap.PressureAltFeet
 	}
-	lat, lon, trk, altFeet, vvelFpm := s.Kinematics(now)
-	nacp := gdl90.NACpFromHorizontalAccuracyMeters(cfg.Sim.Ownship.GPSHorizontalAccuracyM)
-
-	// GDL90 Ownship Report (0x0A) altitude is pressure altitude when available.
-	// Mirror upstream Stratux behavior by preferring baro-derived pressure altitude.
-	ownshipAltFeet := altFeet
-	if cfg.AHRS.Enable && haveAHRS && ahrsSnap.PressureAltValid {
-		ownshipAltFeet = int(ahrsSnap.PressureAltFeet)
-	}
-	frames = append(frames, gdl90.OwnshipReportFrame(gdl90.Ownship{
-		ICAO:        icao,
-		LatDeg:      lat,
-		LonDeg:      lon,
-		AltFeet:     ownshipAltFeet,
-		HaveNICNACp: true,
-		NIC:         8,
-		NACp:        nacp,
-		GroundKt:    cfg.Sim.Ownship.GroundKt,
-		TrackDeg:    trk,
-		OnGround:    cfg.Sim.Ownship.GroundKt == 0,
-		VvelFpm:     vvelFpm,
-		VvelValid:   true,
-		Callsign:    cfg.Sim.Ownship.Callsign,
-		Emitter:     0x01,
-	}))
-	frames = append(frames, gdl90.OwnshipGeometricAltitudeFrame(altFeet))
-
-	// Stratux-like AHRS messages (sim-driven). Even without a real IMU, some
-	// EFBs expect to see these message types.
-	roll := 0.0
-	pitch := 0.0
-	if cfg.AHRS.Enable && haveAHRS {
-		roll = ahrsSnap.RollDeg
-		pitch = ahrsSnap.PitchDeg
-	}
-
-	pressureAltFeet := float64(altFeet)
-	pressureAltValid := true
-	if cfg.AHRS.Enable {
-		pressureAltValid = haveAHRS && ahrsSnap.PressureAltValid
-		if pressureAltValid {
-			pressureAltFeet = ahrsSnap.PressureAltFeet
-		}
-	}
-
-	vs := vvelFpm
-	vsValid := true
-	if cfg.AHRS.Enable {
-		vsValid = haveAHRS && ahrsSnap.VerticalSpeedValid
-		if vsValid {
-			vs = ahrsSnap.VerticalSpeedFpm
-		}
+	vs := 0
+	if ahrsSnap.VerticalSpeedValid {
+		vs = ahrsSnap.VerticalSpeedFpm
 	}
 
 	att := gdl90.Attitude{
 		Valid:                ahrsValid,
-		RollDeg:              roll,
-		PitchDeg:             pitch,
-		HeadingDeg:           trk,
+		RollDeg:              ahrsSnap.RollDeg,
+		PitchDeg:             ahrsSnap.PitchDeg,
+		HeadingDeg:           0,
 		SlipSkidDeg:          0,
-		YawRateDps:           0,
+		YawRateDps:           ahrsSnap.YawRateDps,
 		GLoad:                1.0,
-		IndicatedAirspeedKt:  cfg.Sim.Ownship.GroundKt,
-		TrueAirspeedKt:       cfg.Sim.Ownship.GroundKt,
+		IndicatedAirspeedKt:  0,
+		TrueAirspeedKt:       0,
 		PressureAltitudeFeet: pressureAltFeet,
-		PressureAltValid:     pressureAltValid,
+		PressureAltValid:     ahrsSnap.PressureAltValid,
 		VerticalSpeedFpm:     vs,
-		VerticalSpeedValid:   vsValid,
+		VerticalSpeedValid:   ahrsSnap.VerticalSpeedValid,
+	}
+	if ahrsSnap.GLoadValid {
+		att.GLoad = ahrsSnap.GLoadG
 	}
 	frames = append(frames,
 		gdl90.ForeFlightAHRSFrame(att),
 		gdl90.AHRSGDL90LEFrame(att),
 	)
-
-	if !cfg.Sim.Traffic.Enable {
-		return frames
-	}
-
-	ts := sim.TrafficSim{
-		CenterLatDeg: cfg.Sim.Ownship.CenterLatDeg,
-		CenterLonDeg: cfg.Sim.Ownship.CenterLonDeg,
-		BaseAltFeet:  cfg.Sim.Ownship.AltFeet,
-		GroundKt:     cfg.Sim.Traffic.GroundKt,
-		RadiusNm:     cfg.Sim.Traffic.RadiusNm,
-		Period:       cfg.Sim.Traffic.Period,
-	}
-	targets := ts.Targets(now, cfg.Sim.Traffic.Count)
-	for i, tgt := range targets {
-		if !tgt.Visible {
-			continue
-		}
-		// Deterministic, non-zero ICAO for each target.
-		// Keep it in the "self assigned" range (not necessarily valid ICAO).
-		icaoT := [3]byte{0xF1, 0x00, byte(i + 1)}
-		frames = append(frames, gdl90.TrafficReportFrame(gdl90.Traffic{
-			AddrType:        0x00,
-			ICAO:            icaoT,
-			LatDeg:          tgt.LatDeg,
-			LonDeg:          tgt.LonDeg,
-			AltFeet:         tgt.AltFeet,
-			NIC:             8,
-			NACp:            8,
-			GroundKt:        tgt.GroundKt,
-			TrackDeg:        tgt.TrackDeg,
-			VvelFpm:         tgt.VvelFpm,
-			OnGround:        tgt.GroundKt == 0,
-			Extrapolated:    tgt.Extrapolated,
-			EmitterCategory: 0x01,
-			Tail:            fmt.Sprintf("TGT%04d", i+1),
-			PriorityStatus:  0,
-		}))
-	}
 
 	return frames
 }
@@ -999,10 +818,10 @@ func shortestAngleDiffDeg(targetDeg float64, currentDeg float64) float64 {
 
 func buildGDL90FramesWithGPS(cfg config.Config, now time.Time, haveAHRS bool, ahrsSnap ahrs.Snapshot, haveGPS bool, gpsSnap gps.Snapshot, hf *headingFuser, liveTraffic []gdl90.Traffic) [][]byte {
 	// GPS mode: emit ownship from live GPS when we have a recent fix.
-	icao, err := gdl90.ParseICAOHex(cfg.Sim.Ownship.ICAO)
+	icao, err := gdl90.ParseICAOHex(cfg.Ownship.ICAO)
 	ownshipOK := err == nil
 	if err != nil {
-		log.Printf("ownship invalid sim.ownship.icao: %v", err)
+		log.Printf("ownship invalid config ownship.icao: %v", err)
 	}
 
 	ahrsValid := true
@@ -1039,7 +858,7 @@ func buildGDL90FramesWithGPS(cfg config.Config, now time.Time, haveAHRS bool, ah
 
 	nacp := gdl90.NACpFromHorizontalAccuracyMeters(cfg.GPS.HorizontalAccuracyM)
 
-	geoAltFeet := cfg.Sim.Ownship.AltFeet
+	geoAltFeet := 0
 	if gpsSnap.AltFeet != nil {
 		geoAltFeet = *gpsSnap.AltFeet
 	}
@@ -1103,13 +922,13 @@ func buildGDL90FramesWithGPS(cfg config.Config, now time.Time, haveAHRS bool, ah
 		OnGround:    groundKt == 0,
 		VvelFpm:     vvelFpm,
 		VvelValid:   vvelValid,
-		Callsign:    cfg.Sim.Ownship.Callsign,
+		Callsign:    cfg.Ownship.Callsign,
 		Emitter:     0x01,
 	}))
 	frames = append(frames, gdl90.OwnshipGeometricAltitudeFrame(geoAltFeet))
 
 	// Stratux-like AHRS messages. If AHRS is present, use it; otherwise keep
-	// the sim attitude neutral but with heading aligned to track.
+	// the attitude neutral but with heading aligned to track.
 	roll := 0.0
 	pitch := 0.0
 	if cfg.AHRS.Enable && haveAHRS {
@@ -1153,133 +972,8 @@ func buildGDL90FramesWithGPS(cfg config.Config, now time.Time, haveAHRS bool, ah
 		gdl90.AHRSGDL90LEFrame(att),
 	)
 
-	// If sim traffic is enabled, it still uses sim center from config.
-	if !cfg.Sim.Traffic.Enable {
-		for _, t := range liveTraffic {
-			frames = append(frames, gdl90.TrafficReportFrame(t))
-		}
-		return frames
-	}
-
-	ts := sim.TrafficSim{
-		CenterLatDeg: cfg.Sim.Ownship.CenterLatDeg,
-		CenterLonDeg: cfg.Sim.Ownship.CenterLonDeg,
-		BaseAltFeet:  cfg.Sim.Ownship.AltFeet,
-		GroundKt:     cfg.Sim.Traffic.GroundKt,
-		RadiusNm:     cfg.Sim.Traffic.RadiusNm,
-		Period:       cfg.Sim.Traffic.Period,
-	}
-	targets := ts.Targets(now, cfg.Sim.Traffic.Count)
-	for i, tgt := range targets {
-		if !tgt.Visible {
-			continue
-		}
-		icaoT := [3]byte{0xF1, 0x00, byte(i + 1)}
-		frames = append(frames, gdl90.TrafficReportFrame(gdl90.Traffic{
-			AddrType:        0x00,
-			ICAO:            icaoT,
-			LatDeg:          tgt.LatDeg,
-			LonDeg:          tgt.LonDeg,
-			AltFeet:         tgt.AltFeet,
-			NIC:             8,
-			NACp:            8,
-			GroundKt:        tgt.GroundKt,
-			TrackDeg:        tgt.TrackDeg,
-			VvelFpm:         tgt.VvelFpm,
-			OnGround:        tgt.GroundKt == 0,
-			Extrapolated:    tgt.Extrapolated,
-			EmitterCategory: 0x01,
-			Tail:            fmt.Sprintf("TGT%04d", i+1),
-			PriorityStatus:  0,
-		}))
-	}
-
-	return frames
-}
-
-func buildGDL90FramesFromScenario(cfg config.Config, now time.Time, elapsed time.Duration, scenario *sim.Scenario, ownshipICAO [3]byte, trafficICAO [][3]byte) [][]byte {
-	// Scenario is always deterministic and self-contained, so we advertise GPS/AHRS valid.
-	gpsValid := true
-	ahrsValid := true
-	frames := make([][]byte, 0, 16)
-	frames = append(frames,
-		gdl90.HeartbeatFrameAt(now, gpsValid, false),
-		gdl90.StratuxHeartbeatFrame(gpsValid, ahrsValid),
-	)
-	frames = append(frames, gdl90.ForeFlightIDFrame("Stratux", "Stratux-NG"))
-
-	if scenario == nil {
-		return frames
-	}
-	state := scenario.StateAt(elapsed, cfg.Sim.Scenario.Loop)
-
-	nacp := gdl90.NACpFromHorizontalAccuracyMeters(state.Ownship.GPSHorizontalAccuracyM)
-	call := state.Ownship.Callsign
-	if strings.TrimSpace(call) == "" {
-		call = "STRATUX"
-	}
-	frames = append(frames, gdl90.OwnshipReportFrame(gdl90.Ownship{
-		ICAO:        ownshipICAO,
-		LatDeg:      state.Ownship.LatDeg,
-		LonDeg:      state.Ownship.LonDeg,
-		AltFeet:     state.Ownship.AltFeet,
-		HaveNICNACp: true,
-		NIC:         8,
-		NACp:        nacp,
-		GroundKt:    state.Ownship.GroundKt,
-		TrackDeg:    state.Ownship.TrackDeg,
-		OnGround:    state.Ownship.GroundKt == 0,
-		Callsign:    call,
-		Emitter:     0x01,
-	}))
-	frames = append(frames, gdl90.OwnshipGeometricAltitudeFrame(state.Ownship.AltFeet))
-
-	att := gdl90.Attitude{
-		Valid:                ahrsValid,
-		RollDeg:              0,
-		PitchDeg:             0,
-		HeadingDeg:           state.Ownship.TrackDeg,
-		SlipSkidDeg:          0,
-		YawRateDps:           0,
-		GLoad:                1.0,
-		IndicatedAirspeedKt:  state.Ownship.GroundKt,
-		TrueAirspeedKt:       state.Ownship.GroundKt,
-		PressureAltitudeFeet: float64(state.Ownship.AltFeet),
-		PressureAltValid:     true,
-		VerticalSpeedFpm:     0,
-		VerticalSpeedValid:   true,
-	}
-	frames = append(frames,
-		gdl90.ForeFlightAHRSFrame(att),
-		gdl90.AHRSGDL90LEFrame(att),
-	)
-
-	for i, tgt := range state.Traffic {
-		tail := strings.TrimSpace(tgt.Callsign)
-		if tail == "" {
-			tail = fmt.Sprintf("TGT%04d", i+1)
-		}
-		icao := [3]byte{0xF1, 0x00, byte(i + 1)}
-		if i < len(trafficICAO) {
-			icao = trafficICAO[i]
-		}
-		frames = append(frames, gdl90.TrafficReportFrame(gdl90.Traffic{
-			AddrType:        0x00,
-			ICAO:            icao,
-			LatDeg:          tgt.LatDeg,
-			LonDeg:          tgt.LonDeg,
-			AltFeet:         tgt.AltFeet,
-			NIC:             8,
-			NACp:            8,
-			GroundKt:        tgt.GroundKt,
-			TrackDeg:        tgt.TrackDeg,
-			VvelFpm:         0,
-			OnGround:        tgt.GroundKt == 0,
-			Extrapolated:    false,
-			EmitterCategory: 0x01,
-			Tail:            tail,
-			PriorityStatus:  0,
-		}))
+	for _, t := range liveTraffic {
+		frames = append(frames, gdl90.TrafficReportFrame(t))
 	}
 
 	return frames

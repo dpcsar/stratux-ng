@@ -28,7 +28,7 @@ type Status struct {
 	lastTickNano  int64
 	gdl90Dest     atomic.Value // string
 	interval      atomic.Value // string
-	simInfo       atomic.Value // map[string]any
+	staticInfo    atomic.Value // map[string]any
 	attitude      atomic.Value // AttitudeSnapshot
 	ahrsSensors   atomic.Value // AHRSSensorsSnapshot
 	fan           atomic.Value // fancontrol.Snapshot
@@ -45,7 +45,7 @@ func NewStatus() *Status {
 	atomic.StoreInt64(&s.lastTickNano, 0)
 	s.gdl90Dest.Store("")
 	s.interval.Store("")
-	s.simInfo.Store(map[string]any{})
+	s.staticInfo.Store(map[string]any{})
 	s.attitude.Store(AttitudeSnapshot{})
 	s.ahrsSensors.Store(AHRSSensorsSnapshot{})
 	s.fan.Store(fancontrol.Snapshot{})
@@ -203,15 +203,15 @@ func (s *Status) SetAHRSSensors(nowUTC time.Time, a AHRSSensorsSnapshot) {
 	s.ahrsSensors.Store(a)
 }
 
-func (s *Status) SetStatic(gdl90Dest string, interval string, simInfo map[string]any) {
+func (s *Status) SetStatic(gdl90Dest string, interval string, staticInfo map[string]any) {
 	if gdl90Dest != "" {
 		s.gdl90Dest.Store(gdl90Dest)
 	}
 	if interval != "" {
 		s.interval.Store(interval)
 	}
-	if simInfo != nil {
-		s.simInfo.Store(simInfo)
+	if staticInfo != nil {
+		s.staticInfo.Store(staticInfo)
 	}
 }
 
@@ -233,7 +233,7 @@ type StatusSnapshot struct {
 	Interval        string                `json:"interval"`
 	FramesSentTotal uint64                `json:"frames_sent_total"`
 	LastTickUTC     string                `json:"last_tick_utc,omitempty"`
-	Sim             map[string]any        `json:"sim"`
+	Info            map[string]any        `json:"info"`
 	Attitude        AttitudeSnapshot      `json:"attitude"`
 	AHRSSensors     AHRSSensorsSnapshot   `json:"ahrs"`
 	Fan             fancontrol.Snapshot   `json:"fan"`
@@ -276,7 +276,7 @@ func (s *Status) Snapshot(nowUTC time.Time) StatusSnapshot {
 		GDL90Dest:       s.gdl90Dest.Load().(string),
 		Interval:        s.interval.Load().(string),
 		FramesSentTotal: atomic.LoadUint64(&s.framesSent),
-		Sim:             s.simInfo.Load().(map[string]any),
+		Info:            s.staticInfo.Load().(map[string]any),
 		Attitude:        s.attitude.Load().(AttitudeSnapshot),
 		AHRSSensors:     s.ahrsSensors.Load().(AHRSSensorsSnapshot),
 		Fan:             s.fan.Load().(fancontrol.Snapshot),

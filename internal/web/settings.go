@@ -18,15 +18,10 @@ import (
 )
 
 type SettingsPayload struct {
-	GDL90Dest string `json:"gdl90_dest"`
-	Interval  string `json:"interval"`
-
-	ScenarioEnable       bool   `json:"scenario_enable"`
-	ScenarioPath         string `json:"scenario_path"`
-	ScenarioStartTimeUTC string `json:"scenario_start_time_utc"`
-	ScenarioLoop         bool   `json:"scenario_loop"`
-
-	TrafficEnable bool `json:"traffic_enable"`
+	GDL90Dest       string `json:"gdl90_dest"`
+	Interval        string `json:"interval"`
+	OwnshipICAO     string `json:"ownship_icao"`
+	OwnshipCallsign string `json:"ownship_callsign"`
 }
 
 // SettingsPayloadIn is the strict POST schema.
@@ -34,25 +29,17 @@ type SettingsPayload struct {
 // All fields are required (no partial updates) to avoid hidden defaults and
 // prevent accidental schema drift.
 type SettingsPayloadIn struct {
-	GDL90Dest *string `json:"gdl90_dest"`
-	Interval  *string `json:"interval"`
-
-	ScenarioEnable       *bool   `json:"scenario_enable"`
-	ScenarioPath         *string `json:"scenario_path"`
-	ScenarioStartTimeUTC *string `json:"scenario_start_time_utc"`
-	ScenarioLoop         *bool   `json:"scenario_loop"`
-
-	TrafficEnable *bool `json:"traffic_enable"`
+	GDL90Dest       *string `json:"gdl90_dest"`
+	Interval        *string `json:"interval"`
+	OwnshipICAO     *string `json:"ownship_icao"`
+	OwnshipCallsign *string `json:"ownship_callsign"`
 }
 
 var settingsPostKeys = []string{
 	"gdl90_dest",
 	"interval",
-	"scenario_enable",
-	"scenario_path",
-	"scenario_start_time_utc",
-	"scenario_loop",
-	"traffic_enable",
+	"ownship_icao",
+	"ownship_callsign",
 }
 
 func decodeSettingsPayloadInStrict(body []byte) (SettingsPayloadIn, error) {
@@ -135,14 +122,10 @@ func decodeSettingsPayloadInStrict(body []byte) (SettingsPayloadIn, error) {
 
 func configToSettingsPayload(cfg config.Config) SettingsPayload {
 	return SettingsPayload{
-		GDL90Dest: cfg.GDL90.Dest,
-		Interval:  cfg.GDL90.Interval.String(),
-		ScenarioEnable:       cfg.Sim.Scenario.Enable,
-		ScenarioPath:         cfg.Sim.Scenario.Path,
-		ScenarioStartTimeUTC: cfg.Sim.Scenario.StartTimeUTC,
-		ScenarioLoop:         cfg.Sim.Scenario.Loop,
-
-		TrafficEnable: cfg.Sim.Traffic.Enable,
+		GDL90Dest:       cfg.GDL90.Dest,
+		Interval:        cfg.GDL90.Interval.String(),
+		OwnshipICAO:     cfg.Ownship.ICAO,
+		OwnshipCallsign: cfg.Ownship.Callsign,
 	}
 }
 
@@ -159,28 +142,17 @@ func validateSettingsPayloadIn(p SettingsPayloadIn) error {
 	if strings.TrimSpace(*p.Interval) == "" {
 		return errors.New("interval must be non-empty")
 	}
-	if p.ScenarioEnable == nil {
-		return errors.New("scenario_enable is required")
+	if p.OwnshipICAO == nil {
+		return errors.New("ownship_icao is required")
 	}
-	if p.ScenarioPath == nil {
-		return errors.New("scenario_path is required")
+	if strings.TrimSpace(*p.OwnshipICAO) == "" {
+		return errors.New("ownship_icao must be non-empty")
 	}
-	if p.ScenarioStartTimeUTC == nil {
-		return errors.New("scenario_start_time_utc is required")
+	if p.OwnshipCallsign == nil {
+		return errors.New("ownship_callsign is required")
 	}
-	if p.ScenarioLoop == nil {
-		return errors.New("scenario_loop is required")
-	}
-	if p.TrafficEnable == nil {
-		return errors.New("traffic_enable is required")
-	}
-	if *p.ScenarioEnable {
-		if strings.TrimSpace(*p.ScenarioPath) == "" {
-			return errors.New("scenario_path must be non-empty when scenario_enable is true")
-		}
-		if strings.TrimSpace(*p.ScenarioStartTimeUTC) == "" {
-			return errors.New("scenario_start_time_utc must be non-empty when scenario_enable is true")
-		}
+	if strings.TrimSpace(*p.OwnshipCallsign) == "" {
+		return errors.New("ownship_callsign must be non-empty")
 	}
 	return nil
 }
@@ -202,20 +174,8 @@ func applySettingsPayload(cfg *config.Config, p SettingsPayloadIn) error {
 	}
 	cfg.GDL90.Interval = d
 
-	cfg.Sim.Scenario.Enable = *p.ScenarioEnable
-	cfg.Sim.Scenario.Path = strings.TrimSpace(*p.ScenarioPath)
-	cfg.Sim.Scenario.StartTimeUTC = strings.TrimSpace(*p.ScenarioStartTimeUTC)
-	cfg.Sim.Scenario.Loop = *p.ScenarioLoop
-	if cfg.Sim.Scenario.Enable {
-		if cfg.Sim.Scenario.Path == "" {
-			return errors.New("scenario_path must be non-empty when scenario_enable is true")
-		}
-		if cfg.Sim.Scenario.StartTimeUTC == "" {
-			return errors.New("scenario_start_time_utc must be non-empty when scenario_enable is true")
-		}
-	}
-
-	cfg.Sim.Traffic.Enable = *p.TrafficEnable
+	cfg.Ownship.ICAO = strings.ToUpper(strings.TrimSpace(*p.OwnshipICAO))
+	cfg.Ownship.Callsign = strings.TrimSpace(*p.OwnshipCallsign)
 	return nil
 }
 

@@ -16,28 +16,9 @@ gps:
     device: /dev/stratux-gps
     baud: 9600
     horizontal_accuracy_m: 10
-sim:
-    ownship:
-        center_lat_deg: 45.5404
-        center_lon_deg: -122.9498
-        alt_feet: 3000
-        ground_kt: 90
-        gps_horizontal_accuracy_m: 50
-        radius_nm: 0.5
-        period: 2m0s
-        icao: F00000
-        callsign: STRATUX
-    traffic:
-        enable: false
-        count: 6
-        radius_nm: 2
-        period: 1m30s
-        ground_kt: 120
-    scenario:
-        enable: false
-        path: ./configs/scenarios/edgecases.yaml
-        start_time_utc: "2020-01-01T00:00:00Z"
-        loop: false
+ownship:
+    icao: F00000
+    callsign: STRATUX
 ahrs:
     enable: true
     i2c_bus: 1

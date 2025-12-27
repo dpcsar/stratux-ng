@@ -108,7 +108,7 @@ func CreateWriter(path string) (*Writer, error) {
 		return nil, err
 	}
 	// start is initialized on first WriteFrame() so callers can provide a
-	// deterministic time base (e.g., scenario scripts with fixed UTC times).
+	// deterministic time base (e.g., tests or replays that expect fixed UTC times).
 	return &Writer{f: f, w: bw}, nil
 }
 

@@ -4,7 +4,7 @@ import "math"
 
 // Traffic represents a single traffic target for GDL90 Traffic Report (0x14).
 //
-// This is intentionally minimal and tuned for simulator / bring-up.
+// This is intentionally minimal and tuned for live Stratux-NG traffic updates.
 type Traffic struct {
 	AddrType        byte // 0 = ADS-B with ICAO address (common)
 	ICAO            [3]byte

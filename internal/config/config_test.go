@@ -44,12 +44,8 @@ func TestLoad_DefaultsApplied(t *testing.T) {
 	}
 	// Output is always framed GDL90.
 
-	// Simulator defaults should be populated even if sim is absent.
-	if cfg.Sim.Ownship.Period <= 0 || cfg.Sim.Ownship.RadiusNm <= 0 || cfg.Sim.Ownship.GroundKt <= 0 {
-		t.Fatalf("expected ownship defaults applied")
-	}
-	if cfg.Sim.Traffic.Count <= 0 || cfg.Sim.Traffic.RadiusNm <= 0 || cfg.Sim.Traffic.Period <= 0 || cfg.Sim.Traffic.GroundKt <= 0 {
-		t.Fatalf("expected traffic defaults applied")
+	if cfg.Ownship.ICAO != "F00000" || cfg.Ownship.Callsign != "STRATUX" {
+		t.Fatalf("expected ownship defaults applied: %+v", cfg.Ownship)
 	}
 }
 

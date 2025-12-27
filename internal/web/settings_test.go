@@ -43,19 +43,13 @@ func TestSettingsPOST_AppliesAndSaves(t *testing.T) {
 
 	dest := "127.0.0.1:5000"
 	interval := "250ms"
-	scenarioEnable := false
-	scenarioPath := ""
-	scenarioStart := ""
-	scenarioLoop := false
-	trafficEnable := false
+	icao := "ABC123"
+	callsign := "N12345"
 	payload := SettingsPayloadIn{
-		GDL90Dest:            &dest,
-		Interval:             &interval,
-		ScenarioEnable:       &scenarioEnable,
-		ScenarioPath:         &scenarioPath,
-		ScenarioStartTimeUTC: &scenarioStart,
-		ScenarioLoop:         &scenarioLoop,
-		TrafficEnable:        &trafficEnable,
+		GDL90Dest:       &dest,
+		Interval:        &interval,
+		OwnshipICAO:     &icao,
+		OwnshipCallsign: &callsign,
 	}
 	b, _ := json.Marshal(payload)
 
@@ -77,8 +71,11 @@ func TestSettingsPOST_AppliesAndSaves(t *testing.T) {
 		if got.GDL90.Interval != 250*time.Millisecond {
 			t.Fatalf("applied interval=%s", got.GDL90.Interval)
 		}
-		if got.Sim.Traffic.Enable {
-			t.Fatalf("expected traffic disabled")
+		if got.Ownship.ICAO != strings.ToUpper(icao) {
+			t.Fatalf("applied ownship icao=%q", got.Ownship.ICAO)
+		}
+		if got.Ownship.Callsign != callsign {
+			t.Fatalf("applied ownship callsign=%q", got.Ownship.Callsign)
 		}
 	case <-time.After(1 * time.Second):
 		t.Fatalf("timed out waiting for Apply")
@@ -114,19 +111,13 @@ func TestSettingsPOST_ApplyFailureDoesNotSave(t *testing.T) {
 
 	dest := "127.0.0.1:5000"
 	interval := "2s"
-	scenarioEnable := false
-	scenarioPath := ""
-	scenarioStart := ""
-	scenarioLoop := false
-	trafficEnable := false
+	icao := "ABC123"
+	callsign := "N12345"
 	payload := SettingsPayloadIn{
-		GDL90Dest:            &dest,
-		Interval:             &interval,
-		ScenarioEnable:       &scenarioEnable,
-		ScenarioPath:         &scenarioPath,
-		ScenarioStartTimeUTC: &scenarioStart,
-		ScenarioLoop:         &scenarioLoop,
-		TrafficEnable:        &trafficEnable,
+		GDL90Dest:       &dest,
+		Interval:        &interval,
+		OwnshipICAO:     &icao,
+		OwnshipCallsign: &callsign,
 	}
 	b, _ := json.Marshal(payload)
 
@@ -162,19 +153,13 @@ func TestSettingsPOST_MissingIntervalRejected(t *testing.T) {
 
 	// Interval is required and all other fields must be present (no partial updates).
 	dest := "127.0.0.1:5000"
-	scenarioEnable := false
-	scenarioPath := ""
-	scenarioStart := ""
-	scenarioLoop := false
-	trafficEnable := false
+	icao := "ABC123"
+	callsign := "N12345"
 	payload := SettingsPayloadIn{
-		GDL90Dest:            &dest,
-		Interval:             nil,
-		ScenarioEnable:       &scenarioEnable,
-		ScenarioPath:         &scenarioPath,
-		ScenarioStartTimeUTC: &scenarioStart,
-		ScenarioLoop:         &scenarioLoop,
-		TrafficEnable:        &trafficEnable,
+		GDL90Dest:       &dest,
+		Interval:        nil,
+		OwnshipICAO:     &icao,
+		OwnshipCallsign: &callsign,
 	}
 	b, _ := json.Marshal(payload)
 
@@ -209,15 +194,12 @@ func TestSettingsPOST_DuplicateKeysRejected(t *testing.T) {
 
 	// Duplicate gdl90_dest key should be rejected.
 	dup := []byte(`{
-  "gdl90_dest": "127.0.0.1:5000",
-  "gdl90_dest": "127.0.0.1:6000",
-  "interval": "1s",
-  "scenario_enable": false,
-  "scenario_path": "",
-  "scenario_start_time_utc": "",
-  "scenario_loop": false,
-  "traffic_enable": false
-}`)
+		"gdl90_dest": "127.0.0.1:5000",
+		"gdl90_dest": "127.0.0.1:6000",
+		"interval": "1s",
+		"ownship_icao": "ABC123",
+		"ownship_callsign": "N12345"
+	}`)
 
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/settings", bytes.NewReader(dup))
 	req.Header.Set("Content-Type", "application/json")

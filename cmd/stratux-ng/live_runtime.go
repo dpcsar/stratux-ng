@@ -38,9 +38,8 @@ type liveRuntime struct {
 
 	trafficStore *traffic.Store
 
-	cfg      config.Config
-	scenario scenarioRuntime
-	ticker   *time.Ticker
+	cfg    config.Config
+	ticker *time.Ticker
 }
 
 func decoderBandEqual(a, b config.DecoderBandConfig) bool {
@@ -103,11 +102,6 @@ func newLiveRuntime(ctx context.Context, cfg config.Config, resolvedConfigPath s
 		return nil, fmt.Errorf("sender is nil")
 	}
 
-	sc, err := loadScenarioFromConfig(c)
-	if err != nil {
-		return nil, err
-	}
-
 	var t *time.Ticker
 	if !c.GDL90.Replay.Enable {
 		t = time.NewTicker(c.GDL90.Interval)
@@ -144,7 +138,6 @@ func newLiveRuntime(ctx context.Context, cfg config.Config, resolvedConfigPath s
 		status:             status,
 		sender:             sender,
 		cfg:                c,
-		scenario:           sc,
 		ticker:             t,
 		ahrsSvc:            ahrsSvc,
 		uat978UplinkQ:      make(chan []byte, 512),
@@ -577,13 +570,6 @@ func (r *liveRuntime) Config() config.Config {
 	return r.cfg
 }
 
-func (r *liveRuntime) Scenario() *scenarioRuntime {
-	if r == nil {
-		return nil
-	}
-	return &r.scenario
-}
-
 func (r *liveRuntime) Apply(next config.Config) error {
 	if r == nil {
 		return fmt.Errorf("runtime is nil")
@@ -630,14 +616,6 @@ func (r *liveRuntime) Apply(next config.Config) error {
 		nextBroadcaster = b
 	}
 
-	nextScenario, err := loadScenarioFromConfig(c)
-	if err != nil {
-		if nextBroadcaster != nil {
-			_ = nextBroadcaster.Close()
-		}
-		return err
-	}
-
 	// Commit: swap broadcaster.
 	if nextBroadcaster != nil {
 		r.sender.Swap(nextBroadcaster)
@@ -649,16 +627,7 @@ func (r *liveRuntime) Apply(next config.Config) error {
 		r.ticker = time.NewTicker(c.GDL90.Interval)
 	}
 
-	// Commit: scenario runtime (reset elapsed on any scenario config change).
-	if c.Sim.Scenario.Enable != r.cfg.Sim.Scenario.Enable ||
-		c.Sim.Scenario.Path != r.cfg.Sim.Scenario.Path ||
-		c.Sim.Scenario.StartTimeUTC != r.cfg.Sim.Scenario.StartTimeUTC ||
-		c.Sim.Scenario.Loop != r.cfg.Sim.Scenario.Loop {
-		r.scenario = nextScenario
-		r.scenario.elapsed = 0
-	}
-
 	r.cfg = c
-	r.status.SetStatic(r.cfg.GDL90.Dest, r.cfg.GDL90.Interval.String(), simInfoSnapshot(r.resolvedConfigPath, r.cfg))
+	r.status.SetStatic(r.cfg.GDL90.Dest, r.cfg.GDL90.Interval.String(), staticInfoSnapshot(r.resolvedConfigPath, r.cfg))
 	return nil
 }

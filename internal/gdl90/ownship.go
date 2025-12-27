@@ -32,7 +32,7 @@ type Ownship struct {
 
 // OwnshipReportFrame builds and frames a minimal Ownship Report (0x0A).
 //
-// This is intended for bring-up and simulator use. Fields not yet modeled are
+// This is intended for bring-up and live operation. Fields not yet modeled are
 // encoded as "unknown" where applicable.
 func OwnshipReportFrame(o Ownship) []byte {
 	msg := make([]byte, 28)

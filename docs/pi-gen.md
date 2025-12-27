@@ -14,14 +14,16 @@ Stratux-NG is designed so the same YAML config drives both.
 
 ## Development workflow (fast iteration)
 
-### 1) Run with simulation only
+### 1) Run Stratux-NG locally
 
 - `make run` (uses `CONFIG=./config.yaml` by default)
 - Or: `STRATUX_NG_CONFIG=./config.yaml go run ./cmd/stratux-ng`
 
-This path does not require SDRs, GPS, or AHRS.
+This exercises the full live pipeline. Without SDRs/GPS/AHRS attached you'll
+still get heartbeats and AHRS fallback frames, which is enough to verify the web
+UI, config plumbing, and log output.
 
-### 2) Run with real decoders (1090 + 978)
+### 2) Enable real decoders (1090 + 978)
 
 Stratux-NG can supervise decoders itself (recommended).
 

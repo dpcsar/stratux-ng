@@ -56,6 +56,22 @@ func countTrafficMessages(frames [][]byte) int {
 	return n
 }
 
+func newTrafficTestConfig(t *testing.T) config.Config {
+	t.Helper()
+	cfg := config.Config{
+		GDL90: config.GDL90Config{Dest: "127.0.0.1:4000", Interval: 1 * time.Second},
+		GPS:   config.GPSConfig{Enable: true, HorizontalAccuracyM: 10},
+		Ownship: config.OwnshipConfig{
+			ICAO:     "ABCDEF",
+			Callsign: "STRATUX",
+		},
+	}
+	if err := config.DefaultAndValidate(&cfg); err != nil {
+		t.Fatalf("default config: %v", err)
+	}
+	return cfg
+}
+
 func TestTrafficReplay_Dump1090Fixtures_EmitsGDL90Traffic(t *testing.T) {
 	// Use a stable time so tests are deterministic.
 	now := time.Date(2025, 12, 23, 0, 0, 0, 0, time.UTC)
@@ -68,14 +84,7 @@ func TestTrafficReplay_Dump1090Fixtures_EmitsGDL90Traffic(t *testing.T) {
 	}
 	store.UpsertMany(now, traffic.ParseDump1090FAAircraftJSON(json.RawMessage(data)))
 
-	cfg := config.Config{}
-	cfg.GDL90.Dest = "127.0.0.1:4000"
-	cfg.Sim.Ownship.ICAO = "ABCDEF"
-	if err := config.DefaultAndValidate(&cfg); err != nil {
-		t.Fatalf("default config: %v", err)
-	}
-	cfg.GPS.Enable = true
-	cfg.Sim.Traffic.Enable = false // emit live traffic, not sim
+	cfg := newTrafficTestConfig(t)
 
 	alt := 500
 	gs := 80
@@ -110,14 +119,7 @@ func TestTrafficReplay_Dump978Fixtures_EmitsGDL90Traffic(t *testing.T) {
 		store.UpsertMany(now, traffic.ParseDump978NDJSON(raw))
 	}
 
-	cfg := config.Config{}
-	cfg.GDL90.Dest = "127.0.0.1:4000"
-	cfg.Sim.Ownship.ICAO = "ABCDEF"
-	if err := config.DefaultAndValidate(&cfg); err != nil {
-		t.Fatalf("default config: %v", err)
-	}
-	cfg.GPS.Enable = true
-	cfg.Sim.Traffic.Enable = false
+	cfg := newTrafficTestConfig(t)
 
 	alt := 500
 	gs := 80
@@ -149,14 +151,7 @@ func TestTrafficReplay_Dump1090AircraftJSON_EmitsGDL90Traffic(t *testing.T) {
 	}
 	store.UpsertMany(now, traffic.ParseDump1090FAAircraftJSON(json.RawMessage(b)))
 
-	cfg := config.Config{}
-	cfg.GDL90.Dest = "127.0.0.1:4000"
-	cfg.Sim.Ownship.ICAO = "ABCDEF"
-	if err := config.DefaultAndValidate(&cfg); err != nil {
-		t.Fatalf("default config: %v", err)
-	}
-	cfg.GPS.Enable = true
-	cfg.Sim.Traffic.Enable = false
+	cfg := newTrafficTestConfig(t)
 
 	alt := 500
 	gs := 80
