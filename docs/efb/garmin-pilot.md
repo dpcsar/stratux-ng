@@ -1,13 +1,6 @@
 # Garmin Pilot setup
 
-Garmin Pilot UI labels differ between iOS/Android and versions. This guide is written to avoid guessing exact button text where it’s known to vary.
-
-If you tell me:
-- iOS or Android
-- Garmin Pilot version
-- the exact menu labels you see
-
-…I can make this guide fully “click-by-click”.
+Garmin Pilot UI labels differ between iOS/Android and versions. 
 
 ## Network
 

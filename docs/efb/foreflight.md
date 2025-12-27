@@ -1,6 +1,6 @@
 # ForeFlight setup
 
-This guide aims to be exact, but ForeFlight UI labels can vary by iOS version and ForeFlight build. If any menu labels differ on your device, tell me what you see and I’ll adjust the doc.
+This guide aims to be exact, but ForeFlight UI labels can vary by iOS version and ForeFlight build. 
 
 ## Network
 
