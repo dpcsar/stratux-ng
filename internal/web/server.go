@@ -10,6 +10,8 @@ import (
 	"path"
 	"strings"
 	"time"
+
+	"stratux-ng/internal/wifi"
 )
 
 //go:embed assets/*
@@ -141,6 +143,119 @@ func Handler(status *Status, settings SettingsStore, logs *LogBuffer, ahrsCtl AH
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte("{\"ok\":true}\n"))
+	})
+
+	// Wi-Fi API
+	mux.HandleFunc("/api/settings/wifi", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			status, err := wifi.GetStatus()
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(status)
+			return
+		}
+		w.Header().Set("Allow", http.MethodGet)
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	})
+
+	mux.HandleFunc("/api/settings/wifi/ap", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			SSID     string `json:"ssid"`
+			Password string `json:"password"`
+			IP       string `json:"ip"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if req.SSID == "" {
+			http.Error(w, "ssid required", http.StatusBadRequest)
+			return
+		}
+
+		// Default IP if not provided
+		ip := req.IP
+		if ip == "" {
+			ip = "192.168.10.1"
+		}
+
+		if err := wifi.SetupAP(req.SSID, req.Password, ip); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// Persist to config
+		if strings.TrimSpace(settings.ConfigPath) != "" {
+			cfg, err := settings.load()
+			if err == nil {
+				cfg.WiFi.APSSID = req.SSID
+				cfg.WiFi.APPass = req.Password
+				cfg.WiFi.APIP = ip
+
+				// Update GDL90 destination to broadcast address of the new IP
+				if bcast, err := wifi.CalculateBroadcastAddress(ip); err == nil {
+					// Append port if present in old dest, or default to 4000
+					port := "4000"
+					if strings.Contains(cfg.GDL90.Dest, ":") {
+						parts := strings.Split(cfg.GDL90.Dest, ":")
+						if len(parts) > 1 {
+							port = parts[1]
+						}
+					}
+					cfg.GDL90.Dest = bcast + ":" + port
+				}
+
+				_ = settings.save(cfg)
+			}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"ok":true}`))
+	})
+
+	mux.HandleFunc("/api/settings/wifi/client", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			SSID     string `json:"ssid"`
+			Password string `json:"password"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if req.SSID == "" {
+			http.Error(w, "ssid required", http.StatusBadRequest)
+			return
+		}
+		if err := wifi.ConnectClient(req.SSID, req.Password); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// Persist to config
+		if strings.TrimSpace(settings.ConfigPath) != "" {
+			cfg, err := settings.load()
+			if err == nil {
+				cfg.WiFi.ClientSSID = req.SSID
+				cfg.WiFi.ClientPass = req.Password
+				_ = settings.save(cfg)
+			}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"ok":true}`))
 	})
 
 	// Settings API (read/write YAML config). Changes are applied immediately when supported.

@@ -28,7 +28,6 @@ func snapshotDisk(_ time.Time) *DiskSnapshot {
 	}
 }
 
-
 func snapshotNetwork(_ time.Time) *NetworkSnapshot {
 	addrs := localInterfaceAddrs()
 	return &NetworkSnapshot{LocalAddrs: addrs}

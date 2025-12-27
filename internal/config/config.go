@@ -13,12 +13,13 @@ import (
 )
 
 type Config struct {
-	GDL90 GDL90Config `yaml:"gdl90"`
-	GPS   GPSConfig   `yaml:"gps"`
+	GDL90   GDL90Config   `yaml:"gdl90"`
+	GPS     GPSConfig     `yaml:"gps"`
 	Ownship OwnshipConfig `yaml:"ownship"`
-	AHRS  AHRSConfig  `yaml:"ahrs"`
-	Fan   FanConfig   `yaml:"fan"`
-	Web   WebConfig   `yaml:"web"`
+	AHRS    AHRSConfig    `yaml:"ahrs"`
+	Fan     FanConfig     `yaml:"fan"`
+	Web     WebConfig     `yaml:"web"`
+	WiFi    WiFiConfig    `yaml:"wifi"`
 
 	// External decoder inputs (planned): 1090 and 978.
 	//  - 978 is typically ingested as NDJSON-over-TCP (dump978-fa JSON stream).
@@ -530,4 +531,12 @@ func isAllDigits(s string) bool {
 		}
 	}
 	return true
+}
+
+type WiFiConfig struct {
+	APSSID     string `yaml:"ap_ssid"`
+	APPass     string `yaml:"ap_pass"`
+	APIP       string `yaml:"ap_ip"`
+	ClientSSID string `yaml:"client_ssid"`
+	ClientPass string `yaml:"client_pass"`
 }

@@ -315,10 +315,7 @@
               <span id="ui-vsi-msg" class="muted"></span>
             </div>
 
-            <div class="st-row st-field">
-              <label class="st-key" for="set-gdl90-dest">GDL90 destination</label>
-              <input id="set-gdl90-dest" type="text" placeholder="192.168.10.255:4000" />
-            </div>
+            <!-- GDL90 destination is managed automatically by AP settings, but preserved in backend -->
 
             <div class="st-row st-field">
               <label class="st-key" for="set-interval">Interval (e.g. 1s)</label>
@@ -338,6 +335,48 @@
             <div class="st-actions">
               <button id="btn-save" type="submit" class="primary">Save</button>
               <span id="save-msg" class="muted"></span>
+            </div>
+
+            <div class="st-subhead">Wi-Fi Access Point</div>
+            <div class="st-row st-field">
+              <label class="st-key" for="set-wifi-ap-ssid">SSID</label>
+              <input id="set-wifi-ap-ssid" type="text" placeholder="stratux" />
+            </div>
+            <div class="st-row st-field">
+              <label class="st-key" for="set-wifi-ap-pass">Password</label>
+              <input id="set-wifi-ap-pass" type="password" placeholder="(optional)" />
+            </div>
+            <div class="st-row st-field">
+              <label class="st-key" for="set-wifi-ap-ip">IP Address</label>
+              <input id="set-wifi-ap-ip" type="text" placeholder="192.168.10.1" />
+            </div>
+            <div class="st-actions">
+              <button id="btn-save-ap" type="button" class="primary">Update AP</button>
+              <span id="save-ap-msg" class="muted"></span>
+            </div>
+
+            <div class="st-subhead">Wi-Fi Client</div>
+            <div class="st-row st-field">
+              <label class="st-key" for="set-wifi-client-ssid">SSID</label>
+              <input id="set-wifi-client-ssid" type="text" placeholder="Hotspot Name" />
+            </div>
+            <div class="st-row st-field">
+              <label class="st-key" for="set-wifi-client-pass">Password</label>
+              <input id="set-wifi-client-pass" type="password" placeholder="Password" />
+            </div>
+            <div class="st-body">
+              <div class="st-row">
+                <span class="st-key">Status:</span>
+                <span id="st-wifi-client-state" class="st-val">--</span>
+              </div>
+              <div class="st-row">
+                <span class="st-key">IP:</span>
+                <span id="st-wifi-client-ip" class="st-val">--</span>
+              </div>
+            </div>
+            <div class="st-actions">
+              <button id="btn-save-client" type="button" class="primary">Connect Client</button>
+              <span id="save-client-msg" class="muted"></span>
             </div>
 
             <div class="st-subhead">AHRS calibration</div>

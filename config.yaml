@@ -39,7 +39,7 @@ fan:
     pwm_duty_min: 0
     update_interval: 5s
 web:
-    listen: :8080
+    listen: :80
 
 # External decoders
 #

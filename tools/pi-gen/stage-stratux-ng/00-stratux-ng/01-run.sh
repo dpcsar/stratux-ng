@@ -16,6 +16,9 @@ install -m 0644 files/etc/udev/rules.d/99-stratux-gps.rules "${ROOTFS_DIR}/etc/u
 install -m 0644 files/data/stratux-ng/config.yaml "${ROOTFS_DIR}/data/stratux-ng/config.yaml"
 install -m 0644 files/etc/modules-load.d/stratux-ng.conf "${ROOTFS_DIR}/etc/modules-load.d/stratux-ng.conf"
 
+# Enable IP forwarding for Wi-Fi repeater mode.
+echo "net.ipv4.ip_forward=1" > "${ROOTFS_DIR}/etc/sysctl.d/90-router.conf"
+
 # Blacklist the DVB driver that commonly grabs RTL-SDR devices.
 cat >"${ROOTFS_DIR}/etc/modprobe.d/rtl-sdr-blacklist.conf" <<'EOF'
 blacklist dvb_usb_rtl28xxu

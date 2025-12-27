@@ -387,10 +387,25 @@
 
   const settingsForm = document.getElementById('settings-form');
   const saveMsg = document.getElementById('save-msg');
-  const setGDL90Dest = document.getElementById('set-gdl90-dest');
+  // const setGDL90Dest = document.getElementById('set-gdl90-dest'); // Removed from UI
+  let cachedGDL90Dest = '';
+
   const setIntervalInput = document.getElementById('set-interval');
   const setOwnshipICAO = document.getElementById('set-ownship-icao');
   const setOwnshipCallsign = document.getElementById('set-ownship-callsign');
+
+  const setWiFiAPSSID = document.getElementById('set-wifi-ap-ssid');
+  const setWiFiAPPass = document.getElementById('set-wifi-ap-pass');
+  const setWiFiAPIP = document.getElementById('set-wifi-ap-ip');
+  const btnSaveAP = document.getElementById('btn-save-ap');
+  const saveAPMsg = document.getElementById('save-ap-msg');
+
+  const setWiFiClientSSID = document.getElementById('set-wifi-client-ssid');
+  const setWiFiClientPass = document.getElementById('set-wifi-client-pass');
+  const btnSaveClient = document.getElementById('btn-save-client');
+  const saveClientMsg = document.getElementById('save-client-msg');
+  const stWiFiClientState = document.getElementById('st-wifi-client-state');
+  const stWiFiClientIP = document.getElementById('st-wifi-client-ip');
 
   const uiVsiTrafficDeadband = document.getElementById('ui-vsi-traffic-deadband');
   const uiVsiTrafficRounding = document.getElementById('ui-vsi-traffic-rounding');
@@ -2053,19 +2068,78 @@
       if (!resp.ok) throw new Error(`settings ${resp.status}`);
       const p = await resp.json();
 
-      setGDL90Dest.value = p.gdl90_dest || '';
+      cachedGDL90Dest = p.gdl90_dest || '';
+      // setGDL90Dest.value = p.gdl90_dest || '';
       if (setIntervalInput) setIntervalInput.value = p.interval || '';
       if (setOwnshipICAO) setOwnshipICAO.value = p.ownship_icao || '';
       if (setOwnshipCallsign) setOwnshipCallsign.value = p.ownship_callsign || '';
     } catch (e) {
       saveMsg.textContent = `Settings unavailable (${String(e)})`;
     }
+    loadWiFiSettings();
+  }
+
+  async function loadWiFiSettings() {
+    try {
+      const resp = await fetch('/api/settings/wifi', { cache: 'no-store' });
+      if (!resp.ok) return;
+      const s = await resp.json();
+      if (setWiFiAPSSID) setWiFiAPSSID.value = s.ap_ssid || '';
+      if (setWiFiAPIP) setWiFiAPIP.value = s.ap_ip || '';
+      if (setWiFiClientSSID) setWiFiClientSSID.value = s.client_ssid || '';
+      if (stWiFiClientState) stWiFiClientState.textContent = s.client_state || '--';
+      if (stWiFiClientIP) stWiFiClientIP.textContent = s.client_ip || '--';
+    } catch (e) {
+      console.error('wifi settings load failed', e);
+    }
+  }
+
+  async function saveAPSettings() {
+    if (saveAPMsg) saveAPMsg.textContent = 'Updating AP...';
+    const payload = {
+      ssid: setWiFiAPSSID ? setWiFiAPSSID.value : '',
+      password: setWiFiAPPass ? setWiFiAPPass.value : '',
+      ip: setWiFiAPIP ? setWiFiAPIP.value : '',
+    };
+    try {
+      const resp = await fetch('/api/settings/wifi/ap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const text = await resp.text();
+      if (!resp.ok) throw new Error(text || `error ${resp.status}`);
+      if (saveAPMsg) saveAPMsg.textContent = 'AP updated. You may need to reconnect.';
+    } catch (e) {
+      if (saveAPMsg) saveAPMsg.textContent = `Update failed: ${String(e)}`;
+    }
+  }
+
+  async function saveClientSettings() {
+    if (saveClientMsg) saveClientMsg.textContent = 'Connecting...';
+    const payload = {
+      ssid: setWiFiClientSSID ? setWiFiClientSSID.value : '',
+      password: setWiFiClientPass ? setWiFiClientPass.value : '',
+    };
+    try {
+      const resp = await fetch('/api/settings/wifi/client', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const text = await resp.text();
+      if (!resp.ok) throw new Error(text || `error ${resp.status}`);
+      if (saveClientMsg) saveClientMsg.textContent = 'Connection initiated.';
+      setTimeout(loadWiFiSettings, 2000);
+    } catch (e) {
+      if (saveClientMsg) saveClientMsg.textContent = `Connection failed: ${String(e)}`;
+    }
   }
 
   async function saveSettings() {
     saveMsg.textContent = 'Saving…';
     const payload = {
-      gdl90_dest: setGDL90Dest ? setGDL90Dest.value : '',
+      gdl90_dest: cachedGDL90Dest, // Use cached value since UI is removed
       interval: setIntervalInput ? setIntervalInput.value : '',
       ownship_icao: setOwnshipICAO ? setOwnshipICAO.value : '',
       ownship_callsign: setOwnshipCallsign ? setOwnshipCallsign.value : '',
@@ -2121,6 +2195,8 @@
     e.preventDefault();
     saveSettings();
   });
+  btnSaveAP?.addEventListener('click', saveAPSettings);
+  btnSaveClient?.addEventListener('click', saveClientSettings);
 
   uiVsiTrafficDeadband?.addEventListener('change', persistVsiUiFromInputs);
   uiVsiTrafficRounding?.addEventListener('change', persistVsiUiFromInputs);

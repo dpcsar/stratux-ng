@@ -25,6 +25,7 @@ import (
 	"stratux-ng/internal/replay"
 	"stratux-ng/internal/udp"
 	"stratux-ng/internal/web"
+	"stratux-ng/internal/wifi"
 )
 
 type ahrsProxy struct {
@@ -385,6 +386,33 @@ func main() {
 	}
 	resolvedConfigPath = resolved
 
+	// Initialize Wi-Fi AP if running as root.
+	if os.Geteuid() == 0 {
+		if err := wifi.EnsureAPInterface(); err != nil {
+			log.Printf("wifi: failed to ensure AP interface: %v", err)
+		} else {
+			// Use configured SSID or default to "stratux".
+			ssid := cfg.WiFi.APSSID
+			if ssid == "" {
+				ssid = "stratux"
+			}
+			if err := wifi.SetupAP(ssid, cfg.WiFi.APPass, cfg.WiFi.APIP); err != nil {
+				log.Printf("wifi: failed to setup AP: %v", err)
+			} else {
+				log.Printf("wifi: AP %q configured", ssid)
+			}
+
+			// If client is configured, try to connect.
+			if cfg.WiFi.ClientSSID != "" {
+				if err := wifi.ConnectClient(cfg.WiFi.ClientSSID, cfg.WiFi.ClientPass); err != nil {
+					log.Printf("wifi: failed to connect client: %v", err)
+				} else {
+					log.Printf("wifi: client connecting to %q", cfg.WiFi.ClientSSID)
+				}
+			}
+		}
+	}
+
 	// CLI overrides.
 	if strings.TrimSpace(webListen) != "" {
 		cfg.Web.Listen = webListen
@@ -439,17 +467,29 @@ func main() {
 	log.Printf("web ui enabled listen=%s", cfg.Web.Listen)
 	proxy := &ahrsProxy{}
 	go func() {
-		err := web.Serve(ctx, cfg.Web.Listen, status, web.SettingsStore{ConfigPath: resolvedConfigPath, Apply: applyFunc}, logBuf, proxy)
-		if err != nil && ctx.Err() == nil {
-			if errors.Is(err, syscall.EACCES) {
-				log.Printf("web ui bind failed (permission denied) listen=%s: %v", cfg.Web.Listen, err)
-				log.Printf("to use port 80 without running as root, grant CAP_NET_BIND_SERVICE (examples):")
-				log.Printf("  setcap: sudo setcap 'cap_net_bind_service=+ep' $(readlink -f ./stratux-ng)")
-				log.Printf("  systemd: set AmbientCapabilities=CAP_NET_BIND_SERVICE in the service unit")
+		for {
+			err := web.Serve(ctx, cfg.Web.Listen, status, web.SettingsStore{ConfigPath: resolvedConfigPath, Apply: applyFunc}, logBuf, proxy)
+			if ctx.Err() != nil {
 				return
 			}
-			log.Printf("web ui stopped: %v", err)
-			cancel()
+			if err != nil {
+				if errors.Is(err, syscall.EACCES) {
+					log.Printf("web ui bind failed (permission denied) listen=%s: %v", cfg.Web.Listen, err)
+					log.Printf("to use port 80 without running as root, grant CAP_NET_BIND_SERVICE (examples):")
+					log.Printf("  setcap: sudo setcap 'cap_net_bind_service=+ep' $(readlink -f ./stratux-ng)")
+					log.Printf("  systemd: set AmbientCapabilities=CAP_NET_BIND_SERVICE in the service unit")
+					cancel()
+					return
+				}
+				log.Printf("web ui stopped: %v; restarting in 1s", err)
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(1 * time.Second):
+					continue
+				}
+			}
+			return
 		}
 	}()
 
@@ -504,6 +544,7 @@ func main() {
 		}
 
 		hf := &headingFuser{}
+		var lastUDPErrorLog time.Time
 		for {
 			tickC := rt.TickChan()
 			select {
@@ -620,9 +661,11 @@ func main() {
 						}
 					}
 					if err := sender.Send(frame); err != nil {
-						log.Printf("udp send failed: %v", err)
-						cancel()
-						return
+						if time.Since(lastUDPErrorLog) > 5*time.Second {
+							log.Printf("udp send failed: %v", err)
+							lastUDPErrorLog = time.Now()
+						}
+						// Do not crash on transient network errors.
 					}
 					sent++
 				}

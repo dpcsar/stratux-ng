@@ -24,3 +24,7 @@ fakeroot
 debhelper
 dpkg-dev
 ifupdown
+
+# Wi-Fi / Networking
+network-manager
+iw

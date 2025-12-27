@@ -69,6 +69,25 @@ SDR serial tag note (Stratux-style):
 - Many Stratux-tagged RTL-SDRs report USB serial strings like `stx:1090:0` and `stx:978:0` (as seen in `lsusb -v`).
 - Use the exact string reported by your dongle when passing `dump1090-fa --device-type soapy --device driver=rtlsdr,serial=<serial>` or `dump978-fa --sdr driver=rtlsdr,serial=<serial>`.
 
+## Wi-Fi Configuration
+
+Stratux-NG supports a dual-mode Wi-Fi configuration on Raspberry Pi hardware (using the single built-in Wi-Fi interface):
+
+1.  **Access Point (AP)**: Creates a hotspot (default SSID: `stratux`, no password) for EFBs to connect to.
+2.  **Client Mode**: Simultaneously connects to an external Wi-Fi network (e.g., a phone hotspot) to provide internet access to connected devices.
+
+This allows your EFB to receive GDL90 data from Stratux-NG while maintaining internet connectivity for weather updates, charts, etc.
+
+Configuration is available via the Web UI (`Settings` -> `Wi-Fi`) or the API.
+
+### Wi-Fi Prerequisites (Built-in)
+
+The Stratux-NG image build process automatically handles the necessary system configuration for Wi-Fi operation. This includes:
+
+1.  **IP Forwarding**: Enabled via `/etc/sysctl.d/90-router.conf` (`net.ipv4.ip_forward=1`) to allow traffic routing between the AP and Client interfaces.
+2.  **NetworkManager**: Installed and used to manage Wi-Fi connections and the Access Point.
+3.  **iw**: Installed for low-level wireless configuration.
+
 ## Development (Raspberry Pi 3/4/5 + VS Code)
 
 ### Quick start
