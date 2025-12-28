@@ -12,11 +12,46 @@
     { key: 'about', el: document.getElementById('view-about') },
   ];
 
-  const subtitle = document.getElementById('subtitle');
   const drawer = document.getElementById('drawer');
   const drawerBackdrop = document.getElementById('drawer-backdrop');
   const btnMore = document.getElementById('btn-more');
   const btnClose = document.getElementById('btn-close');
+
+  const stStatusSubtitle = document.getElementById('st-status-subtitle');
+  const topConnectionBadge = document.getElementById('top-connection-badge');
+  const stSummaryUptime = document.getElementById('st-summary-uptime');
+  const stSummaryGdl90 = document.getElementById('st-summary-gdl90');
+  const stSummaryFrames = document.getElementById('st-summary-frames');
+  const stSummaryCpu = document.getElementById('st-summary-cpu');
+  const stSummaryFanDuty = document.getElementById('st-summary-fan-duty');
+  const stSummaryDisk = document.getElementById('st-summary-disk');
+  const stSummaryUap0 = document.getElementById('st-summary-uap0');
+  const stSummaryWlan0 = document.getElementById('st-summary-wlan0');
+  const stSummaryIcao = document.getElementById('st-summary-icao');
+  const stSummaryCallsign = document.getElementById('st-summary-callsign');
+  const stSummaryGpsEnabled = document.getElementById('st-summary-gps-enabled');
+  const stSummaryGpsFixMode = document.getElementById('st-summary-gps-fixmode');
+  const stSummaryGpsHAcc = document.getElementById('st-summary-gps-hacc');
+  const stSummaryGpsVAcc = document.getElementById('st-summary-gps-vacc');
+  const stSummaryGpsLat = document.getElementById('st-summary-gps-lat');
+  const stSummaryGpsLon = document.getElementById('st-summary-gps-lon');
+  const stSummaryGpsAlt = document.getElementById('st-summary-gps-alt');
+  const stSummaryGpsGround = document.getElementById('st-summary-gps-ground');
+  const stSummaryGpsTrack = document.getElementById('st-summary-gps-track');
+  const stSummaryGpsVS = document.getElementById('st-summary-gps-vs');
+  const stSummaryAhrsImu = document.getElementById('st-summary-ahrs-imu');
+  const stSummaryAhrsBaro = document.getElementById('st-summary-ahrs-baro');
+  const stSummaryAhrsOrientation = document.getElementById('st-summary-ahrs-orientation');
+  const stSdr1090Enabled = document.getElementById('st-sdr-1090-enabled');
+  const stSdr1090Serial = document.getElementById('st-sdr-1090-serial');
+  const stSdr1090Source = document.getElementById('st-sdr-1090-source');
+  const stSdr1090Supervisor = document.getElementById('st-sdr-1090-supervisor');
+  const stSdr1090Feed = document.getElementById('st-sdr-1090-feed');
+  const stSdr978Enabled = document.getElementById('st-sdr-978-enabled');
+  const stSdr978Serial = document.getElementById('st-sdr-978-serial');
+  const stSdr978Source = document.getElementById('st-sdr-978-source');
+  const stSdr978Supervisor = document.getElementById('st-sdr-978-supervisor');
+  const stSdr978Feed = document.getElementById('st-sdr-978-feed');
 
   const stUptime = document.getElementById('st-uptime');
   const stNow = document.getElementById('st-now');
@@ -30,11 +65,8 @@
   const stGDL90Dest = document.getElementById('st-gdl90-dest');
   const stInterval = document.getElementById('st-interval');
   const stFrames = document.getElementById('st-frames');
-  const stConfigPath = document.getElementById('st-config-path');
   const stOwnshipICAO = document.getElementById('st-ownship-icao');
   const stOwnshipCallsign = document.getElementById('st-ownship-callsign');
-  const stRecord = document.getElementById('st-record');
-  const stReplay = document.getElementById('st-replay');
 
   const stGpsEnabled = document.getElementById('st-gps-enabled');
   const stGpsValid = document.getElementById('st-gps-valid');
@@ -65,15 +97,6 @@
   const stFanDuty = document.getElementById('st-fan-duty');
   const stFanError = document.getElementById('st-fan-error');
 
-  const stAhrsImuDetected = document.getElementById('st-ahrs-imu-detected');
-  const stAhrsImuWorking = document.getElementById('st-ahrs-imu-working');
-  const stAhrsImuUpdated = document.getElementById('st-ahrs-imu-updated');
-  const stAhrsBaroDetected = document.getElementById('st-ahrs-baro-detected');
-  const stAhrsBaroWorking = document.getElementById('st-ahrs-baro-working');
-  const stAhrsBaroUpdated = document.getElementById('st-ahrs-baro-updated');
-  const stAhrsError = document.getElementById('st-ahrs-error');
-  const stAhrsOrientationSet = document.getElementById('st-ahrs-orientation-set');
-  const stAhrsForwardAxis = document.getElementById('st-ahrs-forward-axis');
   const btnAhrsLevel = document.getElementById('btn-ahrs-level');
   const btnAhrsZeroDrift = document.getElementById('btn-ahrs-zero-drift');
   const btnAhrsOrientForward = document.getElementById('btn-ahrs-orient-forward');
@@ -417,7 +440,7 @@
   const logsTail = document.getElementById('logs-tail');
   const logsRefresh = document.getElementById('logs-refresh');
 
-  if (subtitle) subtitle.textContent = 'Connecting…';
+  setConnectionState(null);
 
 
   function timeNow() {
@@ -439,9 +462,87 @@
     }
   }
 
+  function setIndicator(el, state, labelPrefix = 'State') {
+    if (!el) return;
+    el.classList.add('status-indicator');
+    el.classList.toggle('status-indicator-on', state === true);
+    el.classList.toggle('status-indicator-off', state === false);
+    el.classList.toggle('status-indicator-muted', state == null);
+    const label = state === true ? 'on' : state === false ? 'off' : 'unknown';
+    const prefix = String(labelPrefix || 'State').trim();
+    el.setAttribute('aria-label', prefix ? `${prefix} ${label}` : label);
+  }
+
   function setChecked(el, value) {
     if (!el) return;
     el.checked = !!value;
+  }
+
+  function setConnectionState(state) {
+    const label = state === null ? 'Connecting' : state ? 'Connected' : 'Disconnected';
+    const cls = state === null ? 'status-badge-muted' : state ? 'status-badge-good' : 'status-badge-bad';
+    const apply = (el) => {
+      if (!el) return;
+      el.textContent = label;
+      el.classList.remove('status-badge-good', 'status-badge-bad', 'status-badge-muted');
+      el.classList.add(cls);
+    };
+    apply(topConnectionBadge);
+  }
+
+  function setSdrSummary(snapshot, elements, labelPrefix) {
+    const snap = snapshot && typeof snapshot === 'object' ? snapshot : {};
+    const el = elements || {};
+    const indicatorState = snap.enabled === true ? true : snap.enabled === false ? false : null;
+    if (el.enabled) {
+      const ariaLabel = labelPrefix ? `${labelPrefix} state` : 'SDR state';
+      setIndicator(el.enabled, indicatorState, ariaLabel);
+    }
+    if (el.serial) setInput(el.serial, snap.serial_tag || '--');
+    if (el.source) setInput(el.source, summarizeSdrInput(snap));
+    if (el.supervisor) setInput(el.supervisor, summarizeSdrSupervisor(snap.supervisor));
+    if (el.feed) setInput(el.feed, summarizeSdrFeeds(snap));
+  }
+
+  function summarizeSdrInput(snap) {
+    if (!snap || typeof snap !== 'object') return '--';
+    const parts = [];
+    if (snap.json_endpoint) parts.push(`JSON ${snap.json_endpoint}`);
+    if (snap.raw_endpoint) parts.push(`Raw ${snap.raw_endpoint}`);
+    if (snap.json_file) parts.push(`File ${snap.json_file}`);
+    return parts.join(' · ') || '--';
+  }
+
+  function summarizeSdrSupervisor(sup) {
+    if (!sup || typeof sup !== 'object') return '--';
+    const state = sup.state || (sup.running ? 'running' : 'stopped') || '--';
+    const pid = Number(sup.pid);
+    const pidInfo = Number.isFinite(pid) && pid > 0 ? ` (pid ${pid})` : '';
+    const err = sup.last_error ? ` ⚠ ${sup.last_error}` : '';
+    return `${state}${pidInfo}${err}`.trim();
+  }
+
+  function summarizeSdrFeeds(snap) {
+    if (!snap || typeof snap !== 'object') return '--';
+    const feeds = [];
+    if (snap.stream) feeds.push(formatSdrFeed(snap.stream, 'NDJSON'));
+    if (snap.raw_stream) feeds.push(formatSdrFeed(snap.raw_stream, 'Raw'));
+    if (snap.file) feeds.push(formatSdrFeed(snap.file, 'File'));
+    return feeds.filter(Boolean).join(' · ') || '--';
+  }
+
+  function formatSdrFeed(feed, label) {
+    if (!feed || typeof feed !== 'object') return '';
+    const parts = [];
+    if (label) parts.push(label);
+    if (feed.state) parts.push(feed.state);
+    const count = feed.messages ?? feed.lines ?? feed.updates ?? feed.reads;
+    if (Number.isFinite(Number(count)) && Number(count) > 0) {
+      parts.push(`(${fmtInt(count)})`);
+    }
+    const seen = formatShortUtc(feed.last_seen_utc);
+    if (seen) parts.push(`@ ${seen}`);
+    return parts.join(' ');
   }
 
   function formatUptime(sec) {
@@ -454,6 +555,22 @@
     const pad2 = (x) => String(x).padStart(2, '0');
     if (h > 0) return `${h}:${pad2(m)}:${pad2(ss)}`;
     return `${m}:${pad2(ss)}`;
+  }
+
+  function formatUtcSeconds(value) {
+    if (!value) return '';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '';
+    const pad2 = (n) => String(n).padStart(2, '0');
+    return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())} ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}:${pad2(d.getUTCSeconds())} UTC`;
+  }
+
+  function formatShortUtc(value) {
+    if (!value) return '';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '';
+    const pad2 = (n) => String(n).padStart(2, '0');
+    return `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}:${pad2(d.getUTCSeconds())}Z`;
   }
 
   function applyVsiUiControlStateToUI() {
@@ -1295,10 +1412,23 @@
     const dest = s?.gdl90_dest || '';
     const interval = s?.interval || '';
     const frames = s?.frames_sent_total ?? 0;
+    const uptimeStr = formatUptime(s?.uptime_sec);
+    const nowUtcReadable = formatUtcSeconds(s?.now_utc);
+    const lastTickReadable = formatUtcSeconds(s?.last_tick_utc);
 
-    setInput(stUptime, formatUptime(s?.uptime_sec));
-    setInput(stNow, s?.now_utc || '');
-    setInput(stLastTick, s?.last_tick_utc || '');
+    setInput(stSummaryUptime, uptimeStr || '--');
+    const destSummary = (() => {
+      if (!dest && !interval) return '--';
+      if (!dest) return interval || '--';
+      const suffix = interval ? `/${interval}` : '';
+      return `${dest}${suffix}`;
+    })();
+    setInput(stSummaryGdl90, destSummary);
+    setInput(stSummaryFrames, frames ? fmtInt(frames) : '0');
+
+    setInput(stUptime, uptimeStr);
+    setInput(stNow, nowUtcReadable || s?.now_utc || '');
+    setInput(stLastTick, lastTickReadable || s?.last_tick_utc || '');
     setInput(stGDL90Dest, dest);
     setInput(stInterval, interval);
     setInput(stFrames, frames);
@@ -1311,17 +1441,43 @@
     const addrs = Array.isArray(netw?.local_addrs) ? netw.local_addrs : [];
     setInput(stNetLocalAddrs, netw ? (addrs.length ? addrs.join(' | ') : `-${netErr}`) : '');
 
+    function getIfaceAddr(name) {
+      if (!addrs.length || !name) return '';
+      const lower = String(name).toLowerCase();
+      for (const entry of addrs) {
+        if (typeof entry !== 'string') continue;
+        const trimmed = entry.trim();
+        if (!trimmed) continue;
+        if (trimmed.toLowerCase().startsWith(`${lower}:`)) {
+          return trimmed.split(':').slice(1).join(':').trim();
+        }
+      }
+      return '';
+    }
+
+    setInput(stSummaryUap0, getIfaceAddr('uap0') || '--');
+    setInput(stSummaryWlan0, getIfaceAddr('wlan0') || '--');
+
     const diskErr = disk?.last_error ? ` (${disk.last_error})` : '';
     setInput(stDiskTotal, disk ? `${fmtBytes(disk.root_total_bytes)}${diskErr}` : '');
     setInput(stDiskAvail, disk ? `${fmtBytes(disk.root_avail_bytes)}${diskErr}` : '');
     setInput(stDiskFree, disk ? `${fmtBytes(disk.root_free_bytes)}${diskErr}` : '');
+    const diskFreeBytes = disk?.root_free_bytes;
+    setInput(stSummaryDisk, diskFreeBytes == null ? '--' : fmtBytes(diskFreeBytes));
 
     const info = s?.info || {};
-    setInput(stConfigPath, info.config_path || '');
-    setInput(stOwnshipICAO, info.ownship_icao || '');
-    setInput(stOwnshipCallsign, info.ownship_callsign || '');
-    setChecked(stRecord, !!info.record);
-    setChecked(stReplay, !!info.replay);
+    const ownshipIcao = info.ownship_icao || '';
+    const ownshipCallsign = info.ownship_callsign || '';
+    setInput(stOwnshipICAO, ownshipIcao);
+    setInput(stOwnshipCallsign, ownshipCallsign);
+    setInput(stSummaryIcao, ownshipIcao || '--');
+    setInput(stSummaryCallsign, ownshipCallsign || '--');
+    if (stStatusSubtitle) {
+      const subtitleParts = [];
+      if (info.version) subtitleParts.push(info.version);
+      if (info.build) subtitleParts.push(info.build);
+      stStatusSubtitle.textContent = subtitleParts.join(' · ');
+    }
 
     const gps = s?.gps || {};
 
@@ -1340,6 +1496,20 @@
           return String(mode);
       }
     }
+
+    const gpsVsUi = (gps.vert_speed_fpm == null) ? null : applyOwnshipVsiUi(Number(gps.vert_speed_fpm));
+    const gpsEnabledState = (gps.enabled === true) ? true : (gps.enabled === false ? false : null);
+    setIndicator(stSummaryGpsEnabled, gpsEnabledState, 'GPS state');
+    const summaryFixMode = fmtFixMode(gps.source, gps.fix_mode);
+    setInput(stSummaryGpsFixMode, summaryFixMode || '--');
+    setInput(stSummaryGpsHAcc, gps.horiz_acc_m == null ? '--' : fmtNum(gps.horiz_acc_m, 2));
+    setInput(stSummaryGpsVAcc, gps.vert_acc_m == null ? '--' : fmtNum(gps.vert_acc_m, 2));
+    setInput(stSummaryGpsLat, gps.enabled && gps.valid ? fmtNum(gps.lat_deg, 5) : '--');
+    setInput(stSummaryGpsLon, gps.enabled && gps.valid ? fmtNum(gps.lon_deg, 5) : '--');
+    setInput(stSummaryGpsAlt, gps.alt_feet == null ? '--' : String(gps.alt_feet));
+    setInput(stSummaryGpsGround, gps.ground_kt == null ? '--' : String(gps.ground_kt));
+    setInput(stSummaryGpsTrack, gps.track_deg == null ? '--' : fmtNum(gps.track_deg, 1));
+    setInput(stSummaryGpsVS, gpsVsUi == null ? '--' : String(gpsVsUi));
 
     setChecked(stGpsEnabled, !!gps.enabled);
     setChecked(stGpsValid, !!gps.valid);
@@ -1361,8 +1531,7 @@
     setInput(stGpsAlt, gps.alt_feet == null ? '' : String(gps.alt_feet));
     setInput(stGpsGround, gps.ground_kt == null ? '' : String(gps.ground_kt));
     setInput(stGpsTrack, gps.track_deg == null ? '' : fmtNum(gps.track_deg, 1));
-    const ownVs = (gps.vert_speed_fpm == null) ? null : applyOwnshipVsiUi(Number(gps.vert_speed_fpm));
-    setInput(stGpsVSpeed, ownVs == null ? '' : String(ownVs));
+    setInput(stGpsVSpeed, gpsVsUi == null ? '' : String(gpsVsUi));
     setInput(stGpsError, gps.last_error || '');
 
     const fan = s?.fan || {};
@@ -1371,18 +1540,60 @@
     setInput(stFanCpuTemp, fan.cpu_valid ? fmtNum(fan.cpu_temp_c, 1) : '');
     setInput(stFanDuty, fan.pwm_available ? String(fan.pwm_duty ?? '') : '');
     setInput(stFanError, fan.last_error || '');
+    const cpuSummary = fan?.cpu_valid ? `${fmtNum(fan.cpu_temp_c, 1)} °C` : '--';
+    const fanDutySummary = (() => {
+      if (!fan?.pwm_available) return '--';
+      const duty = Number(fan.pwm_duty);
+      if (Number.isFinite(duty)) return `${Math.round(duty)}% duty`;
+      return 'PWM active';
+    })();
+    setInput(stSummaryCpu, cpuSummary);
+    setInput(stSummaryFanDuty, fanDutySummary);
 
     const ahrs = s?.ahrs || {};
-    setChecked(stAhrsImuDetected, !!ahrs.imu_detected);
-    setChecked(stAhrsImuWorking, !!ahrs.imu_working);
-    setInput(stAhrsImuUpdated, ahrs.imu_last_update_utc || '');
-    setChecked(stAhrsBaroDetected, !!ahrs.baro_detected);
-    setChecked(stAhrsBaroWorking, !!ahrs.baro_working);
-    setInput(stAhrsBaroUpdated, ahrs.baro_last_update_utc || '');
-    setInput(stAhrsError, ahrs.last_error || '');
+    const imuIndicatorState = (() => {
+      if (ahrs.imu_working === true) return true;
+      if (ahrs.imu_detected === true && ahrs.imu_working === false) return false;
+      if (ahrs.imu_detected === false) return false;
+      return null;
+    })();
+    setIndicator(stSummaryAhrsImu, imuIndicatorState, 'AHRS IMU state');
+    const baroIndicatorState = (() => {
+      if (ahrs.baro_working === true) return true;
+      if (ahrs.baro_detected === true && ahrs.baro_working === false) return false;
+      if (ahrs.baro_detected === false) return false;
+      return null;
+    })();
+    setIndicator(stSummaryAhrsBaro, baroIndicatorState, 'AHRS baro state');
+    const orientationSummary = (() => {
+      if (ahrs.orientation_set === true) return 'Calibrated';
+      if (ahrs.orientation_set === false) return 'Not set';
+      return '--';
+    })();
+    setInput(stSummaryAhrsOrientation, orientationSummary);
 
-    setInput(stAhrsOrientationSet, ahrs.orientation_set ? 'true' : 'false');
-    setInput(stAhrsForwardAxis, ahrs.forward_axis == null ? '' : String(ahrs.forward_axis));
+    setSdrSummary(
+      s?.adsb1090,
+      {
+        enabled: stSdr1090Enabled,
+        serial: stSdr1090Serial,
+        source: stSdr1090Source,
+        supervisor: stSdr1090Supervisor,
+        feed: stSdr1090Feed,
+      },
+      '1090 SDR',
+    );
+    setSdrSummary(
+      s?.uat978,
+      {
+        enabled: stSdr978Enabled,
+        serial: stSdr978Serial,
+        source: stSdr978Source,
+        supervisor: stSdr978Supervisor,
+        feed: stSdr978Feed,
+      },
+      '978 SDR',
+    );
 
     const enabled = !!ahrs.enabled;
     if (btnAhrsLevel) btnAhrsLevel.disabled = !enabled;
@@ -2162,7 +2373,8 @@
     try {
       const resp = await fetch('/api/status', { cache: 'no-store' });
       if (!resp.ok) {
-        if (subtitle) subtitle.textContent = 'Disconnected';
+        setConnectionState(false);
+        if (stStatusSubtitle) stStatusSubtitle.textContent = 'Waiting for data...';
         return;
       }
       const s = await resp.json();
@@ -2178,9 +2390,10 @@
       updateMapTraffic(s?.traffic);
       // Radar updates (heading-up traffic view).
       drawRadar();
-      if (subtitle) subtitle.textContent = 'Connected';
+      setConnectionState(true);
     } catch {
-      if (subtitle) subtitle.textContent = 'Disconnected';
+      setConnectionState(false);
+      if (stStatusSubtitle) stStatusSubtitle.textContent = 'Waiting for data...';
     }
   }
 

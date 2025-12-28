@@ -23,7 +23,16 @@
         <div class="title">Stratux-NG</div>
         <div id="subtitle" class="subtitle"></div>
       </div>
-      <span></span>
+      <div class="topbar-right">
+        <span id="st-now" class="topbar-time muted" aria-live="polite">--</span>
+        <span
+          id="top-connection-badge"
+          class="status-badge status-badge-muted"
+          role="status"
+          aria-live="polite"
+          aria-label="Connection state"
+        >--</span>
+      </div>
     </header>
 
     <main id="content" class="content" role="main">
@@ -132,102 +141,210 @@
       </section>
 
       <section id="view-status" class="view" aria-label="Status">
-        <h2>Status</h2>
 
-        <div class="st-grid" aria-label="Status sections">
-          <div class="st-section" aria-label="About">
-            <div class="st-head">About</div>
-            <div class="st-row"><div class="st-key">Uptime</div><div id="st-uptime" class="st-val"></div></div>
-            <div class="st-row"><div class="st-key">Now (UTC)</div><div id="st-now" class="st-val"></div></div>
-            <div class="st-row"><div class="st-key">Last tick (UTC)</div><div id="st-last-tick" class="st-val"></div></div>
+        <div class="status-panel card" aria-label="Overall status">
+          <div class="status-panel-head">
+            <div class="status-panel-lead">
+              <div class="status-panel-title">Status</div>
+              <div id="st-status-subtitle" class="status-panel-subtitle muted">Waiting for data...</div>
+            </div>
           </div>
+          <div class="status-panel-body">
+            <div class="status-metrics-label status-metrics-label-system">System</div>
+            <div class="status-metrics status-metrics-system">
+              <div class="status-metric">
+                <span class="status-label">Uptime</span>
+                <span id="st-summary-uptime" class="status-value">--</span>
+              </div>
+              <div class="status-metric">
+                <span class="status-label">GDL90 Dest</span>
+                <span id="st-summary-gdl90" class="status-value">--</span>
+              </div>
+              <div class="status-metric">
+                <span class="status-label">Frames Sent</span>
+                <span id="st-summary-frames" class="status-value">--</span>
+              </div>
+              <div class="status-metric status-metric-duo">
+                <span class="status-label">CPU / Fan</span>
+                <span class="status-value status-value-pair">
+                  <span id="st-summary-cpu" class="status-value-primary">--</span>
+                  <span class="status-value-divider">/</span>
+                  <span id="st-summary-fan-duty" class="status-value-secondary">--</span>
+                </span>
+              </div>
+              <div class="status-metric">
+                <span class="status-label">Disk Free</span>
+                <span id="st-summary-disk" class="status-value">--</span>
+              </div>
+              <div class="status-metric">
+                <span class="status-label">uap0</span>
+                <span id="st-summary-uap0" class="status-value">--</span>
+              </div>
+              <div class="status-metric">
+                <span class="status-label">wlan0</span>
+                <span id="st-summary-wlan0" class="status-value">--</span>
+              </div>
+              <div class="status-metric">
+                <span class="status-label">Ownship ICAO</span>
+                <span id="st-summary-icao" class="status-value">--</span>
+              </div>
+              <div class="status-metric">
+                <span class="status-label">Ownship Callsign</span>
+                <span id="st-summary-callsign" class="status-value">--</span>
+              </div>
+            </div>
 
-          <div class="st-section" aria-label="Network">
-            <div class="st-head">Network</div>
-            <div class="st-row"><div class="st-key">Local addrs</div><div id="st-net-local-addrs" class="st-val"></div></div>
-          </div>
+            <div class="status-metrics-label status-metrics-label-gps">GPS</div>
+            <div class="status-metrics status-metrics-gps">
+              <div class="status-metric">
+                <span class="status-label">Enabled</span>
+                <span class="status-value status-value-indicator">
+                  <span
+                    id="st-summary-gps-enabled"
+                    class="status-indicator status-indicator-muted"
+                    role="img"
+                    aria-label="GPS state unknown"
+                  ></span>
+                </span>
+              </div>
+              <div class="status-metric">
+                <span class="status-label">Fix Mode</span>
+                <span id="st-summary-gps-fixmode" class="status-value">--</span>
+              </div>
+              <div class="status-metric">
+                <span class="status-label">Horiz Acc (m)</span>
+                <span id="st-summary-gps-hacc" class="status-value">--</span>
+              </div>
+              <div class="status-metric">
+                <span class="status-label">Vert Acc (m)</span>
+                <span id="st-summary-gps-vacc" class="status-value">--</span>
+              </div>
+              <div class="status-metric">
+                <span class="status-label">Latitude</span>
+                <span id="st-summary-gps-lat" class="status-value">--</span>
+              </div>
+              <div class="status-metric">
+                <span class="status-label">Longitude</span>
+                <span id="st-summary-gps-lon" class="status-value">--</span>
+              </div>
+              <div class="status-metric">
+                <span class="status-label">Altitude (ft)</span>
+                <span id="st-summary-gps-alt" class="status-value">--</span>
+              </div>
+              <div class="status-metric">
+                <span class="status-label">Ground Speed (kt)</span>
+                <span id="st-summary-gps-ground" class="status-value">--</span>
+              </div>
+              <div class="status-metric">
+                <span class="status-label">Track (deg)</span>
+                <span id="st-summary-gps-track" class="status-value">--</span>
+              </div>
+              <div class="status-metric">
+                <span class="status-label">Vertical Speed (fpm)</span>
+                <span id="st-summary-gps-vs" class="status-value">--</span>
+              </div>
+            </div>
 
-          <div class="st-section" aria-label="Disk">
-            <div class="st-head">Disk</div>
-            <div class="st-row"><div class="st-key">Root total</div><div id="st-disk-total" class="st-val"></div></div>
-            <div class="st-row"><div class="st-key">Root available</div><div id="st-disk-avail" class="st-val"></div></div>
-            <div class="st-row"><div class="st-key">Root free</div><div id="st-disk-free" class="st-val"></div></div>
-          </div>
+            <div class="status-metrics-label status-metrics-label-ahrs">AHRS</div>
+            <div class="status-metrics status-metrics-ahrs">
+              <div class="status-metric">
+                <span class="status-label">IMU</span>
+                <span class="status-value status-value-indicator">
+                  <span
+                    id="st-summary-ahrs-imu"
+                    class="status-indicator status-indicator-muted"
+                    role="img"
+                    aria-label="AHRS IMU state unknown"
+                  ></span>
+                </span>
+              </div>
+              <div class="status-metric">
+                <span class="status-label">Baro</span>
+                <span class="status-value status-value-indicator">
+                  <span
+                    id="st-summary-ahrs-baro"
+                    class="status-indicator status-indicator-muted"
+                    role="img"
+                    aria-label="AHRS Baro state unknown"
+                  ></span>
+                </span>
+              </div>
+              <div class="status-metric">
+                <span class="status-label">Orientation</span>
+                <span id="st-summary-ahrs-orientation" class="status-value">--</span>
+              </div>
+            </div>
 
-          <div class="st-section" aria-label="GDL90 Output">
-            <div class="st-head">GDL90 Output</div>
-            <div class="st-row"><div class="st-key">Destination</div><div id="st-gdl90-dest" class="st-val"></div></div>
-            <div class="st-row"><div class="st-key">Interval</div><div id="st-interval" class="st-val"></div></div>
-            <div class="st-row"><div class="st-key">Frames sent</div><div id="st-frames" class="st-val"></div></div>
-          </div>
+            <div class="status-metrics-label status-metrics-label-sdr">SDRs</div>
+            <div class="status-sdr-grid">
+              <div class="status-sdr-card" aria-label="1090 MHz SDR">
+                <div class="status-sdr-title">
+                  <span>1090 MHz</span>
+                  <span class="status-sdr-tag">ADSB</span>
+                </div>
+                <div class="status-sdr-pill">
+                  <span class="status-label">Radio</span>
+                  <span
+                    id="st-sdr-1090-enabled"
+                    class="status-indicator status-indicator-muted"
+                    role="img"
+                    aria-label="1090 SDR state unknown"
+                  ></span>
+                </div>
+                <div class="status-sdr-row">
+                  <span class="status-sdr-key">Serial Tag</span>
+                  <span id="st-sdr-1090-serial" class="status-sdr-val">--</span>
+                </div>
+                <div class="status-sdr-row">
+                  <span class="status-sdr-key">Input</span>
+                  <span id="st-sdr-1090-source" class="status-sdr-val">--</span>
+                </div>
+                <div class="status-sdr-row">
+                  <span class="status-sdr-key">Supervisor</span>
+                  <span id="st-sdr-1090-supervisor" class="status-sdr-val">--</span>
+                </div>
+                <div class="status-sdr-row">
+                  <span class="status-sdr-key">Feeds</span>
+                  <span id="st-sdr-1090-feed" class="status-sdr-val">--</span>
+                </div>
+              </div>
 
-          <div class="st-section" aria-label="System">
-            <div class="st-head">System</div>
-            <div class="st-row"><div class="st-key">Config path</div><div id="st-config-path" class="st-val"></div></div>
-            <div class="st-row"><div class="st-key">Ownship ICAO</div><div id="st-ownship-icao" class="st-val"></div></div>
-            <div class="st-row"><div class="st-key">Ownship callsign</div><div id="st-ownship-callsign" class="st-val"></div></div>
-            <div class="st-row"><div class="st-key">Recording enabled</div><input id="st-record" class="st-led" type="checkbox" disabled /></div>
-            <div class="st-row"><div class="st-key">Replay enabled</div><input id="st-replay" class="st-led" type="checkbox" disabled /></div>
-          </div>
+              <div class="status-sdr-card" aria-label="978 MHz SDR">
+                <div class="status-sdr-title">
+                  <span>978 MHz</span>
+                  <span class="status-sdr-tag">UAT</span>
+                </div>
+                <div class="status-sdr-pill">
+                  <span class="status-label">Radio</span>
+                  <span
+                    id="st-sdr-978-enabled"
+                    class="status-indicator status-indicator-muted"
+                    role="img"
+                    aria-label="978 SDR state unknown"
+                  ></span>
+                </div>
+                <div class="status-sdr-row">
+                  <span class="status-sdr-key">Serial Tag</span>
+                  <span id="st-sdr-978-serial" class="status-sdr-val">--</span>
+                </div>
+                <div class="status-sdr-row">
+                  <span class="status-sdr-key">Input</span>
+                  <span id="st-sdr-978-source" class="status-sdr-val">--</span>
+                </div>
+                <div class="status-sdr-row">
+                  <span class="status-sdr-key">Supervisor</span>
+                  <span id="st-sdr-978-supervisor" class="status-sdr-val">--</span>
+                </div>
+                <div class="status-sdr-row">
+                  <span class="status-sdr-key">Feeds</span>
+                  <span id="st-sdr-978-feed" class="status-sdr-val">--</span>
+                </div>
+              </div>
+            </div>
 
-          <div class="st-section" aria-label="GPS">
-            <div class="st-head">GPS</div>
-            <div class="st-row"><div class="st-key">Enabled</div><input id="st-gps-enabled" class="st-led" type="checkbox" disabled /></div>
-            <div class="st-row"><div class="st-key">Fix valid</div><input id="st-gps-valid" class="st-led" type="checkbox" disabled /></div>
-            <div class="st-row"><div class="st-key">Fix stale (&gt;3s)</div><input id="st-gps-stale" class="st-led" type="checkbox" disabled /></div>
-            <div class="st-row"><div class="st-key">Fix age (s)</div><div id="st-gps-age" class="st-val"></div></div>
-
-            <div class="st-subhead">Source</div>
-            <div class="st-row"><div class="st-key">Source</div><div id="st-gps-source" class="st-val"></div></div>
-            <div class="st-row"><div class="st-key">Device</div><div id="st-gps-device" class="st-val"></div></div>
-            <div class="st-row"><div class="st-key">gpsd addr</div><div id="st-gps-gpsd-addr" class="st-val"></div></div>
-            <div class="st-row"><div class="st-key">Baud</div><div id="st-gps-baud" class="st-val"></div></div>
-
-            <div class="st-subhead">Fix</div>
-            <div class="st-row"><div class="st-key">Last fix (UTC)</div><div id="st-gps-last-fix" class="st-val"></div></div>
-            <div class="st-row"><div class="st-key">Fix quality</div><div id="st-gps-fixq" class="st-val"></div></div>
-            <div class="st-row"><div class="st-key">Fix mode</div><div id="st-gps-fixmode" class="st-val"></div></div>
-            <div class="st-row"><div class="st-key">Satellites</div><div id="st-gps-sats" class="st-val"></div></div>
-            <div class="st-row"><div class="st-key">HDOP</div><div id="st-gps-hdop" class="st-val"></div></div>
-            <div class="st-row"><div class="st-key">Horiz acc (m)</div><div id="st-gps-hacc" class="st-val"></div></div>
-            <div class="st-row"><div class="st-key">Vert acc (m)</div><div id="st-gps-vacc" class="st-val"></div></div>
-
-            <div class="st-subhead">Position</div>
-            <div class="st-row"><div class="st-key">Latitude</div><div id="st-gps-lat" class="st-val"></div></div>
-            <div class="st-row"><div class="st-key">Longitude</div><div id="st-gps-lon" class="st-val"></div></div>
-            <div class="st-row"><div class="st-key">Altitude (ft)</div><div id="st-gps-alt" class="st-val"></div></div>
-            <div class="st-row"><div class="st-key">Ground speed (kt)</div><div id="st-gps-ground" class="st-val"></div></div>
-            <div class="st-row"><div class="st-key">Track (deg)</div><div id="st-gps-track" class="st-val"></div></div>
-            <div class="st-row"><div class="st-key">Vertical speed (fpm)</div><div id="st-gps-vspeed" class="st-val"></div></div>
-            <div class="st-row"><div class="st-key">GPS last error</div><div id="st-gps-error" class="st-val"></div></div>
-          </div>
-
-          <div class="st-section" aria-label="Fan">
-            <div class="st-head">Fan</div>
-            <div class="st-row"><div class="st-key">Backend</div><div id="st-fan-backend" class="st-val"></div></div>
-            <div class="st-row"><div class="st-key">Enabled</div><input id="st-fan-enabled" class="st-led" type="checkbox" disabled /></div>
-            <div class="st-row"><div class="st-key">CPU temp (°C)</div><div id="st-fan-cpu-temp" class="st-val"></div></div>
-            <div class="st-row"><div class="st-key">Duty (%)</div><div id="st-fan-duty" class="st-val"></div></div>
-            <div class="st-row"><div class="st-key">Fan last error</div><div id="st-fan-error" class="st-val"></div></div>
-          </div>
-
-          <div class="st-section" aria-label="AHRS Sensors">
-            <div class="st-head">AHRS Sensors</div>
-            <div class="st-row"><div class="st-key">IMU detected</div><input id="st-ahrs-imu-detected" class="st-led" type="checkbox" disabled /></div>
-            <div class="st-row"><div class="st-key">IMU working</div><input id="st-ahrs-imu-working" class="st-led" type="checkbox" disabled /></div>
-            <div class="st-row"><div class="st-key">IMU last update (UTC)</div><div id="st-ahrs-imu-updated" class="st-val"></div></div>
-
-            <div class="st-subhead">Baro</div>
-            <div class="st-row"><div class="st-key">Baro detected</div><input id="st-ahrs-baro-detected" class="st-led" type="checkbox" disabled /></div>
-            <div class="st-row"><div class="st-key">Baro working</div><input id="st-ahrs-baro-working" class="st-led" type="checkbox" disabled /></div>
-            <div class="st-row"><div class="st-key">Baro last update (UTC)</div><div id="st-ahrs-baro-updated" class="st-val"></div></div>
-
-            <div class="st-subhead">Errors/Config</div>
-            <div class="st-row"><div class="st-key">AHRS last error</div><div id="st-ahrs-error" class="st-val"></div></div>
-            <div class="st-row"><div class="st-key">Orientation set</div><div id="st-ahrs-orientation-set" class="st-val"></div></div>
-            <div class="st-row"><div class="st-key">Forward axis</div><div id="st-ahrs-forward-axis" class="st-val"></div></div>
           </div>
         </div>
+
       </section>
 
       <section id="view-traffic" class="view" aria-label="Traffic">
