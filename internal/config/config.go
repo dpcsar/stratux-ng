@@ -22,8 +22,8 @@ type Config struct {
 	WiFi    WiFiConfig    `yaml:"wifi"`
 
 	// External decoder inputs (planned): 1090 and 978.
-	//  - 978 is typically ingested as NDJSON-over-TCP (dump978-fa JSON stream).
-	//  - 1090 is ingested by polling a JSON file (dump1090-fa aircraft.json).
+	//  - Both bands ingest newline-delimited JSON over TCP (dump1090-fa
+	//    --net-stratux-port, dump978-fa --json-port).
 	ADSB1090 DecoderBandConfig `yaml:"adsb1090"`
 	UAT978   DecoderBandConfig `yaml:"uat978"`
 }
@@ -31,9 +31,7 @@ type Config struct {
 // DecoderBandConfig describes one RF band ingest path (e.g. 1090 or 978).
 //
 // Stratux-NG treats decoders as external processes and ingests their output via
-// either:
-//   - newline-delimited JSON (NDJSON) over TCP, or
-//   - a periodically-updated JSON file.
+// newline-delimited JSON (NDJSON) over TCP.
 type DecoderBandConfig struct {
 	Enable bool `yaml:"enable"`
 
@@ -46,11 +44,11 @@ type DecoderBandConfig struct {
 // - an externally-managed decoder (Command empty) that Stratux-NG connects to.
 //
 // Supported ingest sources:
-// - NDJSON-over-TCP via JSONListen/JSONAddr (e.g. dump978-fa --json-port)
-// - periodically-updated JSON files via JSONFile (e.g. dump1090-fa aircraft.json)
+// - NDJSON-over-TCP via JSONListen/JSONAddr (e.g. dump978-fa --json-port,
+//   dump1090-fa --net-stratux-port)
 // - raw line-over-TCP via RawListen/RawAddr (e.g. dump978-fa --raw-port)
-//
-// For NDJSON ingest, set exactly one of JSONListen, JSONAddr, or JSONFile.
+
+// For NDJSON ingest, set exactly one of JSONListen or JSONAddr.
 // For raw ingest, set exactly one of RawListen or RawAddr.
 //
 // At least one ingest source must be configured when the band is enabled.
@@ -60,16 +58,11 @@ type DecoderConfig struct {
 
 	JSONListen string `yaml:"json_listen"`
 	JSONAddr   string `yaml:"json_addr"`
-	JSONFile   string `yaml:"json_file"`
 
 	// RawListen/RawAddr configure a TCP endpoint that emits newline-delimited
 	// dump978-style raw messages (e.g. "+<hex>;rs=...;ss=...;").
 	RawListen string `yaml:"raw_listen"`
 	RawAddr   string `yaml:"raw_addr"`
-
-	// JSONFileInterval controls how often JSONFile is polled.
-	// When zero, defaults to 1s.
-	JSONFileInterval time.Duration `yaml:"json_file_interval"`
 }
 
 // SDRSelector describes how to select an SDR device.
@@ -287,7 +280,6 @@ func DefaultAndValidate(cfg *Config) error {
 		}
 		listen := strings.TrimSpace(b.Decoder.JSONListen)
 		addr := strings.TrimSpace(b.Decoder.JSONAddr)
-		file := strings.TrimSpace(b.Decoder.JSONFile)
 		rawListen := strings.TrimSpace(b.Decoder.RawListen)
 		rawAddr := strings.TrimSpace(b.Decoder.RawAddr)
 
@@ -296,9 +288,6 @@ func DefaultAndValidate(cfg *Config) error {
 			jsonSet++
 		}
 		if addr != "" {
-			jsonSet++
-		}
-		if file != "" {
 			jsonSet++
 		}
 		rawSet := 0
@@ -312,22 +301,13 @@ func DefaultAndValidate(cfg *Config) error {
 			return fmt.Errorf("%s.decoder must set at least one ingest source (json_* or raw_*)", name)
 		}
 		if jsonSet != 0 && jsonSet != 1 {
-			return fmt.Errorf("%s.decoder must set exactly one of json_listen, json_addr, or json_file", name)
+			return fmt.Errorf("%s.decoder must set exactly one of json_listen or json_addr", name)
 		}
 		if rawSet != 0 && rawSet != 1 {
 			return fmt.Errorf("%s.decoder must set exactly one of raw_listen or raw_addr", name)
 		}
 		if rawSet > 0 && name != "uat978" {
 			return fmt.Errorf("%s.decoder raw_* is only supported for uat978", name)
-		}
-		if name == "adsb1090" {
-			// Be strict: 1090 ingest is dump1090-fa aircraft.json polling.
-			if strings.TrimSpace(b.Decoder.JSONFile) == "" {
-				return fmt.Errorf("adsb1090.decoder.json_file is required (dump1090-fa aircraft.json polling)")
-			}
-			if strings.TrimSpace(b.Decoder.JSONListen) != "" || strings.TrimSpace(b.Decoder.JSONAddr) != "" {
-				return fmt.Errorf("adsb1090.decoder only supports json_file (dump1090-fa); json_listen/json_addr are not supported")
-			}
 		}
 		if listen != "" {
 			if _, err := net.ResolveTCPAddr("tcp", listen); err != nil {
@@ -337,18 +317,6 @@ func DefaultAndValidate(cfg *Config) error {
 		if addr != "" {
 			if _, err := net.ResolveTCPAddr("tcp", addr); err != nil {
 				return fmt.Errorf("%s.decoder.json_addr invalid: %w", name, err)
-			}
-		}
-		if file != "" {
-			// Be permissive: allow relative paths (dev) and non-existent files at startup.
-			if strings.ContainsRune(file, '\x00') {
-				return fmt.Errorf("%s.decoder.json_file invalid", name)
-			}
-			if b.Decoder.JSONFileInterval < 0 {
-				return fmt.Errorf("%s.decoder.json_file_interval must be >= 0", name)
-			}
-			if b.Decoder.JSONFileInterval == 0 {
-				b.Decoder.JSONFileInterval = 1 * time.Second
 			}
 		}
 		if rawListen != "" {

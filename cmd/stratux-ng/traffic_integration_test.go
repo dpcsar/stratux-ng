@@ -116,7 +116,9 @@ func TestTrafficReplay_Dump978Fixtures_EmitsGDL90Traffic(t *testing.T) {
 	store := traffic.NewStore(traffic.StoreConfig{MaxTargets: 50, TTL: 10 * time.Minute})
 	lines := loadNDJSONLines(t, filepath.Join("..", "..", "internal", "traffic", "testdata", "dump978.ndjson"))
 	for _, raw := range lines {
-		store.UpsertMany(now, traffic.ParseDump978NDJSON(raw))
+		if upd, ok := traffic.ParseDump978NDJSON(raw); ok {
+			store.Apply(now, upd)
+		}
 	}
 
 	cfg := newTrafficTestConfig(t)

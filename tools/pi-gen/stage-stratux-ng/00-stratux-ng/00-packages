@@ -15,6 +15,7 @@ cmake
 pkg-config
 git
 libusb-1.0-0-dev
+librtlsdr-dev
 zlib1g-dev
 libncurses-dev
 libboost-all-dev

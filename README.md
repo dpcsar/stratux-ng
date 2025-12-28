@@ -10,7 +10,7 @@ Working now:
 - **GDL90 over UDP** (heartbeat + ownship + traffic + device ID + Stratux heartbeat)
 - **Web UI + status API** (including decoder health)
 - **AHRS (ICM-20948 + BMP280)** + **fan control**
-- **1090** ingest from FlightAware `dump1090-fa` (`aircraft.json` polling) → **real GDL90 Traffic (0x14)**
+- **1090** ingest from FlightAware `dump1090-fa` (Stratux JSON stream via `--net-stratux-port`) → **real GDL90 Traffic (0x14)**
 - **978** ingest from `dump978-fa` (JSON/NDJSON over TCP) → **real GDL90 Traffic (0x14)**
 - **978** uplink relay from `dump978-fa` raw TCP (`--raw-port`) → **GDL90 Uplink (0x07)** (EFB weather)
 
@@ -60,8 +60,15 @@ This is a **new implementation** (new repository) with a modular architecture an
   - FlightAware `dump1090-fa` for 1090 MHz
   - `dump978` / `dump978-fa` for 978 MHz
 
+### Traffic ingestion + cache (Stratux compatibility)
+
+- Both 1090 and 978 streams feed a single traffic store (`internal/traffic/store.go`). Each NDJSON line becomes a `TrafficUpdate` that can include a full position (`gdl90.Traffic`) plus supplemental metadata (tail, squawk, velocity, on-ground state, etc.).
+- Metadata-only frames (e.g. Mode S velocity without lat/lon) merge into the last known target so UI/GDL90 output keeps showing tail/speed/track even when the latest message lacked a full position. The merge logic mirrors Stratux classic behavior.
+- The store keeps up to 200 targets by default and applies a **30 s TTL** that only refreshes when a new position-bearing frame arrives. This roughly matches Stratux’s “drop traffic 60 s after the last DF17/DF18 position” rule while keeping the cache small for Pi‑class hardware.
+- GDL90 0x14 frames are built directly from the cached `gdl90.Traffic` slice returned by `Store.Snapshot()`, so every unexpired target is emitted without extra per-client filtering. (Range/altitude gating—if desired—can be layered on top of the snapshot before encoding.)
+
 Decoder I/O convention:
-- 1090 recommended: `dump1090-fa --write-json ...` (Stratux-NG polls `aircraft.json`)
+- 1090 recommended: `dump1090-fa --net-stratux-port 30006` (Stratux-NG ingests the Stratux JSON stream)
 - 978 traffic recommended: `dump978-fa --json-port ...` (Stratux-NG ingests NDJSON over TCP)
 - 978 weather recommended: `dump978-fa --raw-port ...` (Stratux-NG relays uplinks as GDL90 message `0x07`)
 
@@ -171,11 +178,8 @@ sudo install -m 755 dump978-fa /usr/local/bin/dump978-fa
 5) Validate decoder output paths/ports (defaults used by [config.yaml](config.yaml)):
 
 ```
-# 1090 aircraft.json (dump1090-fa)
-# Note: this file only exists after dump1090-fa is running.
-# If you're using the provided systemd unit, systemd creates /run/dump1090-fa via RuntimeDirectory.
-ls -l /run/dump1090-fa/aircraft.json
-head /run/dump1090-fa/aircraft.json
+# 1090 Stratux JSON stream (dump1090-fa)
+nc 127.0.0.1 30006 | head
 
 # 978 JSON/NDJSON
 nc 127.0.0.1 30978 | head

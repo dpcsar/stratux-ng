@@ -16,26 +16,28 @@ func TestParseDump978NDJSON_BasicPosition(t *testing.T) {
 		"true_track":180.0,
 		"callsign":"N12345"
 	}`)
-	out := ParseDump978NDJSON(raw)
-	if len(out) != 1 {
-		t.Fatalf("expected 1 target, got %d", len(out))
+	upd, ok := ParseDump978NDJSON(raw)
+	if !ok {
+		t.Fatalf("expected parse success")
+	}
+	if upd.Traffic == nil {
+		t.Fatalf("expected traffic payload")
 	}
 	want, _ := gdl90.ParseICAOHex("ABC123")
-	if out[0].ICAO != want {
+	if upd.Traffic.ICAO != want {
 		t.Fatalf("unexpected ICAO")
 	}
-	if out[0].AltFeet != 4200 {
+	if upd.Traffic.AltFeet != 4200 {
 		t.Fatalf("unexpected altitude")
 	}
-	if out[0].GroundKt != 120 {
+	if upd.Traffic.GroundKt != 120 {
 		t.Fatalf("unexpected groundspeed")
 	}
 }
 
 func TestParseDump978NDJSON_NoPosition_NoTarget(t *testing.T) {
 	raw := json.RawMessage(`{"address":"ABC123"}`)
-	out := ParseDump978NDJSON(raw)
-	if len(out) != 0 {
-		t.Fatalf("expected 0 targets, got %d", len(out))
+	if upd, ok := ParseDump978NDJSON(raw); ok {
+		t.Fatalf("expected failure, got %+v", upd)
 	}
 }

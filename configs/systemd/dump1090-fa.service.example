@@ -9,12 +9,11 @@
 #   sudo systemctl enable --now dump1090-fa
 #
 # Notes:
-# - Writes aircraft.json to /run/dump1090-fa (RAM-backed on most distros).
-# - If using this unit, configure Stratux-NG to poll json_file and do NOT run the decoder itself:
+# - Streams Stratux JSON (`--net-stratux-port`) on 127.0.0.1:30006.
+# - If using this unit, configure Stratux-NG to consume the stream and do NOT run the decoder itself:
 #     adsb1090.enable: true
 #     adsb1090.decoder.command: ""                 # empty
-#     adsb1090.decoder.json_file: /run/dump1090-fa/aircraft.json
-#     adsb1090.decoder.json_file_interval: 1s
+#     adsb1090.decoder.json_addr: 127.0.0.1:30006
 
 [Unit]
 Description=dump1090-fa (1090 ADS-B decoder)
@@ -24,10 +23,11 @@ After=network-online.target
 [Service]
 Type=simple
 ExecStart=/usr/local/bin/dump1090-fa \
-  --device-type soapy \
-  --device driver=rtlsdr,serial=stx:1090:0 \
-  --write-json /run/dump1090-fa \
-  --write-json-every 1
+  --device-type rtlsdr \
+  --device stx:1090:0 \
+  --net \
+  --net-stratux-port 30006 \
+  --modeac
 Restart=on-failure
 RestartSec=1
 

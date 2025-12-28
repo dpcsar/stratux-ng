@@ -31,7 +31,7 @@ Stratux-NG can supervise decoders itself (recommended).
 - Confirm your SDR serial tags (e.g. `stx:1090:0`, `stx:978:0`) match `lsusb -v`.
 
 Typical decoder command lines (examples; adjust for your install):
-- 1090 (FlightAware `dump1090-fa`): `--device-type rtlsdr --device stx:1090:0 --write-json /run/dump1090-fa --write-json-every 1`
+- 1090 (FlightAware `dump1090-fa`): `--device-type rtlsdr --device stx:1090:0 --net --net-stratux-port 30006 --modeac`
 - 978 traffic (`dump978-fa`): `--sdr driver=rtlsdr,serial=stx:978:0 --json-port 30978`
 - 978 weather / FIS-B uplinks (`dump978-fa`): add `--raw-port 30979`
 

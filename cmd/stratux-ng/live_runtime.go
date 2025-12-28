@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -29,12 +27,12 @@ type liveRuntime struct {
 	gpsSvc             *gps.Service
 	fanSvc             *fancontrol.Service
 
-	adsb1090Sup   *decoder.Supervisor
-	uat978Sup     *decoder.Supervisor
-	adsb1090File  *decoder.JSONFilePoller
-	uat978Stream  *decoder.NDJSONClient
-	uat978Raw     *decoder.LineClient
-	uat978UplinkQ chan []byte
+	adsb1090Sup    *decoder.Supervisor
+	uat978Sup      *decoder.Supervisor
+	adsb1090Stream *decoder.NDJSONClient
+	uat978Stream   *decoder.NDJSONClient
+	uat978Raw      *decoder.LineClient
+	uat978UplinkQ  chan []byte
 
 	trafficStore *traffic.Store
 
@@ -55,16 +53,10 @@ func decoderBandEqual(a, b config.DecoderBandConfig) bool {
 	if strings.TrimSpace(a.Decoder.JSONAddr) != strings.TrimSpace(b.Decoder.JSONAddr) {
 		return false
 	}
-	if strings.TrimSpace(a.Decoder.JSONFile) != strings.TrimSpace(b.Decoder.JSONFile) {
-		return false
-	}
 	if strings.TrimSpace(a.Decoder.RawListen) != strings.TrimSpace(b.Decoder.RawListen) {
 		return false
 	}
 	if strings.TrimSpace(a.Decoder.RawAddr) != strings.TrimSpace(b.Decoder.RawAddr) {
-		return false
-	}
-	if a.Decoder.JSONFileInterval != b.Decoder.JSONFileInterval {
 		return false
 	}
 	if strings.TrimSpace(a.SDR.SerialTag) != strings.TrimSpace(b.SDR.SerialTag) {
@@ -196,20 +188,16 @@ func (r *liveRuntime) initDecoders(ctx context.Context) error {
 	// 1090
 	if r.cfg.ADSB1090.Enable {
 		band := r.cfg.ADSB1090
-		jsonFile := strings.TrimSpace(band.Decoder.JSONFile)
-		if jsonFile == "" {
-			return fmt.Errorf("adsb1090.decoder.json_file is required")
+		endpoint := strings.TrimSpace(band.Decoder.JSONAddr)
+		if endpoint == "" {
+			endpoint = strings.TrimSpace(band.Decoder.JSONListen)
 		}
-		log.Printf("adsb1090 enabled json_file=%s interval=%s", jsonFile, band.Decoder.JSONFileInterval)
+		if endpoint == "" {
+			return fmt.Errorf("adsb1090.decoder.json_addr or json_listen is required")
+		}
+		log.Printf("adsb1090 enabled json_endpoint=%s", endpoint)
 		if cmd := strings.TrimSpace(band.Decoder.Command); cmd != "" {
 			log.Printf("adsb1090 supervising decoder cmd=%s args=%q", cmd, band.Decoder.Args)
-			// If we're supervising dump1090-fa and asking it to write under jsonFile,
-			// ensure the directory exists (common path: /run/dump1090-fa).
-			if dir := filepath.Dir(jsonFile); dir != "" && dir != "." {
-				if err := os.MkdirAll(dir, 0o755); err != nil {
-					return fmt.Errorf("adsb1090.decoder.json_file directory: %w", err)
-				}
-			}
 			sup, err := decoder.NewSupervisor(decoder.SupervisorConfig{
 				Name:    "adsb1090",
 				Command: cmd,
@@ -237,30 +225,30 @@ func (r *liveRuntime) initDecoders(ctx context.Context) error {
 				}
 			}()
 		}
-		poller, err := decoder.NewJSONFilePoller(decoder.JSONFilePollerConfig{
-			Name:     "adsb1090",
-			Path:     jsonFile,
-			Interval: band.Decoder.JSONFileInterval,
+		client, err := decoder.NewNDJSONClient(decoder.NDJSONClientConfig{
+			Name: "adsb1090",
+			Addr: endpoint,
 		})
 		if err != nil {
-			return fmt.Errorf("adsb1090 jsonfile: %w", err)
+			return fmt.Errorf("adsb1090 ndjson: %w", err)
 		}
-		if err := poller.Start(ctx, func(raw json.RawMessage) error {
-			// Keep the poller healthy: never return errors for parse issues.
-			targets := traffic.ParseDump1090FAAircraftJSON(raw)
-			if len(targets) > 0 && r.trafficStore != nil {
-				r.trafficStore.UpsertMany(time.Now().UTC(), targets)
+		if err := client.Start(ctx, func(raw json.RawMessage) error {
+			upd, ok := traffic.ParseDump1090RawJSON(raw)
+			if !ok || r.trafficStore == nil {
+				return nil
 			}
+			now := time.Now().UTC()
+			r.trafficStore.Apply(now, upd)
 			return nil
 		}); err != nil {
-			return fmt.Errorf("adsb1090 jsonfile start: %w", err)
+			return fmt.Errorf("adsb1090 ndjson start: %w", err)
 		}
-		r.adsb1090File = poller
+		r.adsb1090Stream = client
 		go func() {
 			time.Sleep(2 * time.Second)
-			snap := poller.Snapshot(time.Now().UTC())
-			if snap.State == "error" {
-				log.Printf("adsb1090 jsonfile poller error path=%s err=%s", snap.Path, snap.LastError)
+			snap := client.Snapshot(time.Now().UTC())
+			if snap.State != "connected" {
+				log.Printf("adsb1090 ndjson state=%s addr=%s last_error=%s", snap.State, snap.Addr, snap.LastError)
 			}
 		}()
 	}
@@ -315,9 +303,9 @@ func (r *liveRuntime) initDecoders(ctx context.Context) error {
 			}
 			if err := client.Start(ctx, func(raw json.RawMessage) error {
 				// Keep the stream healthy: never return errors for parse issues.
-				targets := traffic.ParseDump978NDJSON(raw)
-				if len(targets) > 0 && r.trafficStore != nil {
-					r.trafficStore.UpsertMany(time.Now().UTC(), targets)
+				upd, ok := traffic.ParseDump978NDJSON(raw)
+				if ok && r.trafficStore != nil {
+					r.trafficStore.Apply(time.Now().UTC(), upd)
 				}
 				return nil
 			}); err != nil {
@@ -384,9 +372,9 @@ func (r *liveRuntime) Close() {
 		r.fanSvc.Close()
 		r.fanSvc = nil
 	}
-	if r.adsb1090File != nil {
-		r.adsb1090File.Close()
-		r.adsb1090File = nil
+	if r.adsb1090Stream != nil {
+		r.adsb1090Stream.Close()
+		r.adsb1090Stream = nil
 	}
 	if r.uat978Stream != nil {
 		r.uat978Stream.Close()
@@ -425,19 +413,22 @@ func (r *liveRuntime) ADSB1090DecoderSnapshot(nowUTC time.Time) (web.DecoderStat
 	if !cur.Enable {
 		return web.DecoderStatusSnapshot{Enabled: false}, true
 	}
-	jsonFile := strings.TrimSpace(cur.Decoder.JSONFile)
+	endpoint := strings.TrimSpace(cur.Decoder.JSONAddr)
+	if endpoint == "" {
+		endpoint = strings.TrimSpace(cur.Decoder.JSONListen)
+	}
 	snap := web.DecoderStatusSnapshot{
-		Enabled:   true,
-		SerialTag: strings.TrimSpace(cur.SDR.SerialTag),
-		Command:   strings.TrimSpace(cur.Decoder.Command),
-		JSONFile:  jsonFile,
+		Enabled:      true,
+		SerialTag:    strings.TrimSpace(cur.SDR.SerialTag),
+		Command:      strings.TrimSpace(cur.Decoder.Command),
+		JSONEndpoint: endpoint,
 	}
 	if r.adsb1090Sup != nil {
 		snap.Supervisor = r.adsb1090Sup.Snapshot()
 	}
-	if r.adsb1090File != nil {
-		fs := r.adsb1090File.Snapshot(nowUTC)
-		snap.File = &fs
+	if r.adsb1090Stream != nil {
+		st := r.adsb1090Stream.Snapshot(nowUTC)
+		snap.Stream = &st
 	}
 	return snap, true
 }

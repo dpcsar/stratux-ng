@@ -9,21 +9,18 @@ import (
 )
 
 // ParseDump978NDJSON parses a single NDJSON line from dump978-fa's --json-port
-// output and returns a GDL90 traffic target when possible.
+// output and returns a unified traffic update (position + metadata) when
+// possible.
 //
 // dump978-fa emits one JSON object per downlink message (no wrapper array).
 // This parser is intentionally tolerant: unknown fields are ignored and parse
-// failures return nil so the stream stays healthy.
-func ParseDump978NDJSON(raw json.RawMessage) []gdl90.Traffic {
+// failures are reported via false so the stream stays healthy.
+func ParseDump978NDJSON(raw json.RawMessage) (TrafficUpdate, bool) {
 	var msg dump978Message
 	if err := json.Unmarshal(raw, &msg); err != nil {
-		return nil
+		return TrafficUpdate{}, false
 	}
-	t, ok := msg.toTraffic()
-	if !ok {
-		return nil
-	}
-	return []gdl90.Traffic{t}
+	return msg.toUpdate()
 }
 
 type dump978Message struct {
@@ -46,26 +43,31 @@ type dump978Message struct {
 	Callsign          *string  `json:"callsign"`
 }
 
-func (m dump978Message) toTraffic() (gdl90.Traffic, bool) {
+func (m dump978Message) toUpdate() (TrafficUpdate, bool) {
 	addr := strings.TrimSpace(m.Address)
 	if addr == "" {
-		return gdl90.Traffic{}, false
+		return TrafficUpdate{}, false
 	}
 	icao, err := gdl90.ParseICAOHex(addr)
 	if err != nil {
-		return gdl90.Traffic{}, false
+		return TrafficUpdate{}, false
 	}
 	if m.Position == nil {
-		return gdl90.Traffic{}, false
+		return TrafficUpdate{}, false
 	}
 	lat := m.Position.Lat
 	lon := m.Position.Lon
 
+	meta := MetadataUpdate{ICAO: icao}
 	altFeet := 0
 	if m.GeometricAltitude != nil {
 		altFeet = *m.GeometricAltitude
 	} else if m.PressureAltitude != nil {
 		altFeet = *m.PressureAltitude
+	}
+	if m.GeometricAltitude != nil || m.PressureAltitude != nil {
+		meta.AltFeet = altFeet
+		meta.HasAlt = true
 	}
 
 	groundKt := 0
@@ -74,11 +76,15 @@ func (m dump978Message) toTraffic() (gdl90.Traffic, bool) {
 		if groundKt < 0 {
 			groundKt = 0
 		}
+		meta.GroundKt = groundKt
+		meta.HasGround = true
 	}
 
 	trackDeg := 0.0
 	if m.TrueTrack != nil {
 		trackDeg = *m.TrueTrack
+		meta.TrackDeg = trackDeg
+		meta.HasTrack = true
 	}
 
 	vvelFpm := 0
@@ -86,6 +92,10 @@ func (m dump978Message) toTraffic() (gdl90.Traffic, bool) {
 		vvelFpm = *m.VerticalVelGeom
 	} else if m.VerticalVelBaro != nil {
 		vvelFpm = *m.VerticalVelBaro
+	}
+	if m.VerticalVelGeom != nil || m.VerticalVelBaro != nil {
+		meta.VvelFpm = vvelFpm
+		meta.HasVvel = true
 	}
 
 	onGround := groundKt == 0
@@ -96,6 +106,10 @@ func (m dump978Message) toTraffic() (gdl90.Traffic, bool) {
 		} else if s == "airborne" || s == "supersonic" {
 			onGround = false
 		}
+	}
+	if m.AirGroundState != nil || m.GroundSpeed != nil {
+		meta.OnGround = onGround
+		meta.HasOnGround = true
 	}
 
 	nic := byte(8)
@@ -129,8 +143,12 @@ func (m dump978Message) toTraffic() (gdl90.Traffic, bool) {
 			tail = tail[:8]
 		}
 	}
+	if tail != "" {
+		meta.Tail = tail
+		meta.HasTail = true
+	}
 
-	return gdl90.Traffic{
+	traffic := gdl90.Traffic{
 		AddrType:        0x00,
 		ICAO:            icao,
 		LatDeg:          lat,
@@ -146,5 +164,11 @@ func (m dump978Message) toTraffic() (gdl90.Traffic, bool) {
 		EmitterCategory: 0x01,
 		Tail:            tail,
 		PriorityStatus:  0,
+	}
+
+	return TrafficUpdate{
+		ICAO:    icao,
+		Traffic: &traffic,
+		Meta:    meta,
 	}, true
 }

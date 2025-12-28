@@ -60,8 +60,9 @@ func TestFixtures_Dump978NDJSON_ToStoreSnapshot(t *testing.T) {
 		if len(line) == 0 {
 			continue
 		}
-		targets := ParseDump978NDJSON(json.RawMessage(append([]byte(nil), line...)))
-		s.UpsertMany(now, targets)
+		if upd, ok := ParseDump978NDJSON(json.RawMessage(append([]byte(nil), line...))); ok {
+			s.Apply(now, upd)
+		}
 	}
 	if err := scanner.Err(); err != nil {
 		t.Fatalf("scan %s: %v", path, err)

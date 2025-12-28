@@ -7,8 +7,8 @@
 ## Where things live
 - Runtime orchestration: `cmd/stratux-ng` (main loop + live runtime wiring).
 - GDL90: package `gdl90` (CRC16 + byte-stuffing framing, message builders: heartbeat 0x00, ownship 0x0A/0x0B, traffic 0x14, uplink 0x07, ForeFlight 0x65, Stratux heartbeat 0xCC).
-- Decoder ingest/supervision: package `decoder` (supervised child processes + TCP NDJSON/line clients + JSON file poller).
-- Traffic: package `traffic` (`Store` with TTL/eviction + parsers for dump1090-fa aircraft.json and dump978).
+- Decoder ingest/supervision: package `decoder` (supervised child processes + TCP NDJSON/line clients).
+- Traffic: package `traffic` (`Store` with TTL/eviction + parsers for dump1090-fa Stratux JSON stream and dump978).
 - Web: package `web` (/api/status + strict /api/settings + embedded UI assets).
 - Deterministic testing aids: package `sim` (scenario YAML v1 fixtures) and package `replay` (stable line-oriented GDL90 log format).
 
@@ -18,7 +18,7 @@
 - Heartbeat cadence is ~1 Hz (configured by `gdl90.interval`).
 
 ## Decoder conventions
-- 1090: poll dump1090-fa aircraft.json → parse → upsert into `traffic.Store`.
+- 1090: consume dump1090-fa `--net-stratux-port` JSON stream → parse → upsert into `traffic.Store`.
 - 978: NDJSON traffic over TCP; raw uplink lines → `ParseDump978RawUplinkLine` → relay as GDL90 uplink (0x07).
 - Config changes should go through `config.DefaultAndValidate()`.
 

@@ -75,18 +75,7 @@ func NewStore(cfg StoreConfig) *Store {
 }
 
 func (s *Store) Upsert(nowUTC time.Time, t gdl90.Traffic) {
-	if s == nil {
-		return
-	}
-	if nowUTC.IsZero() {
-		nowUTC = time.Now().UTC()
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.targets[t.ICAO] = target{traffic: t, seenAt: nowUTC.UTC()}
-	s.evictIfNeededLocked()
+	s.Apply(nowUTC, NewTrafficUpdateFromTraffic(t))
 }
 
 func (s *Store) UpsertMany(nowUTC time.Time, targets []gdl90.Traffic) {
@@ -96,23 +85,59 @@ func (s *Store) UpsertMany(nowUTC time.Time, targets []gdl90.Traffic) {
 	if len(targets) == 0 {
 		return
 	}
+	for _, t := range targets {
+		if t.LatDeg == 0 && t.LonDeg == 0 {
+			continue
+		}
+		s.Apply(nowUTC, NewTrafficUpdateFromTraffic(t))
+	}
+}
+
+// Apply merges the provided traffic/metadata update into the store, keeping
+// prior field values when the latest update omitted them.
+func (s *Store) Apply(nowUTC time.Time, update TrafficUpdate) {
+	if s == nil {
+		return
+	}
+	if update.Empty() {
+		return
+	}
+	upd, ok := update.withDefaults()
+	if !ok {
+		return
+	}
 	if nowUTC.IsZero() {
 		nowUTC = time.Now().UTC()
 	}
-
 	nowUTC = nowUTC.UTC()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	for _, t := range targets {
-		// Skip obviously invalid targets.
-		if t.LatDeg == 0 && t.LonDeg == 0 {
-			continue
+	tgt, exists := s.targets[upd.ICAO]
+	prevTraffic := tgt.traffic
+
+	if upd.Traffic != nil {
+		traffic := *upd.Traffic
+		if exists {
+			s.carryForwardMetadata(&traffic, prevTraffic, upd.Meta)
 		}
-		s.targets[t.ICAO] = target{traffic: t, seenAt: nowUTC}
+		tgt.traffic = traffic
+		tgt.seenAt = nowUTC
+		exists = true
 	}
-	s.evictIfNeededLocked()
+
+	if exists && !upd.Meta.Empty() {
+		tgt.traffic = applyMetadata(tgt.traffic, upd.Meta)
+	}
+
+	if upd.Traffic != nil || (exists && !upd.Meta.Empty()) {
+		s.targets[upd.ICAO] = tgt
+	}
+
+	if upd.Traffic != nil {
+		s.evictIfNeededLocked()
+	}
 }
 
 func (s *Store) Snapshot(nowUTC time.Time) []gdl90.Traffic {
@@ -153,4 +178,50 @@ func (s *Store) Snapshot(nowUTC time.Time) []gdl90.Traffic {
 	})
 
 	return out
+}
+
+func (s *Store) carryForwardMetadata(dst *gdl90.Traffic, prev gdl90.Traffic, meta MetadataUpdate) {
+	if dst == nil {
+		return
+	}
+	if !meta.HasTail {
+		dst.Tail = prev.Tail
+	}
+	if !meta.HasGround {
+		dst.GroundKt = prev.GroundKt
+	}
+	if !meta.HasTrack {
+		dst.TrackDeg = prev.TrackDeg
+	}
+	if !meta.HasVvel {
+		dst.VvelFpm = prev.VvelFpm
+	}
+	if !meta.HasAlt {
+		dst.AltFeet = prev.AltFeet
+	}
+	if !meta.HasOnGround {
+		dst.OnGround = prev.OnGround
+	}
+}
+
+func applyMetadata(t gdl90.Traffic, meta MetadataUpdate) gdl90.Traffic {
+	if meta.HasTail {
+		t.Tail = meta.Tail
+	}
+	if meta.HasGround {
+		t.GroundKt = meta.GroundKt
+	}
+	if meta.HasTrack {
+		t.TrackDeg = meta.TrackDeg
+	}
+	if meta.HasVvel {
+		t.VvelFpm = meta.VvelFpm
+	}
+	if meta.HasAlt {
+		t.AltFeet = meta.AltFeet
+	}
+	if meta.HasOnGround {
+		t.OnGround = meta.OnGround
+	}
+	return t
 }

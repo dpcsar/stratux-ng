@@ -65,12 +65,10 @@ type DecoderStatusSnapshot struct {
 	Command      string `json:"command,omitempty"`
 	JSONEndpoint string `json:"json_endpoint,omitempty"`
 	RawEndpoint  string `json:"raw_endpoint,omitempty"`
-	JSONFile     string `json:"json_file,omitempty"`
 
-	Supervisor decoder.Snapshot          `json:"supervisor"`
-	Stream     *decoder.NDJSONSnapshot   `json:"stream,omitempty"`
-	RawStream  *decoder.LineSnapshot     `json:"raw_stream,omitempty"`
-	File       *decoder.JSONFileSnapshot `json:"file,omitempty"`
+	Supervisor decoder.Snapshot        `json:"supervisor"`
+	Stream     *decoder.NDJSONSnapshot `json:"stream,omitempty"`
+	RawStream  *decoder.LineSnapshot   `json:"raw_stream,omitempty"`
 }
 
 func (s *Status) SetADSB1090Decoder(_ time.Time, snap DecoderStatusSnapshot) {
