@@ -348,210 +348,436 @@
       </section>
 
       <section id="view-traffic" class="view" aria-label="Traffic">
-        <h2>Traffic</h2>
-        <p class="muted">Combined traffic targets plus per-band decoder ingest health.</p>
-
-        <div class="st-grid" aria-label="Traffic sections">
-          <div class="st-section" aria-label="Targets">
-            <div class="st-head">Targets</div>
-            <div class="st-row"><div class="st-key">Count</div><div id="tr-count" class="st-val"></div></div>
-            <div class="st-row st-row-multiline"><div class="st-key">List</div><pre id="tr-list" class="st-pre" aria-label="Traffic target list"></pre></div>
+        <div class="traffic-panel status-panel" aria-label="Traffic pipeline overview">
+          <div class="status-panel-head">
+            <div class="status-panel-lead">
+              <div class="status-panel-title">Traffic</div>
+              <div class="status-panel-subtitle muted">GDL90 output plus decoder feed health</div>
+            </div>
+            <span id="tr-gdl90-state" class="status-badge status-badge-muted" role="status">--</span>
           </div>
 
-          <div class="st-section" aria-label="1090 MHz (ADSB)">
-            <div class="st-head">1090 MHz (ADSB)</div>
-            <div class="st-row st-row-multiline"><div class="st-key">Status</div><pre id="tr-adsb1090" class="st-pre" aria-label="ADSB 1090 status"></pre></div>
-          </div>
+          <div class="status-panel-body traffic-panel-body" aria-label="Traffic sections">
+            <div class="traffic-metrics-label traffic-metrics-label-main">GDL90 Output</div>
+            <div class="status-metrics traffic-summary-metrics">
+              <div class="status-metric">
+                <span class="status-label">Destination</span>
+                <span id="tr-gdl90-dest" class="status-value">--</span>
+              </div>
+              <div class="status-metric">
+                <span class="status-label">Interval</span>
+                <span id="tr-gdl90-interval" class="status-value">--</span>
+              </div>
+              <div class="status-metric">
+                <span class="status-label">Frames Sent</span>
+                <span id="tr-gdl90-frames" class="status-value">--</span>
+              </div>
+              <div class="status-metric">
+                <span class="status-label">Active Targets</span>
+                <span id="tr-gdl90-targets" class="status-value">--</span>
+              </div>
+            </div>
 
-          <div class="st-section" aria-label="978 MHz (UAT)">
-            <div class="st-head">978 MHz (UAT)</div>
-            <div class="st-row st-row-multiline"><div class="st-key">Status</div><pre id="tr-uat978" class="st-pre" aria-label="UAT 978 status"></pre></div>
+            <div class="traffic-table" aria-label="Traffic targets list">
+              <div class="traffic-table-headline">
+                <div class="traffic-label">Targets</div>
+                <div class="traffic-table-controls" role="group" aria-label="Toggle traffic columns">
+                  <label class="traffic-toggle">
+                    <input type="checkbox" data-traffic-col="alt" data-traffic-col-toggle checked />
+                    <span>Altitude</span>
+                  </label>
+                  <label class="traffic-toggle">
+                    <input type="checkbox" data-traffic-col="gs" data-traffic-col-toggle checked />
+                    <span>Ground Speed</span>
+                  </label>
+                  <label class="traffic-toggle">
+                    <input type="checkbox" data-traffic-col="track" data-traffic-col-toggle checked />
+                    <span>Track</span>
+                  </label>
+                  <label class="traffic-toggle">
+                    <input type="checkbox" data-traffic-col="vs" data-traffic-col-toggle checked />
+                    <span>Vertical Speed</span>
+                  </label>
+                  <label class="traffic-toggle">
+                    <input type="checkbox" data-traffic-col="age" data-traffic-col-toggle checked />
+                    <span>Age</span>
+                  </label>
+                  <label class="traffic-toggle">
+                    <input type="checkbox" data-traffic-col="flags" data-traffic-col-toggle checked />
+                    <span>Flags</span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="traffic-table-wrap">
+                <table class="traffic-table-grid" aria-label="Traffic targets table">
+                  <thead>
+                    <tr id="tr-gdl90-table-head"></tr>
+                  </thead>
+                  <tbody id="tr-gdl90-table-body"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="traffic-metrics-label traffic-metrics-label-decoder">Decoder Feeds</div>
+            <div class="status-sdr-grid traffic-sdr-grid" aria-label="Decoder sections">
+              <div class="status-sdr-card traffic-feed-card" aria-label="dump1090 feed details">
+                <div class="status-sdr-title">
+                  <span>1090 MHz</span>
+                  <span class="status-sdr-tag">dump1090</span>
+                </div>
+                <div class="traffic-feed-pill">
+                  <span class="status-label">State</span>
+                  <span id="tr-adsb-badge" class="status-badge status-badge-muted status-badge-compact" role="status">--</span>
+                </div>
+                <div class="traffic-feed-row">
+                  <span class="traffic-feed-key">Radio</span>
+                  <span class="traffic-feed-val"><span id="tr-adsb-radio" class="status-indicator status-indicator-muted" role="img" aria-label="1090 radio state unknown"></span></span>
+                </div>
+                <div class="traffic-feed-row">
+                  <span class="traffic-feed-key">Serial Tag</span>
+                  <span id="tr-adsb-serial" class="traffic-feed-val">--</span>
+                </div>
+                <div class="traffic-feed-row">
+                  <span class="traffic-feed-key">Input</span>
+                  <span id="tr-adsb-input" class="traffic-feed-val">--</span>
+                </div>
+                <div class="traffic-feed-row">
+                  <span class="traffic-feed-key">Supervisor</span>
+                  <span id="tr-adsb-supervisor" class="traffic-feed-val">--</span>
+                </div>
+                <div class="traffic-feed-grid" aria-label="dump1090 feeds">
+                  <div>
+                    <div class="traffic-feed-label">NDJSON Stream</div>
+                    <div id="tr-adsb-stream" class="traffic-feed-value">--</div>
+                  </div>
+                </div>
+                <div class="traffic-feed-note" id="tr-adsb-error" aria-live="polite"></div>
+              </div>
+
+              <div class="status-sdr-card traffic-feed-card" aria-label="dump978 feed details">
+                <div class="status-sdr-title">
+                  <span>978 MHz</span>
+                  <span class="status-sdr-tag">dump978</span>
+                </div>
+                <div class="traffic-feed-pill">
+                  <span class="status-label">State</span>
+                  <span id="tr-uat-badge" class="status-badge status-badge-muted status-badge-compact" role="status">--</span>
+                </div>
+                <div class="traffic-feed-row">
+                  <span class="traffic-feed-key">Radio</span>
+                  <span class="traffic-feed-val"><span id="tr-uat-radio" class="status-indicator status-indicator-muted" role="img" aria-label="978 radio state unknown"></span></span>
+                </div>
+                <div class="traffic-feed-row">
+                  <span class="traffic-feed-key">Serial Tag</span>
+                  <span id="tr-uat-serial" class="traffic-feed-val">--</span>
+                </div>
+                <div class="traffic-feed-row">
+                  <span class="traffic-feed-key">Input</span>
+                  <span id="tr-uat-input" class="traffic-feed-val">--</span>
+                </div>
+                <div class="traffic-feed-row">
+                  <span class="traffic-feed-key">Supervisor</span>
+                  <span id="tr-uat-supervisor" class="traffic-feed-val">--</span>
+                </div>
+                <div class="traffic-feed-grid" aria-label="dump978 feeds">
+                  <div>
+                    <div class="traffic-feed-label">NDJSON Stream</div>
+                    <div id="tr-uat-stream" class="traffic-feed-value">--</div>
+                  </div>
+                  <div>
+                    <div class="traffic-feed-label">Raw Stream</div>
+                    <div id="tr-uat-raw" class="traffic-feed-value">--</div>
+                  </div>
+                </div>
+                <div class="traffic-feed-note" id="tr-uat-error" aria-live="polite"></div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
       <section id="view-weather" class="view" aria-label="Weather">
-        <h2>Weather</h2>
-        <p class="muted">Stratux-NG relays 978 UAT uplinks (FIS-B) to EFBs; this UI shows relay health (not decoded products).</p>
+        <div class="status-panel status-panel-utility" aria-label="Weather status">
+          <div class="status-panel-head">
+            <div class="status-panel-lead">
+              <div class="status-panel-title">Weather</div>
+              <div class="status-panel-subtitle muted">Stratux-NG relays 978 UAT uplinks (FIS-B) to EFBs; this UI shows relay health (not decoded products).</div>
+            </div>
+          </div>
 
-        <div class="st-grid" aria-label="Weather sections">
-          <div class="st-section" aria-label="978 Uplink Relay">
-            <div class="st-head">978 Uplink Relay</div>
-            <div class="st-row"><div class="st-key">Raw endpoint</div><div id="wx-raw-endpoint" class="st-val"></div></div>
-            <div class="st-row"><div class="st-key">State</div><div id="wx-raw-state" class="st-val"></div></div>
-            <div class="st-row"><div class="st-key">Lines</div><div id="wx-raw-lines" class="st-val"></div></div>
-            <div class="st-row"><div class="st-key">Last seen (UTC)</div><div id="wx-raw-last-seen" class="st-val"></div></div>
-            <div class="st-row"><div class="st-key">Last error</div><div id="wx-raw-error" class="st-val"></div></div>
+          <div class="status-panel-body">
+            <div class="panel-grid" aria-label="Weather sections">
+              <div class="panel-card" aria-label="978 Uplink Relay">
+                <div class="panel-card-head">
+                  <div class="panel-card-title">978 Uplink Relay</div>
+                  <div class="panel-card-subtitle">Health of the raw FIS-B stream.</div>
+                </div>
+                <div class="panel-card-body">
+                  <div class="panel-kv">
+                    <div class="panel-kv-row">
+                      <span class="panel-kv-key">Raw Endpoint</span>
+                      <span id="wx-raw-endpoint" class="panel-kv-val">--</span>
+                    </div>
+                    <div class="panel-kv-row">
+                      <span class="panel-kv-key">State</span>
+                      <span id="wx-raw-state" class="panel-kv-val">--</span>
+                    </div>
+                    <div class="panel-kv-row">
+                      <span class="panel-kv-key">Lines</span>
+                      <span id="wx-raw-lines" class="panel-kv-val">--</span>
+                    </div>
+                    <div class="panel-kv-row">
+                      <span class="panel-kv-key">Last Seen (UTC)</span>
+                      <span id="wx-raw-last-seen" class="panel-kv-val">--</span>
+                    </div>
+                    <div class="panel-kv-row">
+                      <span class="panel-kv-key">Last Error</span>
+                      <span id="wx-raw-error" class="panel-kv-val">--</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
       <section id="view-towers" class="view" aria-label="Towers">
-        <h2>Towers</h2>
-        <p class="muted">Upstream Stratux shows nearby UAT ground stations (“towers”). Stratux-NG does not decode tower info yet.</p>
+        <div class="status-panel status-panel-utility" aria-label="Towers status">
+          <div class="status-panel-head">
+            <div class="status-panel-lead">
+              <div class="status-panel-title">Towers</div>
+              <div class="status-panel-subtitle muted">Upstream Stratux shows nearby UAT ground stations; Stratux-NG will surface tower metadata when the decoder lands.</div>
+            </div>
+          </div>
 
-        <div class="st-grid" aria-label="Towers sections">
-          <div class="st-section" aria-label="Notes">
-            <div class="st-head">Notes</div>
-            <div class="st-body">
-              <p class="muted">Today, the closest proxy is the 978 raw uplink stream health shown on the Weather page. Implementing a real Towers page requires decoding ground-station metadata from UAT uplinks.</p>
+          <div class="status-panel-body">
+            <div class="panel-grid">
+              <div class="panel-card" aria-label="Notes">
+                <div class="panel-card-head">
+                  <div class="panel-card-title">Notes</div>
+                  <div class="panel-card-subtitle">Current limitations</div>
+                </div>
+                <div class="panel-card-body">
+                  <div class="panel-kv">
+                    <div class="panel-kv-row">
+                      <span class="panel-kv-key">978 MHz</span>
+                      <span class="panel-kv-val">Use the Weather page to monitor raw uplink health; tower metadata is not yet decoded.</span>
+                    </div>
+                    <div class="panel-kv-row">
+                      <span class="panel-kv-key">1090 MHz</span>
+                      <span class="panel-kv-val">Tower discovery will return once Stratux-NG parses ground-station traffic.</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
       <section id="view-settings" class="view" aria-label="Settings">
-        <h2>Settings</h2>
-        <p class="muted">Edits are saved to your YAML config and applied immediately.</p>
+        <div class="status-panel status-panel-form" aria-label="Settings form">
+          <div class="status-panel-head">
+            <div class="status-panel-lead">
+              <div class="status-panel-title">Settings</div>
+              <div class="status-panel-subtitle muted">Edits are saved to your YAML config and applied immediately.</div>
+            </div>
+          </div>
 
-        <div class="st-grid" aria-label="Settings sections">
-          <form id="settings-form" class="st-section st-form" autocomplete="off">
-            <div class="st-head">Configuration</div>
-
-            <div class="st-subhead">Web UI only (display)</div>
-            <div class="st-body">
-              <p class="muted">These settings affect only this web UI display (saved in your browser). They do not change emitted GDL90 data.</p>
-            </div>
-
-            <div class="st-row st-field">
-              <label class="st-key" for="ui-vsi-traffic-deadband">Traffic vertical speed deadband (fpm)</label>
-              <input id="ui-vsi-traffic-deadband" type="number" min="0" step="1" placeholder="50" />
-            </div>
-
-            <div class="st-row st-field">
-              <label class="st-key" for="ui-vsi-traffic-rounding">Traffic vertical speed rounding (fpm)</label>
-              <input id="ui-vsi-traffic-rounding" type="number" min="0" step="1" placeholder="10" />
-            </div>
-
-            <div class="st-row st-field">
-              <label class="st-key" for="ui-vsi-ownship-rounding">Ownship vertical speed rounding (fpm)</label>
-              <input id="ui-vsi-ownship-rounding" type="number" min="0" step="1" placeholder="10" />
-            </div>
-
-            <div class="st-body">
-              <span id="ui-vsi-msg" class="muted"></span>
-            </div>
-
-            <!-- GDL90 destination is managed automatically by AP settings, but preserved in backend -->
-
-            <div class="st-row st-field">
-              <label class="st-key" for="set-interval">Interval (e.g. 1s)</label>
-              <input id="set-interval" type="text" placeholder="1s" />
-            </div>
-
-            <div class="st-row st-field">
-              <label class="st-key" for="set-ownship-icao">Ownship ICAO (hex)</label>
-              <input id="set-ownship-icao" type="text" placeholder="F00000" />
-            </div>
-
-            <div class="st-row st-field">
-              <label class="st-key" for="set-ownship-callsign">Ownship callsign</label>
-              <input id="set-ownship-callsign" type="text" placeholder="STRATUX" />
-            </div>
-
-            <div class="st-actions">
-              <button id="btn-save" type="submit" class="primary">Save</button>
-              <span id="save-msg" class="muted"></span>
-            </div>
-
-            <div class="st-subhead">Wi-Fi Access Point</div>
-            <div class="st-row st-field">
-              <label class="st-key" for="set-wifi-ap-ssid">SSID</label>
-              <input id="set-wifi-ap-ssid" type="text" placeholder="stratux" />
-            </div>
-            <div class="st-row st-field">
-              <label class="st-key" for="set-wifi-ap-pass">Password</label>
-              <input id="set-wifi-ap-pass" type="password" placeholder="(optional)" />
-            </div>
-            <div class="st-row st-field">
-              <label class="st-key" for="set-wifi-ap-ip">IP Address</label>
-              <input id="set-wifi-ap-ip" type="text" placeholder="192.168.10.1" />
-            </div>
-            <div class="st-actions">
-              <button id="btn-save-ap" type="button" class="primary">Update AP</button>
-              <span id="save-ap-msg" class="muted"></span>
-            </div>
-
-            <div class="st-subhead">Wi-Fi Client</div>
-            <div class="st-row st-field">
-              <label class="st-key" for="set-wifi-client-ssid">SSID</label>
-              <input id="set-wifi-client-ssid" type="text" placeholder="Hotspot Name" />
-            </div>
-            <div class="st-row st-field">
-              <label class="st-key" for="set-wifi-client-pass">Password</label>
-              <input id="set-wifi-client-pass" type="password" placeholder="Password" />
-            </div>
-            <div class="st-body">
-              <div class="st-row">
-                <span class="st-key">Status:</span>
-                <span id="st-wifi-client-state" class="st-val">--</span>
+          <div class="status-panel-body">
+            <form id="settings-form" class="panel-form" autocomplete="off">
+              <div class="panel-form-group" aria-label="Web UI display settings">
+                <div class="panel-card-head">
+                  <div class="panel-card-title">Web UI Only (Display)</div>
+                  <div class="panel-card-subtitle">Saved in this browser only; does not change emitted GDL90 data.</div>
+                </div>
+                <div class="panel-card-body">
+                  <div class="panel-form-row">
+                    <label for="ui-vsi-traffic-deadband">Traffic vertical speed deadband (fpm)</label>
+                    <input id="ui-vsi-traffic-deadband" type="number" min="0" step="1" placeholder="50" />
+                  </div>
+                  <div class="panel-form-row">
+                    <label for="ui-vsi-traffic-rounding">Traffic vertical speed rounding (fpm)</label>
+                    <input id="ui-vsi-traffic-rounding" type="number" min="0" step="1" placeholder="10" />
+                  </div>
+                  <div class="panel-form-row">
+                    <label for="ui-vsi-ownship-rounding">Ownship vertical speed rounding (fpm)</label>
+                    <input id="ui-vsi-ownship-rounding" type="number" min="0" step="1" placeholder="10" />
+                  </div>
+                  <span id="ui-vsi-msg" class="panel-form-msg muted"></span>
+                </div>
               </div>
-              <div class="st-row">
-                <span class="st-key">IP:</span>
-                <span id="st-wifi-client-ip" class="st-val">--</span>
+
+              <div class="panel-form-group" aria-label="Configuration">
+                <div class="panel-card-head">
+                  <div class="panel-card-title">Configuration</div>
+                  <div class="panel-card-subtitle">Persisted in Stratux-NG config.</div>
+                </div>
+                <div class="panel-card-body">
+                  <div class="panel-form-row">
+                    <label for="set-interval">Interval (e.g. 1s)</label>
+                    <input id="set-interval" type="text" placeholder="1s" />
+                  </div>
+                  <div class="panel-form-row">
+                    <label for="set-ownship-icao">Ownship ICAO (hex)</label>
+                    <input id="set-ownship-icao" type="text" placeholder="F00000" />
+                  </div>
+                  <div class="panel-form-row">
+                    <label for="set-ownship-callsign">Ownship callsign</label>
+                    <input id="set-ownship-callsign" type="text" placeholder="STRATUX" />
+                  </div>
+                  <div class="panel-actions">
+                    <button id="btn-save" type="submit" class="primary">Save</button>
+                    <span id="save-msg" class="panel-form-msg muted"></span>
+                  </div>
+                </div>
               </div>
-            </div>
-            <div class="st-actions">
-              <button id="btn-save-client" type="button" class="primary">Connect Client</button>
-              <span id="save-client-msg" class="muted"></span>
-            </div>
 
-            <div class="st-subhead">AHRS calibration</div>
+              <div class="panel-form-group" aria-label="Wi-Fi access point">
+                <div class="panel-card-head">
+                  <div class="panel-card-title">Wi-Fi Access Point</div>
+                  <div class="panel-card-subtitle">SSID, password, and management IP for Stratux-NG AP mode.</div>
+                </div>
+                <div class="panel-card-body">
+                  <div class="panel-form-row">
+                    <label for="set-wifi-ap-ssid">SSID</label>
+                    <input id="set-wifi-ap-ssid" type="text" placeholder="stratux" />
+                  </div>
+                  <div class="panel-form-row">
+                    <label for="set-wifi-ap-pass">Password</label>
+                    <input id="set-wifi-ap-pass" type="password" placeholder="(optional)" />
+                  </div>
+                  <div class="panel-form-row">
+                    <label for="set-wifi-ap-ip">IP Address</label>
+                    <input id="set-wifi-ap-ip" type="text" placeholder="192.168.10.1" />
+                  </div>
+                  <div class="panel-actions">
+                    <button id="btn-save-ap" type="button" class="primary">Update AP</button>
+                    <span id="save-ap-msg" class="panel-form-msg muted"></span>
+                  </div>
+                </div>
+              </div>
 
-            <div class="st-body st-buttons">
-              <button id="btn-ahrs-level" type="button">Set Level</button>
-              <button id="btn-ahrs-zero-drift" type="button">Zero Drift</button>
-              <button id="btn-ahrs-orient-forward" type="button">Set Forward (hold so nose-end points up)</button>
-              <button id="btn-ahrs-orient-done" type="button">Finish Orientation (hold level, mounted)</button>
-            </div>
+              <div class="panel-form-group" aria-label="Wi-Fi client">
+                <div class="panel-card-head">
+                  <div class="panel-card-title">Wi-Fi Client</div>
+                  <div class="panel-card-subtitle">Connect Stratux-NG to an upstream hotspot.</div>
+                </div>
+                <div class="panel-card-body">
+                  <div class="panel-form-row">
+                    <label for="set-wifi-client-ssid">SSID</label>
+                    <input id="set-wifi-client-ssid" type="text" placeholder="Hotspot Name" />
+                  </div>
+                  <div class="panel-form-row">
+                    <label for="set-wifi-client-pass">Password</label>
+                    <input id="set-wifi-client-pass" type="password" placeholder="Password" />
+                  </div>
+                  <div class="panel-kv panel-form-kv">
+                    <div class="panel-kv-row">
+                      <span class="panel-kv-key">Status</span>
+                      <span id="st-wifi-client-state" class="panel-kv-val">--</span>
+                    </div>
+                    <div class="panel-kv-row">
+                      <span class="panel-kv-key">IP</span>
+                      <span id="st-wifi-client-ip" class="panel-kv-val">--</span>
+                    </div>
+                  </div>
+                  <div class="panel-actions">
+                    <button id="btn-save-client" type="button" class="primary">Connect Client</button>
+                    <span id="save-client-msg" class="panel-form-msg muted"></span>
+                  </div>
+                </div>
+              </div>
 
-            <div class="st-body">
-              <span id="ahrs-msg" class="muted"></span>
-            </div>
-          </form>
+              <div class="panel-form-group" aria-label="AHRS calibration">
+                <div class="panel-card-head">
+                  <div class="panel-card-title">AHRS Calibration</div>
+                  <div class="panel-card-subtitle">Commands affect the connected AHRS immediately.</div>
+                </div>
+                <div class="panel-card-body">
+                  <div class="panel-button-row">
+                    <button id="btn-ahrs-level" type="button">Set Level</button>
+                    <button id="btn-ahrs-zero-drift" type="button">Zero Drift</button>
+                    <button id="btn-ahrs-orient-forward" type="button">Set Forward (hold so nose-end points up)</button>
+                    <button id="btn-ahrs-orient-done" type="button">Finish Orientation (hold level, mounted)</button>
+                  </div>
+                  <span id="ahrs-msg" class="panel-form-msg muted"></span>
+                </div>
+              </div>
+            </form>
+          </div>
         </div>
       </section>
 
       <section id="view-logs" class="view" aria-label="Logs">
-        <h2>Logs</h2>
-        <p class="muted">Recent Stratux-NG logs from <a href="/api/logs?format=text">/api/logs</a>.</p>
-
-        <div class="st-grid" aria-label="Logs sections">
-          <div class="st-section" aria-label="Log controls">
-            <div class="st-head">Controls</div>
-            <div class="st-row st-field">
-              <label class="st-key" for="logs-tail">Tail</label>
-              <select id="logs-tail">
-                <option value="200" selected>200 lines</option>
-                <option value="500">500 lines</option>
-                <option value="2000">2000 lines</option>
-              </select>
-            </div>
-            <div class="st-actions">
-              <button id="logs-refresh" type="button" class="primary">Refresh</button>
-              <span id="logs-meta" class="muted"></span>
+        <div class="status-panel status-panel-utility" aria-label="Logs view">
+          <div class="status-panel-head">
+            <div class="status-panel-lead">
+              <div class="status-panel-title">Logs</div>
+              <div class="status-panel-subtitle muted">Recent Stratux-NG logs from <a href="/api/logs?format=text">/api/logs</a>.</div>
             </div>
           </div>
 
-          <div class="st-section st-wide" aria-label="Log output">
-            <div class="st-head">Output</div>
-            <div class="st-body">
-              <pre id="logs-text" class="st-pre">Loading…</pre>
+          <div class="status-panel-body">
+            <div class="panel-grid">
+              <div class="panel-card" aria-label="Log controls">
+                <div class="panel-card-head">
+                  <div class="panel-card-title">Controls</div>
+                  <div class="panel-card-subtitle">Select a tail length and refresh.</div>
+                </div>
+                <div class="panel-card-body">
+                  <div class="panel-form-row">
+                    <label for="logs-tail">Tail</label>
+                    <select id="logs-tail">
+                      <option value="200" selected>200 lines</option>
+                      <option value="500">500 lines</option>
+                      <option value="2000">2000 lines</option>
+                    </select>
+                  </div>
+                  <div class="panel-actions">
+                    <button id="logs-refresh" type="button" class="primary">Refresh</button>
+                    <span id="logs-meta" class="panel-form-msg muted"></span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="panel-card panel-card-wide" aria-label="Log output">
+                <div class="panel-card-head">
+                  <div class="panel-card-title">Output</div>
+                  <div class="panel-card-subtitle">Latest lines streamed from Stratux-NG.</div>
+                </div>
+                <div class="panel-card-body">
+                  <pre id="logs-text" class="panel-pre">Loading…</pre>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
       <section id="view-about" class="view" aria-label="About">
-        <h2>About</h2>
-        <p class="muted">Build/runtime details and diagnostics.</p>
+        <div class="status-panel status-panel-utility" aria-label="About view">
+          <div class="status-panel-head">
+            <div class="status-panel-lead">
+              <div class="status-panel-title">About</div>
+              <div class="status-panel-subtitle muted">Build/runtime details and diagnostics.</div>
+            </div>
+          </div>
 
-        <div class="st-grid" aria-label="About sections">
-          <div class="st-section" aria-label="Raw diagnostics">
-            <div class="st-head">Diagnostics</div>
-            <div class="st-body">
-              <p class="muted">Raw build/runtime details:</p>
-              <p><a href="/api/about">/api/about</a></p>
+          <div class="status-panel-body">
+            <div class="panel-grid">
+              <div class="panel-card" aria-label="Diagnostics">
+                <div class="panel-card-head">
+                  <div class="panel-card-title">Diagnostics</div>
+                  <div class="panel-card-subtitle">Raw build/runtime JSON.</div>
+                </div>
+                <div class="panel-card-body">
+                  <p class="muted">Use the API endpoint to pull the exact Stratux-NG build info, git hash, and runtime wiring used for debugging.</p>
+                  <a class="panel-link" href="/api/about">/api/about</a>
+                </div>
+              </div>
             </div>
           </div>
         </div>

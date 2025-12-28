@@ -128,10 +128,31 @@
   const attRightTapeCtx = attRightTape ? attRightTape.getContext('2d') : null;
 
   // Traffic / Weather pages.
-  const trCount = document.getElementById('tr-count');
-  const trList = document.getElementById('tr-list');
-  const trAdsb1090 = document.getElementById('tr-adsb1090');
-  const trUat978 = document.getElementById('tr-uat978');
+  const trGdl90State = document.getElementById('tr-gdl90-state');
+  const trGdl90Dest = document.getElementById('tr-gdl90-dest');
+  const trGdl90Interval = document.getElementById('tr-gdl90-interval');
+  const trGdl90Frames = document.getElementById('tr-gdl90-frames');
+  const trGdl90Targets = document.getElementById('tr-gdl90-targets');
+  const trGdl90TableHead = document.getElementById('tr-gdl90-table-head');
+  const trGdl90TableBody = document.getElementById('tr-gdl90-table-body');
+  const trafficColumnToggleInputs = document.querySelectorAll('[data-traffic-col-toggle]');
+
+  const trAdsbBadge = document.getElementById('tr-adsb-badge');
+  const trAdsbRadio = document.getElementById('tr-adsb-radio');
+  const trAdsbSerial = document.getElementById('tr-adsb-serial');
+  const trAdsbInput = document.getElementById('tr-adsb-input');
+  const trAdsbSupervisor = document.getElementById('tr-adsb-supervisor');
+  const trAdsbStream = document.getElementById('tr-adsb-stream');
+  const trAdsbError = document.getElementById('tr-adsb-error');
+
+  const trUatBadge = document.getElementById('tr-uat-badge');
+  const trUatRadio = document.getElementById('tr-uat-radio');
+  const trUatSerial = document.getElementById('tr-uat-serial');
+  const trUatInput = document.getElementById('tr-uat-input');
+  const trUatSupervisor = document.getElementById('tr-uat-supervisor');
+  const trUatStream = document.getElementById('tr-uat-stream');
+  const trUatRaw = document.getElementById('tr-uat-raw');
+  const trUatError = document.getElementById('tr-uat-error');
 
   const wxRawEndpoint = document.getElementById('wx-raw-endpoint');
   const wxRawState = document.getElementById('wx-raw-state');
@@ -194,6 +215,8 @@
     vsiTrafficDeadbandFpm: 'stratuxng.webui.vsi.traffic_deadband_fpm',
     vsiTrafficRoundingFpm: 'stratuxng.webui.vsi.traffic_rounding_fpm',
     vsiOwnshipRoundingFpm: 'stratuxng.webui.vsi.ownship_rounding_fpm',
+
+    trafficColumnPrefix: 'stratuxng.webui.traffic.col.',
   };
 
   const defaultVsiUi = {
@@ -205,6 +228,18 @@
   let vsiTrafficDeadbandFpm = defaultVsiUi.trafficDeadbandFpm;
   let vsiTrafficRoundingFpm = defaultVsiUi.trafficRoundingFpm;
   let vsiOwnshipRoundingFpm = defaultVsiUi.ownshipRoundingFpm;
+
+  const trafficColumns = [
+    { key: 'target', label: 'Target', required: true },
+    { key: 'alt', label: 'Altitude', defaultVisible: true },
+    { key: 'gs', label: 'Ground Speed', defaultVisible: true },
+    { key: 'track', label: 'Track', defaultVisible: true },
+    { key: 'vs', label: 'Vertical Speed', defaultVisible: true },
+    { key: 'age', label: 'Age', defaultVisible: true },
+    { key: 'flags', label: 'Flags', defaultVisible: true },
+  ];
+
+  const trafficColumnVisibility = new Map();
 
   function lsGetNumber(key, fallback) {
     try {
@@ -471,6 +506,175 @@
     const label = state === true ? 'on' : state === false ? 'off' : 'unknown';
     const prefix = String(labelPrefix || 'State').trim();
     el.setAttribute('aria-label', prefix ? `${prefix} ${label}` : label);
+  }
+
+  function setTrafficBadge(el, label, tone = 'muted') {
+    if (!el) return;
+    const cls = tone === 'good' ? 'status-badge-good' : tone === 'bad' ? 'status-badge-bad' : 'status-badge-muted';
+    el.textContent = label || '--';
+    el.classList.remove('status-badge-good', 'status-badge-bad', 'status-badge-muted');
+    el.classList.add(cls);
+  }
+
+  function setTrafficFeedNote(el, text) {
+    if (!el) return;
+    const msg = String(text || '').trim();
+    el.textContent = msg;
+    el.classList.toggle('traffic-feed-note-active', !!msg);
+  }
+
+  function setTrafficFeedCard(snapshot, elements, indicatorLabel) {
+    const snap = snapshot && typeof snapshot === 'object' ? snapshot : {};
+    if (elements?.radio) {
+      const ariaLabel = indicatorLabel ? `${indicatorLabel} state` : 'Radio state';
+      const state = snap.enabled === true ? true : snap.enabled === false ? false : null;
+      setIndicator(elements.radio, state, ariaLabel);
+    }
+    if (elements?.badge) {
+      const supState = String(snap?.supervisor?.state || '').trim();
+      const hasErr = !!(snap?.last_error || snap?.supervisor?.last_error);
+      if (hasErr) {
+        setTrafficBadge(elements.badge, 'Error', 'bad');
+      } else if (supState) {
+        const tone = supState.toLowerCase() === 'running' ? 'good' : 'muted';
+        setTrafficBadge(elements.badge, supState, tone);
+      } else if (snap?.enabled === false) {
+        setTrafficBadge(elements.badge, 'Disabled', 'muted');
+      } else {
+        setTrafficBadge(elements.badge, 'Idle', 'muted');
+      }
+    }
+    if (elements?.serial) setInput(elements.serial, snap.serial_tag || '--');
+    if (elements?.input) setInput(elements.input, summarizeSdrInput(snap));
+    if (elements?.supervisor) setInput(elements.supervisor, summarizeSdrSupervisor(snap.supervisor));
+    if (elements?.stream) setInput(elements.stream, formatSdrFeed(snap.stream) || '--');
+    if (elements?.raw) setInput(elements.raw, formatSdrFeed(snap.raw_stream) || '--');
+    if (elements?.file) setInput(elements.file, formatSdrFeed(snap.file) || '--');
+    if (elements?.error) setTrafficFeedNote(elements.error, snap.last_error || snap.supervisor?.last_error || '');
+  }
+
+  function trafficColumnStorageKey(key) {
+    return `${lsKeys.trafficColumnPrefix || 'stratuxng.webui.traffic.col.'}${String(key || '')}`;
+  }
+
+  function getTrafficColumnDefault(col) {
+    if (!col) return true;
+    if (col.required) return true;
+    return col.defaultVisible !== false;
+  }
+
+  function getVisibleTrafficColumns() {
+    return trafficColumns.filter((col) => col.required || trafficColumnVisibility.get(col.key) !== false);
+  }
+
+  function formatTrafficCellValue(target, key) {
+    const t = target || {};
+    switch (key) {
+      case 'target': {
+        const tail = String(t.tail || '').trim();
+        const icao = String(t.icao || '').trim();
+        if (tail && icao) return `${tail} (${icao})`;
+        return tail || icao || '--';
+      }
+      case 'alt': {
+        const alt = Number(t.alt_feet);
+        return Number.isFinite(alt) ? `${fmtInt(alt)} ft` : '--';
+      }
+      case 'gs': {
+        const gs = Number(t.ground_kt);
+        return Number.isFinite(gs) ? `${fmtNum(gs, 0)} kt` : '--';
+      }
+      case 'track': {
+        const trk = Number(t.track_deg);
+        return Number.isFinite(trk) ? `${fmtNum(trk, 0)}°` : '--';
+      }
+      case 'vs': {
+        const vs = applyTrafficVsiUi(t.vvel_fpm);
+        if (vs == null) return '--';
+        if (vs === 0) return '0 fpm';
+        const arrow = vs > 0 ? '▲' : '▼';
+        return `${fmtInt(Math.abs(vs))} fpm ${arrow}`;
+      }
+      case 'age': {
+        const age = Number(t.age_sec);
+        return Number.isFinite(age) ? `${fmtNum(age, age < 10 ? 1 : 0)} s` : '--';
+      }
+      case 'flags': {
+        const flags = [];
+        if (t.on_ground) flags.push('GND');
+        if (t.extrapolated) flags.push('XTRP');
+        return flags.join(' · ') || '--';
+      }
+      default:
+        return '--';
+    }
+  }
+
+  function renderTrafficTable(trafficList) {
+    if (!trGdl90TableHead || !trGdl90TableBody) return;
+    const cols = getVisibleTrafficColumns();
+    if (!cols.length) {
+      trGdl90TableHead.innerHTML = '';
+      trGdl90TableBody.innerHTML = '<tr class="traffic-table-empty-row"><td>No columns selected</td></tr>';
+      return;
+    }
+
+    trGdl90TableHead.innerHTML = cols
+      .map((col) => `<th scope="col">${escapeHtml(col.label)}</th>`)
+      .join('');
+
+    const rows = [];
+    for (const target of Array.isArray(trafficList) ? trafficList : []) {
+      const cells = cols
+        .map((col) => `<td>${escapeHtml(formatTrafficCellValue(target, col.key))}</td>`)
+        .join('');
+      rows.push(`<tr>${cells}</tr>`);
+    }
+
+    if (!rows.length) {
+      rows.push(`<tr class="traffic-table-empty-row"><td colspan="${cols.length}">No traffic</td></tr>`);
+    }
+
+    trGdl90TableBody.innerHTML = rows.join('');
+  }
+
+  function initTrafficColumnPreferences() {
+    for (const col of trafficColumns) {
+      if (col.required) {
+        trafficColumnVisibility.set(col.key, true);
+        continue;
+      }
+      const raw = lsGetString(trafficColumnStorageKey(col.key), '');
+      if (raw === '0') {
+        trafficColumnVisibility.set(col.key, false);
+      } else if (raw === '1') {
+        trafficColumnVisibility.set(col.key, true);
+      } else {
+        trafficColumnVisibility.set(col.key, getTrafficColumnDefault(col));
+      }
+    }
+
+    Array.from(trafficColumnToggleInputs || []).forEach((input) => {
+      const key = input?.dataset?.trafficCol;
+      if (!key) return;
+      const col = trafficColumns.find((c) => c.key === key);
+      if (!col) return;
+      const visible = col.required ? true : trafficColumnVisibility.get(key) !== false;
+      input.checked = visible;
+      input.disabled = !!col.required;
+      input.addEventListener('change', () => {
+        const next = !!input.checked;
+        if (col.required && !next) {
+          input.checked = true;
+          return;
+        }
+        trafficColumnVisibility.set(key, next);
+        if (!col.required) {
+          lsSet(trafficColumnStorageKey(key), next ? '1' : '0');
+        }
+        renderTrafficTable(Array.isArray(lastTraffic) ? lastTraffic : []);
+      });
+    });
   }
 
   function setChecked(el, value) {
@@ -1606,32 +1810,51 @@
 
     // Traffic page.
     const traffic = Array.isArray(s?.traffic) ? s.traffic : [];
-    setInput(trCount, String(traffic.length));
-    if (trList) {
-      trList.value = traffic
-        .map((t) => {
-          const id = String(t?.tail || t?.icao || '').trim();
-          const alt = t?.alt_feet == null ? '--' : `${String(t.alt_feet)}ft`;
-          const gs = t?.ground_kt == null ? '--' : `${String(t.ground_kt)}kt`;
-          const trk = t?.track_deg == null ? '--' : `${fmtNum(t.track_deg, 0)}°`;
-          const age = t?.age_sec == null ? '' : ` age ${fmtNum(t.age_sec, 1)}s`;
-          const flags = `${t?.on_ground ? ' GND' : ''}${t?.extrapolated ? ' XTRP' : ''}`;
-          return `${id || '--'}  ${alt} ${gs} ${trk}${age}${flags}`.trim();
-        })
-        .filter(Boolean)
-        .join('\n');
-    }
+    setInput(trGdl90Dest, dest || '--');
+    setInput(trGdl90Interval, interval || '--');
+    setInput(trGdl90Frames, frames ? fmtInt(frames) : '0');
+    setInput(trGdl90Targets, traffic.length ? fmtInt(traffic.length) : '0');
 
-    function fmtJSON(obj) {
-      try {
-        return obj ? JSON.stringify(obj, null, 2) : '';
-      } catch {
-        return '';
+    if (trGdl90State) {
+      if (!dest) {
+        setTrafficBadge(trGdl90State, 'Idle', 'muted');
+      } else if (frames > 0 && traffic.length > 0) {
+        setTrafficBadge(trGdl90State, 'Broadcasting', 'good');
+      } else {
+        setTrafficBadge(trGdl90State, 'Armed', 'muted');
       }
     }
 
-    if (trAdsb1090) trAdsb1090.value = fmtJSON(s?.adsb1090);
-    if (trUat978) trUat978.value = fmtJSON(s?.uat978);
+    renderTrafficTable(traffic);
+
+    setTrafficFeedCard(
+      s?.adsb1090,
+      {
+        badge: trAdsbBadge,
+        radio: trAdsbRadio,
+        serial: trAdsbSerial,
+        input: trAdsbInput,
+        supervisor: trAdsbSupervisor,
+        stream: trAdsbStream,
+        error: trAdsbError,
+      },
+      '1090 radio',
+    );
+
+    setTrafficFeedCard(
+      s?.uat978,
+      {
+        badge: trUatBadge,
+        radio: trUatRadio,
+        serial: trUatSerial,
+        input: trUatInput,
+        supervisor: trUatSupervisor,
+        stream: trUatStream,
+        raw: trUatRaw,
+        error: trUatError,
+      },
+      '978 radio',
+    );
 
     // Weather page (relay health, not decoded products).
     const uat = s?.uat978 || {};
@@ -2414,6 +2637,9 @@
   uiVsiTrafficDeadband?.addEventListener('change', persistVsiUiFromInputs);
   uiVsiTrafficRounding?.addEventListener('change', persistVsiUiFromInputs);
   uiVsiOwnshipRounding?.addEventListener('change', persistVsiUiFromInputs);
+
+  initTrafficColumnPreferences();
+  renderTrafficTable([]);
 
   poll();
   setInterval(poll, 1000);
