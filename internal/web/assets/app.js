@@ -2483,7 +2483,10 @@
 
   function updateAttitudeTextFromDisplay() {
     const att = lastSmoothedAttitude || lastAttitude || null;
-    setAttitudeText(att ? { attitude: att } : { attitude: null });
+    setAttitudeText({
+      attitude: att,
+      gps: lastGps || null,
+    });
   }
 
   function advanceAttitudeRender() {

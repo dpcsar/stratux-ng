@@ -27,7 +27,7 @@ type AHRSController interface {
 	Orientation() (forwardAxis int, gravity [3]float64, gravityOK bool)
 }
 
-func Handler(status *Status, settings SettingsStore, logs *LogBuffer, ahrsCtl AHRSController, att *AttitudeBroadcaster) http.Handler {
+func Handler(status *Status, settings SettingsStore, logs *LogBuffer, ahrsCtl AHRSController) http.Handler {
 	mux := http.NewServeMux()
 
 	assetsFS, err := fs.Sub(embeddedAssets, "assets")
@@ -151,7 +151,7 @@ func Handler(status *Status, settings SettingsStore, logs *LogBuffer, ahrsCtl AH
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		if att == nil || !att.Available() {
+		if status == nil || !status.AttitudeAvailable() {
 			http.Error(w, "ahrs unavailable", http.StatusServiceUnavailable)
 			return
 		}
@@ -166,8 +166,8 @@ func Handler(status *Status, settings SettingsStore, logs *LogBuffer, ahrsCtl AH
 		w.Header().Set("X-Accel-Buffering", "no")
 		_, _ = w.Write([]byte(":ok\n\n"))
 		flusher.Flush()
-		id, ch := att.Subscribe(4)
-		defer att.Unsubscribe(id)
+		id, ch := status.SubscribeAttitude(4)
+		defer status.UnsubscribeAttitude(id)
 		ctx := r.Context()
 		for {
 			select {
@@ -364,14 +364,14 @@ func Handler(status *Status, settings SettingsStore, logs *LogBuffer, ahrsCtl AH
 	return mux
 }
 
-func Serve(ctx context.Context, listenAddr string, status *Status, settings SettingsStore, logs *LogBuffer, ahrsCtl AHRSController, att *AttitudeBroadcaster) error {
+func Serve(ctx context.Context, listenAddr string, status *Status, settings SettingsStore, logs *LogBuffer, ahrsCtl AHRSController) error {
 	if status == nil {
 		status = NewStatus()
 	}
 
 	srv := &http.Server{
 		Addr:              listenAddr,
-		Handler:           Handler(status, settings, logs, ahrsCtl, att),
+		Handler:           Handler(status, settings, logs, ahrsCtl),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,

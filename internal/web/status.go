@@ -1,6 +1,7 @@
 package web
 
 import (
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -30,6 +31,11 @@ type Status struct {
 	interval      atomic.Value // string
 	staticInfo    atomic.Value // map[string]any
 	attitude      atomic.Value // AttitudeSnapshot
+	attitudeSet   atomic.Bool
+	attAvail      atomic.Bool
+	attSubsMu     sync.RWMutex
+	attSubs       map[int]chan AttitudeSnapshot
+	attNextID     int
 	ahrsSensors   atomic.Value // AHRSSensorsSnapshot
 	fan           atomic.Value // fancontrol.Snapshot
 	gps           atomic.Value // gps.Snapshot
@@ -53,6 +59,7 @@ func NewStatus() *Status {
 	s.traffic.Store([]TrafficSnapshot{})
 	s.adsb1090.Store(DecoderStatusSnapshot{Enabled: false})
 	s.uat978.Store(DecoderStatusSnapshot{Enabled: false})
+	s.attSubs = make(map[int]chan AttitudeSnapshot)
 	return s
 }
 
@@ -187,6 +194,77 @@ func (s *Status) SetAttitude(nowUTC time.Time, att AttitudeSnapshot) {
 		att.LastUpdateUTC = nowUTC.UTC().Format(time.RFC3339Nano)
 	}
 	s.attitude.Store(att)
+	s.attitudeSet.Store(true)
+	s.broadcastAttitude(att)
+}
+
+func (s *Status) SetAttitudeAvailable(v bool) {
+	if s == nil {
+		return
+	}
+	s.attAvail.Store(v)
+}
+
+func (s *Status) AttitudeAvailable() bool {
+	if s == nil {
+		return false
+	}
+	return s.attAvail.Load()
+}
+
+func (s *Status) SubscribeAttitude(buffer int) (int, <-chan AttitudeSnapshot) {
+	if s == nil {
+		return 0, nil
+	}
+	if buffer <= 0 {
+		buffer = 2
+	}
+	ch := make(chan AttitudeSnapshot, buffer)
+	s.attSubsMu.Lock()
+	id := s.attNextID
+	s.attNextID++
+	s.attSubs[id] = ch
+	have := s.attitudeSet.Load()
+	last := s.attitude.Load().(AttitudeSnapshot)
+	s.attSubsMu.Unlock()
+	if have {
+		select {
+		case ch <- last:
+		default:
+		}
+	}
+	return id, ch
+}
+
+func (s *Status) UnsubscribeAttitude(id int) {
+	if s == nil {
+		return
+	}
+	s.attSubsMu.Lock()
+	ch, ok := s.attSubs[id]
+	if ok {
+		delete(s.attSubs, id)
+		close(ch)
+	}
+	s.attSubsMu.Unlock()
+}
+
+func (s *Status) broadcastAttitude(att AttitudeSnapshot) {
+	if s == nil {
+		return
+	}
+	s.attSubsMu.RLock()
+	subs := make([]chan AttitudeSnapshot, 0, len(s.attSubs))
+	for _, ch := range s.attSubs {
+		subs = append(subs, ch)
+	}
+	s.attSubsMu.RUnlock()
+	for _, ch := range subs {
+		select {
+		case ch <- att:
+		default:
+		}
+	}
 }
 
 func (s *Status) SetAHRSSensors(nowUTC time.Time, a AHRSSensorsSnapshot) {

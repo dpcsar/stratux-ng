@@ -32,7 +32,7 @@ func TestAPI_AHRSOrientDone_PersistsOrientation(t *testing.T) {
 
 	status := NewStatus()
 	settings := SettingsStore{ConfigPath: cfgPath}
-	h := Handler(status, settings, nil, fakeAHRSPersist{}, nil)
+	h := Handler(status, settings, nil, fakeAHRSPersist{})
 
 	req := httptest.NewRequest(http.MethodPost, "/api/ahrs/orient/done", nil)
 	w := httptest.NewRecorder()
@@ -62,7 +62,7 @@ func TestAPIStatus(t *testing.T) {
 	st := NewStatus()
 	st.SetStatic("127.0.0.1:4000", "1s", map[string]any{"record": false})
 
-	ts := httptest.NewServer(Handler(st, SettingsStore{}, nil, nil, nil))
+	ts := httptest.NewServer(Handler(st, SettingsStore{}, nil, nil))
 	defer ts.Close()
 
 	resp, err := http.Get(ts.URL + "/api/status")
@@ -94,7 +94,7 @@ func TestAPIStatus(t *testing.T) {
 
 func TestRootPage(t *testing.T) {
 	st := NewStatus()
-	ts := httptest.NewServer(Handler(st, SettingsStore{}, nil, nil, nil))
+	ts := httptest.NewServer(Handler(st, SettingsStore{}, nil, nil))
 	defer ts.Close()
 
 	resp, err := http.Get(ts.URL + "/")

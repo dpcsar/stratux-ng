@@ -104,7 +104,7 @@ func TestTrafficReplay_Dump1090Fixtures_EmitsGDL90Traffic(t *testing.T) {
 		LastFixUTC: now.Format(time.RFC3339Nano),
 	}
 
-	frames := buildGDL90FramesWithGPS(cfg, now, false, ahrs.Snapshot{}, true, gpsSnap, &headingFuser{}, store.Snapshot(now))
+	frames := buildGDL90FramesWithGPS(cfg, now, false, ahrs.Snapshot{}, true, gpsSnap, store.Snapshot(now))
 	if got := countTrafficMessages(frames); got < 1 {
 		t.Fatalf("expected at least 1 traffic (0x14) message, got %d", got)
 	}
@@ -137,7 +137,7 @@ func TestTrafficReplay_Dump978Fixtures_EmitsGDL90Traffic(t *testing.T) {
 		LastFixUTC: now.Format(time.RFC3339Nano),
 	}
 
-	frames := buildGDL90FramesWithGPS(cfg, now, false, ahrs.Snapshot{}, true, gpsSnap, &headingFuser{}, store.Snapshot(now))
+	frames := buildGDL90FramesWithGPS(cfg, now, false, ahrs.Snapshot{}, true, gpsSnap, store.Snapshot(now))
 	if got := countTrafficMessages(frames); got < 1 {
 		t.Fatalf("expected at least 1 traffic (0x14) message, got %d", got)
 	}
@@ -169,7 +169,7 @@ func TestTrafficReplay_Dump1090AircraftJSON_EmitsGDL90Traffic(t *testing.T) {
 		LastFixUTC: now.Format(time.RFC3339Nano),
 	}
 
-	frames := buildGDL90FramesWithGPS(cfg, now, false, ahrs.Snapshot{}, true, gpsSnap, &headingFuser{}, store.Snapshot(now))
+	frames := buildGDL90FramesWithGPS(cfg, now, false, ahrs.Snapshot{}, true, gpsSnap, store.Snapshot(now))
 	if got := countTrafficMessages(frames); got < 1 {
 		t.Fatalf("expected at least 1 traffic (0x14) message, got %d", got)
 	}

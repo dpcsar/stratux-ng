@@ -97,63 +97,6 @@ func (p *ahrsProxy) Orientation() (forwardAxis int, gravity [3]float64, gravityO
 	return rt.AHRSOrientation()
 }
 
-func decodeAttitudeFromFrames(frames [][]byte) web.AttitudeSnapshot {
-	var out web.AttitudeSnapshot
-
-	for _, frame := range frames {
-		msg, crcOK, err := gdl90.Unframe(frame)
-		if err != nil || !crcOK || len(msg) == 0 {
-			continue
-		}
-
-		// Stratux heartbeat: bit0 = AHRS valid.
-		if msg[0] == 0xCC && len(msg) >= 2 {
-			out.Valid = (msg[1] & 0x01) != 0
-		}
-
-		// ForeFlight AHRS: 0x65, sub-id 0x01.
-		if msg[0] == 0x65 && len(msg) >= 12 && msg[1] == 0x01 {
-			roll := int16(msg[2])<<8 | int16(msg[3])
-			pitch := int16(msg[4])<<8 | int16(msg[5])
-			if roll != int16(0x7FFF) {
-				v := float64(roll) / 10.0
-				out.RollDeg = &v
-			}
-			if pitch != int16(0x7FFF) {
-				v := float64(pitch) / 10.0
-				out.PitchDeg = &v
-			}
-			continue
-		}
-
-		// Stratux LE AHRS report: starts with 0x4C 0x45 0x01 0x01.
-		if len(msg) >= 24 && msg[0] == 0x4C && msg[1] == 0x45 && msg[2] == 0x01 && msg[3] == 0x01 {
-			roll := int16(msg[4])<<8 | int16(msg[5])
-			pitch := int16(msg[6])<<8 | int16(msg[7])
-			hdg := int16(msg[8])<<8 | int16(msg[9])
-			palt := uint16(msg[18])<<8 | uint16(msg[19])
-			if roll != int16(0x7FFF) {
-				v := float64(roll) / 10.0
-				out.RollDeg = &v
-			}
-			if pitch != int16(0x7FFF) {
-				v := float64(pitch) / 10.0
-				out.PitchDeg = &v
-			}
-			if hdg != int16(0x7FFF) {
-				v := float64(hdg) / 10.0
-				out.HeadingDeg = &v
-			}
-			if palt != uint16(0xFFFF) {
-				v := float64(palt) - 5000.5
-				out.PressureAltFt = &v
-			}
-			continue
-		}
-	}
-	return out
-}
-
 func attitudeSnapshotFromAHRS(snap ahrs.Snapshot) web.AttitudeSnapshot {
 	att := web.AttitudeSnapshot{}
 	attValid := snap.Valid
@@ -183,6 +126,38 @@ func attitudeSnapshotFromAHRS(snap ahrs.Snapshot) web.AttitudeSnapshot {
 		att.LastUpdateUTC = snap.UpdatedAt.UTC().Format(time.RFC3339Nano)
 	}
 	return att
+}
+
+func attitudeSnapshotFromPayload(att gdl90.Attitude, haveAHRS bool, snap ahrs.Snapshot) web.AttitudeSnapshot {
+	var out web.AttitudeSnapshot
+	if haveAHRS {
+		out = attitudeSnapshotFromAHRS(snap)
+	} else {
+		out = web.AttitudeSnapshot{Valid: att.Valid}
+	}
+	if att.Valid {
+		if out.RollDeg == nil {
+			roll := att.RollDeg
+			out.RollDeg = &roll
+		}
+		if out.PitchDeg == nil {
+			pitch := att.PitchDeg
+			out.PitchDeg = &pitch
+		}
+		if out.GLoad == nil {
+			g := att.GLoad
+			out.GLoad = &g
+		}
+	}
+	if !math.IsNaN(att.HeadingDeg) {
+		h := att.HeadingDeg
+		out.HeadingDeg = &h
+	}
+	if att.PressureAltValid && out.PressureAltFt == nil {
+		alt := att.PressureAltitudeFeet
+		out.PressureAltFt = &alt
+	}
+	return out
 }
 
 func decodeTrafficFromFrames(frames [][]byte) []web.TrafficSnapshot {
@@ -478,7 +453,6 @@ func main() {
 
 	status := web.NewStatus()
 	status.SetStatic(cfg.GDL90.Dest, cfg.GDL90.Interval.String(), staticInfoSnapshot(resolvedConfigPath, cfg))
-	attitudeBroadcaster := web.NewAttitudeBroadcaster()
 
 	applyCh := make(chan applyRequest)
 	applyFunc := func(nextCfg config.Config) error {
@@ -500,7 +474,7 @@ func main() {
 	proxy := &ahrsProxy{}
 	go func() {
 		for {
-			err := web.Serve(ctx, cfg.Web.Listen, status, web.SettingsStore{ConfigPath: resolvedConfigPath, Apply: applyFunc}, logBuf, proxy, attitudeBroadcaster)
+			err := web.Serve(ctx, cfg.Web.Listen, status, web.SettingsStore{ConfigPath: resolvedConfigPath, Apply: applyFunc}, logBuf, proxy)
 			if ctx.Err() != nil {
 				return
 			}
@@ -526,6 +500,23 @@ func main() {
 	}()
 
 	var rec *replay.Writer
+	var recMu sync.Mutex
+	recordFrame := func(now time.Time, frame []byte) error {
+		if rec == nil {
+			return nil
+		}
+		recMu.Lock()
+		defer recMu.Unlock()
+		return rec.WriteFrame(now, frame)
+	}
+	flushRecord := func() error {
+		if rec == nil {
+			return nil
+		}
+		recMu.Lock()
+		defer recMu.Unlock()
+		return rec.Flush()
+	}
 	if cfg.GDL90.Record.Enable {
 		w, err := replay.CreateWriter(cfg.GDL90.Record.Path)
 		if err != nil {
@@ -552,7 +543,7 @@ func main() {
 	log.Printf("ownship icao=%s callsign=%s", cfg.Ownship.ICAO, cfg.Ownship.Callsign)
 
 	go func() {
-		rt, err := newLiveRuntime(ctx, cfg, resolvedConfigPath, status, sender, attitudeBroadcaster)
+		rt, err := newLiveRuntime(ctx, cfg, resolvedConfigPath, status, sender)
 		if err != nil {
 			log.Printf("runtime init failed: %v", err)
 			cancel()
@@ -561,6 +552,12 @@ func main() {
 		proxy.setRuntime(rt)
 		defer rt.Close()
 		defer proxy.clearRuntime(rt)
+		cur := rt.Config()
+		if !cur.GDL90.Replay.Enable && cur.AHRS.Enable {
+			go runAttitudeStreamer(ctx, cancel, rt, status, sender, recordFrame)
+		} else if status != nil {
+			status.SetAttitudeAvailable(false)
+		}
 
 		// Replay sender runs separately so we can still accept live updates.
 		if rt.Config().GDL90.Replay.Enable {
@@ -575,7 +572,6 @@ func main() {
 			}()
 		}
 
-		hf := &headingFuser{}
 		var lastUDPErrorLog time.Time
 		for {
 			tickC := rt.TickChan()
@@ -653,45 +649,22 @@ func main() {
 					status.SetAHRSSensors(now.UTC(), web.AHRSSensorsSnapshot{Enabled: false})
 				}
 				if curCfg.GPS.Enable {
-					frames = buildGDL90FramesWithGPS(curCfg, now.UTC(), haveAHRS, snap, haveGPS, gpsSnap, hf, rt.TrafficTargets(now.UTC()))
+					frames = buildGDL90FramesWithGPS(curCfg, now.UTC(), haveAHRS, snap, haveGPS, gpsSnap, rt.TrafficTargets(now.UTC()))
 				} else {
 					frames = buildGDL90FramesNoGPS(curCfg, now.UTC(), haveAHRS, snap)
 				}
 				if extra := rt.DrainUAT978UplinkFrames(50); len(extra) > 0 {
 					frames = append(frames, extra...)
 				}
-				attFromFrames := decodeAttitudeFromFrames(frames)
-				att := attFromFrames
-				if haveAHRS {
-					att = attitudeSnapshotFromAHRS(snap)
-					if attFromFrames.HeadingDeg != nil && att.HeadingDeg == nil {
-						h := *attFromFrames.HeadingDeg
-						att.HeadingDeg = &h
-					}
-					if attFromFrames.PressureAltFt != nil && att.PressureAltFt == nil {
-						v := *attFromFrames.PressureAltFt
-						att.PressureAltFt = &v
-					}
-				}
 				status.SetTraffic(now.UTC(), decodeTrafficFromFrames(frames))
-				status.SetAttitude(now.UTC(), att)
-				if attitudeBroadcaster != nil {
-					if att.HeadingDeg != nil {
-						attitudeBroadcaster.SetHeading(*att.HeadingDeg, true)
-					} else {
-						attitudeBroadcaster.SetHeading(0, false)
-					}
-				}
 				// Always record a "tick" time even if we fail mid-send.
 				status.MarkTick(now.UTC(), 0)
 				sent := 0
 				for _, frame := range frames {
-					if rec != nil {
-						if err := rec.WriteFrame(now, frame); err != nil {
-							log.Printf("record write failed: %v", err)
-							cancel()
-							return
-						}
+					if err := recordFrame(now, frame); err != nil {
+						log.Printf("record write failed: %v", err)
+						cancel()
+						return
 					}
 					if err := sender.Send(frame); err != nil {
 						if time.Since(lastUDPErrorLog) > 5*time.Second {
@@ -702,12 +675,10 @@ func main() {
 					}
 					sent++
 				}
-				if rec != nil {
-					if err := rec.Flush(); err != nil {
-						log.Printf("record flush failed: %v", err)
-						cancel()
-						return
-					}
+				if err := flushRecord(); err != nil {
+					log.Printf("record flush failed: %v", err)
+					cancel()
+					return
 				}
 				status.MarkTick(now.UTC(), sent)
 			}
@@ -716,53 +687,6 @@ func main() {
 
 	<-ctx.Done()
 	log.Printf("stratux-ng stopping")
-}
-
-func runListen(ctx context.Context, addr string, dumpHex bool) error {
-	pc, err := net.ListenPacket("udp", addr)
-	if err != nil {
-		return err
-	}
-	defer pc.Close()
-
-	log.Printf("listen mode: udp bind=%s", addr)
-	buf := make([]byte, 64*1024)
-	for {
-		_ = pc.SetReadDeadline(time.Now().Add(1 * time.Second))
-		n, src, err := pc.ReadFrom(buf)
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-		if err != nil {
-			if ne, ok := err.(net.Error); ok && ne.Timeout() {
-				continue
-			}
-			return err
-		}
-		frame := append([]byte(nil), buf[:n]...)
-
-		msg, crcOK, uerr := gdl90.Unframe(frame)
-		if uerr != nil {
-			log.Printf("rx src=%s bytes=%d unframe_err=%v", src.String(), len(frame), uerr)
-			if dumpHex {
-				log.Printf("rx hex=%s", hex.EncodeToString(frame))
-			}
-			continue
-		}
-
-		id := msg[0]
-		info := fmt.Sprintf("id=0x%02X", id)
-		if id == 0x65 && len(msg) >= 2 {
-			info = fmt.Sprintf("id=0x65 sub=0x%02X", msg[1])
-		}
-
-		log.Printf("rx src=%s bytes=%d crc_ok=%t %s msg_len=%d", src.String(), len(frame), crcOK, info, len(msg))
-		if dumpHex {
-			log.Printf("rx hex=%s", hex.EncodeToString(frame))
-		}
-	}
 }
 
 func buildGDL90FramesNoGPS(cfg config.Config, now time.Time, haveAHRS bool, ahrsSnap ahrs.Snapshot) [][]byte {
@@ -778,42 +702,6 @@ func buildGDL90FramesNoGPS(cfg config.Config, now time.Time, haveAHRS bool, ahrs
 		gdl90.StratuxHeartbeatFrame(gpsValid, ahrsValid),
 	)
 	frames = append(frames, gdl90.ForeFlightIDFrame("Stratux", "Stratux-NG"))
-
-	if !cfg.AHRS.Enable || !haveAHRS {
-		return frames
-	}
-
-	pressureAltFeet := 0.0
-	if ahrsSnap.PressureAltValid {
-		pressureAltFeet = ahrsSnap.PressureAltFeet
-	}
-	vs := 0
-	if ahrsSnap.VerticalSpeedValid {
-		vs = ahrsSnap.VerticalSpeedFpm
-	}
-
-	att := gdl90.Attitude{
-		Valid:                ahrsValid,
-		RollDeg:              ahrsSnap.RollDeg,
-		PitchDeg:             ahrsSnap.PitchDeg,
-		HeadingDeg:           0,
-		SlipSkidDeg:          0,
-		YawRateDps:           ahrsSnap.YawRateDps,
-		GLoad:                1.0,
-		IndicatedAirspeedKt:  0,
-		TrueAirspeedKt:       0,
-		PressureAltitudeFeet: pressureAltFeet,
-		PressureAltValid:     ahrsSnap.PressureAltValid,
-		VerticalSpeedFpm:     vs,
-		VerticalSpeedValid:   ahrsSnap.VerticalSpeedValid,
-	}
-	if ahrsSnap.GLoadValid {
-		att.GLoad = ahrsSnap.GLoadG
-	}
-	frames = append(frames,
-		gdl90.ForeFlightAHRSFrame(att),
-		gdl90.AHRSGDL90LEFrame(att),
-	)
 
 	return frames
 }
@@ -892,7 +780,7 @@ func shortestAngleDiffDeg(targetDeg float64, currentDeg float64) float64 {
 	return d
 }
 
-func buildGDL90FramesWithGPS(cfg config.Config, now time.Time, haveAHRS bool, ahrsSnap ahrs.Snapshot, haveGPS bool, gpsSnap gps.Snapshot, hf *headingFuser, liveTraffic []gdl90.Traffic) [][]byte {
+func buildGDL90FramesWithGPS(cfg config.Config, now time.Time, haveAHRS bool, ahrsSnap ahrs.Snapshot, haveGPS bool, gpsSnap gps.Snapshot, liveTraffic []gdl90.Traffic) [][]byte {
 	// GPS mode: emit ownship from live GPS when we have a recent fix.
 	icao, err := gdl90.ParseICAOHex(cfg.Ownship.ICAO)
 	ownshipOK := err == nil
@@ -926,9 +814,6 @@ func buildGDL90FramesWithGPS(cfg config.Config, now time.Time, haveAHRS bool, ah
 	// Identify as a Stratux-like device for apps that key off 0x65.
 	frames = append(frames, gdl90.ForeFlightIDFrame("Stratux", "Stratux-NG"))
 	if !gpsValid {
-		if hf != nil {
-			hf.Reset()
-		}
 		return frames
 	}
 
@@ -953,29 +838,6 @@ func buildGDL90FramesWithGPS(cfg config.Config, now time.Time, haveAHRS bool, ah
 	trackDeg := 0.0
 	if gpsSnap.TrackDeg != nil {
 		trackDeg = *gpsSnap.TrackDeg
-	}
-	// GPS track is only considered valid for correction when moving fast enough.
-	gpsTrackValid := fixOK && gpsSnap.TrackDeg != nil && gpsSnap.GroundKt != nil && *gpsSnap.GroundKt >= 5
-	// When GPS fix quality/mode is available, require at least a 2D fix.
-	if gpsTrackValid {
-		if gpsSnap.FixMode != nil && *gpsSnap.FixMode < 2 {
-			gpsTrackValid = false
-		}
-		if gpsSnap.FixQuality != nil && *gpsSnap.FixQuality <= 0 {
-			gpsTrackValid = false
-		}
-	}
-
-	// Fuse heading for EFB: yaw-rate for short turns, GPS track for long-term accuracy.
-	// Only do this when we actually have AHRS (gyro). Otherwise use GPS track.
-	headingDeg := trackDeg
-	if hf != nil && cfg.AHRS.Enable && haveAHRS && ahrsSnap.Valid {
-		trkPtr := (*float64)(nil)
-		if gpsSnap.TrackDeg != nil {
-			trkPtr = gpsSnap.TrackDeg
-		}
-		yawPtr := &ahrsSnap.YawRateDps
-		headingDeg = hf.Update(now, trkPtr, gpsTrackValid, groundKt, yawPtr)
 	}
 
 	vvelFpm := 0
@@ -1003,8 +865,22 @@ func buildGDL90FramesWithGPS(cfg config.Config, now time.Time, haveAHRS bool, ah
 	}))
 	frames = append(frames, gdl90.OwnshipGeometricAltitudeFrame(geoAltFeet))
 
-	// Stratux-like AHRS messages. If AHRS is present, use it; otherwise keep
-	// the attitude neutral but with heading aligned to track.
+	for _, t := range liveTraffic {
+		frames = append(frames, gdl90.TrafficReportFrame(t))
+	}
+
+	return frames
+}
+
+func buildAttitudePayload(cfg config.Config, now time.Time, haveAHRS bool, ahrsSnap ahrs.Snapshot, haveGPS bool, gpsSnap gps.Snapshot, hf *headingFuser) gdl90.Attitude {
+	ahrsValid := false
+	if cfg.AHRS.Enable {
+		ahrsValid = haveAHRS && ahrsSnap.Valid
+		if ahrsSnap.IMUDetected && !ahrsSnap.StartupReady {
+			ahrsValid = false
+		}
+	}
+
 	roll := 0.0
 	pitch := 0.0
 	if cfg.AHRS.Enable && haveAHRS {
@@ -1012,23 +888,77 @@ func buildGDL90FramesWithGPS(cfg config.Config, now time.Time, haveAHRS bool, ah
 		pitch = ahrsSnap.PitchDeg
 	}
 
-	pressureAltFeet := float64(geoAltFeet)
-	pressureAltValid := false
-	if cfg.AHRS.Enable {
-		pressureAltValid = haveAHRS && ahrsSnap.PressureAltValid
-		if pressureAltValid {
-			pressureAltFeet = ahrsSnap.PressureAltFeet
+	groundKt := 0
+	trackDeg := 0.0
+	geoAltFeet := 0
+	vvelFpm := 0
+	vvelValid := false
+	if cfg.GPS.Enable && haveGPS {
+		if gpsSnap.GroundKt != nil {
+			groundKt = *gpsSnap.GroundKt
+		}
+		if gpsSnap.TrackDeg != nil {
+			trackDeg = *gpsSnap.TrackDeg
+		}
+		if gpsSnap.AltFeet != nil {
+			geoAltFeet = *gpsSnap.AltFeet
+		}
+		if gpsSnap.VertSpeedFPM != nil {
+			vvelFpm = *gpsSnap.VertSpeedFPM
+			vvelValid = true
 		}
 	}
 
-	att := gdl90.Attitude{
+	headingDeg := trackDeg
+	if hf != nil && cfg.AHRS.Enable && haveAHRS && ahrsSnap.Valid {
+		gpsTrackValid := false
+		if cfg.GPS.Enable && haveGPS && gpsSnap.TrackDeg != nil && gpsSnap.GroundKt != nil && *gpsSnap.GroundKt >= 5 {
+			gpsTrackValid = true
+			if gpsSnap.FixMode != nil && *gpsSnap.FixMode < 2 {
+				gpsTrackValid = false
+			}
+			if gpsSnap.FixQuality != nil && *gpsSnap.FixQuality <= 0 {
+				gpsTrackValid = false
+			}
+		}
+		trkPtr := (*float64)(nil)
+		if gpsSnap.TrackDeg != nil {
+			trkPtr = gpsSnap.TrackDeg
+		}
+		yawPtr := &ahrsSnap.YawRateDps
+		headingDeg = hf.Update(now, trkPtr, gpsTrackValid, groundKt, yawPtr)
+	}
+
+	pressureAltFeet := float64(geoAltFeet)
+	pressureAltValid := false
+	if cfg.AHRS.Enable && haveAHRS && ahrsSnap.PressureAltValid {
+		pressureAltFeet = ahrsSnap.PressureAltFeet
+		pressureAltValid = true
+	}
+
+	if cfg.AHRS.Enable && haveAHRS && ahrsSnap.VerticalSpeedValid {
+		vvelFpm = ahrsSnap.VerticalSpeedFpm
+		vvelValid = true
+	}
+
+	gLoad := 1.0
+	if cfg.AHRS.Enable && haveAHRS && ahrsSnap.GLoadValid {
+		gLoad = ahrsSnap.GLoadG
+	}
+
+	yawRate := 0.0
+	if cfg.AHRS.Enable && haveAHRS && ahrsSnap.Valid {
+		yawRate = ahrsSnap.YawRateDps
+	}
+
+	return gdl90.Attitude{
 		Valid:                ahrsValid,
 		RollDeg:              roll,
 		PitchDeg:             pitch,
 		HeadingDeg:           headingDeg,
 		SlipSkidDeg:          0,
-		YawRateDps:           0,
-		GLoad:                1.0,
+		YawRateDps:           yawRate,
+		GLoad:                gLoad,
 		IndicatedAirspeedKt:  groundKt,
 		TrueAirspeedKt:       groundKt,
 		PressureAltitudeFeet: pressureAltFeet,
@@ -1036,21 +966,112 @@ func buildGDL90FramesWithGPS(cfg config.Config, now time.Time, haveAHRS bool, ah
 		VerticalSpeedFpm:     vvelFpm,
 		VerticalSpeedValid:   vvelValid,
 	}
-	if cfg.AHRS.Enable && haveAHRS && ahrsSnap.Valid {
-		att.YawRateDps = ahrsSnap.YawRateDps
-	}
-	if cfg.AHRS.Enable && haveAHRS && ahrsSnap.VerticalSpeedValid {
-		att.VerticalSpeedFpm = ahrsSnap.VerticalSpeedFpm
-		att.VerticalSpeedValid = true
-	}
-	frames = append(frames,
-		gdl90.ForeFlightAHRSFrame(att),
-		gdl90.AHRSGDL90LEFrame(att),
-	)
+}
 
-	for _, t := range liveTraffic {
-		frames = append(frames, gdl90.TrafficReportFrame(t))
+func runAttitudeStreamer(ctx context.Context, cancel context.CancelFunc, rt *liveRuntime, status *web.Status, sender *safeBroadcaster, recordFrame func(time.Time, []byte) error) {
+	if rt == nil || sender == nil {
+		return
 	}
+	const leInterval = 50 * time.Millisecond
+	const foreFlightInterval = 200 * time.Millisecond
+	ticker := time.NewTicker(leInterval)
+	defer ticker.Stop()
+	if status != nil {
+		status.SetAttitudeAvailable(true)
+		defer status.SetAttitudeAvailable(false)
+	}
+	hf := &headingFuser{}
+	var lastUDPErrLog time.Time
+	var lastForeFlight time.Time
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case now := <-ticker.C:
+			curCfg := rt.Config()
+			if curCfg.GDL90.Replay.Enable || !curCfg.AHRS.Enable {
+				continue
+			}
+			snap, haveAHRS := rt.AHRSSnapshot()
+			var gpsSnap gps.Snapshot
+			haveGPS := false
+			if curCfg.GPS.Enable {
+				gpsSnap, haveGPS = rt.GPSSnapshot()
+			}
+			attitude := buildAttitudePayload(curCfg, now, haveAHRS, snap, haveGPS, gpsSnap, hf)
+			frames := make([][]byte, 0, 2)
+			frames = append(frames, gdl90.AHRSGDL90LEFrame(attitude))
+			if lastForeFlight.IsZero() || now.Sub(lastForeFlight) >= foreFlightInterval {
+				frames = append(frames, gdl90.ForeFlightAHRSFrame(attitude))
+				lastForeFlight = now
+			}
+			snapShot := attitudeSnapshotFromPayload(attitude, haveAHRS, snap)
+			snapShot.LastUpdateUTC = now.UTC().Format(time.RFC3339Nano)
+			for _, frame := range frames {
+				if recordFrame != nil {
+					if err := recordFrame(now, frame); err != nil {
+						log.Printf("record write failed: %v", err)
+						cancel()
+						return
+					}
+				}
+				if err := sender.Send(frame); err != nil {
+					if time.Since(lastUDPErrLog) > 5*time.Second {
+						log.Printf("udp send failed (ahrs): %v", err)
+						lastUDPErrLog = time.Now()
+					}
+				}
+			}
+			if status != nil {
+				status.SetAttitude(now.UTC(), snapShot)
+			}
+		}
+	}
+}
 
-	return frames
+func runListen(ctx context.Context, addr string, dumpHex bool) error {
+	pc, err := net.ListenPacket("udp", addr)
+	if err != nil {
+		return err
+	}
+	defer pc.Close()
+
+	log.Printf("listen mode: udp bind=%s", addr)
+	buf := make([]byte, 64*1024)
+	for {
+		_ = pc.SetReadDeadline(time.Now().Add(1 * time.Second))
+		n, src, err := pc.ReadFrom(buf)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		if err != nil {
+			if ne, ok := err.(net.Error); ok && ne.Timeout() {
+				continue
+			}
+			return err
+		}
+		frame := append([]byte(nil), buf[:n]...)
+
+		msg, crcOK, uerr := gdl90.Unframe(frame)
+		if uerr != nil {
+			log.Printf("rx src=%s bytes=%d unframe_err=%v", src.String(), len(frame), uerr)
+			if dumpHex {
+				log.Printf("rx hex=%s", hex.EncodeToString(frame))
+			}
+			continue
+		}
+
+		id := msg[0]
+		info := fmt.Sprintf("id=0x%02X", id)
+		if id == 0x65 && len(msg) >= 2 {
+			info = fmt.Sprintf("id=0x65 sub=0x%02X", msg[1])
+		}
+
+		log.Printf("rx src=%s bytes=%d crc_ok=%t %s msg_len=%d", src.String(), len(frame), crcOK, info, len(msg))
+		if dumpHex {
+			log.Printf("rx hex=%s", hex.EncodeToString(frame))
+		}
+	}
 }
