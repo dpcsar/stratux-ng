@@ -183,7 +183,9 @@ func (s *Status) SetAttitude(nowUTC time.Time, att AttitudeSnapshot) {
 	if nowUTC.IsZero() {
 		nowUTC = time.Now().UTC()
 	}
-	att.LastUpdateUTC = nowUTC.UTC().Format(time.RFC3339Nano)
+	if att.LastUpdateUTC == "" {
+		att.LastUpdateUTC = nowUTC.UTC().Format(time.RFC3339Nano)
+	}
 	s.attitude.Store(att)
 }
 

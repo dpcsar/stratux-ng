@@ -27,7 +27,7 @@ type AHRSController interface {
 	Orientation() (forwardAxis int, gravity [3]float64, gravityOK bool)
 }
 
-func Handler(status *Status, settings SettingsStore, logs *LogBuffer, ahrsCtl AHRSController) http.Handler {
+func Handler(status *Status, settings SettingsStore, logs *LogBuffer, ahrsCtl AHRSController, att *AttitudeBroadcaster) http.Handler {
 	mux := http.NewServeMux()
 
 	assetsFS, err := fs.Sub(embeddedAssets, "assets")
@@ -143,6 +143,50 @@ func Handler(status *Status, settings SettingsStore, logs *LogBuffer, ahrsCtl AH
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte("{\"ok\":true}\n"))
+	})
+
+	mux.HandleFunc("/api/attitude/live", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", http.MethodGet)
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if att == nil || !att.Available() {
+			http.Error(w, "ahrs unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Connection", "keep-alive")
+		w.Header().Set("X-Accel-Buffering", "no")
+		_, _ = w.Write([]byte(":ok\n\n"))
+		flusher.Flush()
+		id, ch := att.Subscribe(4)
+		defer att.Unsubscribe(id)
+		ctx := r.Context()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case snap, ok := <-ch:
+				if !ok {
+					return
+				}
+				b, err := json.Marshal(snap)
+				if err != nil {
+					continue
+				}
+				if _, err := fmt.Fprintf(w, "data: %s\n\n", b); err != nil {
+					return
+				}
+				flusher.Flush()
+			}
+		}
 	})
 
 	// Wi-Fi API
@@ -320,14 +364,14 @@ func Handler(status *Status, settings SettingsStore, logs *LogBuffer, ahrsCtl AH
 	return mux
 }
 
-func Serve(ctx context.Context, listenAddr string, status *Status, settings SettingsStore, logs *LogBuffer, ahrsCtl AHRSController) error {
+func Serve(ctx context.Context, listenAddr string, status *Status, settings SettingsStore, logs *LogBuffer, ahrsCtl AHRSController, att *AttitudeBroadcaster) error {
 	if status == nil {
 		status = NewStatus()
 	}
 
 	srv := &http.Server{
 		Addr:              listenAddr,
-		Handler:           Handler(status, settings, logs, ahrsCtl),
+		Handler:           Handler(status, settings, logs, ahrsCtl, att),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,

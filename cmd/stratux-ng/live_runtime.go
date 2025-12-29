@@ -26,6 +26,7 @@ type liveRuntime struct {
 	ahrsSvc            *ahrs.Service
 	gpsSvc             *gps.Service
 	fanSvc             *fancontrol.Service
+	attBroadcaster     *web.AttitudeBroadcaster
 
 	adsb1090Sup    *decoder.Supervisor
 	uat978Sup      *decoder.Supervisor
@@ -82,7 +83,7 @@ func decoderBandEqual(a, b config.DecoderBandConfig) bool {
 	return true
 }
 
-func newLiveRuntime(ctx context.Context, cfg config.Config, resolvedConfigPath string, status *web.Status, sender *safeBroadcaster) (*liveRuntime, error) {
+func newLiveRuntime(ctx context.Context, cfg config.Config, resolvedConfigPath string, status *web.Status, sender *safeBroadcaster, attBroadcaster *web.AttitudeBroadcaster) (*liveRuntime, error) {
 	c := cfg
 	if err := config.DefaultAndValidate(&c); err != nil {
 		return nil, err
@@ -132,6 +133,7 @@ func newLiveRuntime(ctx context.Context, cfg config.Config, resolvedConfigPath s
 		cfg:                c,
 		ticker:             t,
 		ahrsSvc:            ahrsSvc,
+		attBroadcaster:     attBroadcaster,
 		uat978UplinkQ:      make(chan []byte, 512),
 		trafficStore:       traffic.NewStore(traffic.StoreConfig{MaxTargets: 200, TTL: 30 * time.Second}),
 	}
@@ -178,6 +180,7 @@ func newLiveRuntime(ctx context.Context, cfg config.Config, resolvedConfigPath s
 		}
 	}
 
+	r.startAttitudeStreamer(ctx)
 	return r, nil
 }
 
@@ -356,9 +359,49 @@ func (r *liveRuntime) initDecoders(ctx context.Context) error {
 	return nil
 }
 
+func (r *liveRuntime) startAttitudeStreamer(ctx context.Context) {
+	if r == nil || r.attBroadcaster == nil {
+		return
+	}
+	if r.ahrsSvc == nil {
+		r.attBroadcaster.SetAvailable(false)
+		return
+	}
+	r.attBroadcaster.SetAvailable(true)
+	go func() {
+		ticker := time.NewTicker(16 * time.Millisecond)
+		defer ticker.Stop()
+		var lastStamp int64
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				snap, ok := r.AHRSSnapshot()
+				if !ok {
+					continue
+				}
+				if snap.UpdatedAt.IsZero() {
+					continue
+				}
+				stamp := snap.UpdatedAt.UTC().UnixNano()
+				if stamp == lastStamp {
+					continue
+				}
+				lastStamp = stamp
+				att := attitudeSnapshotFromAHRS(snap)
+				r.attBroadcaster.Publish(att)
+			}
+		}
+	}()
+}
+
 func (r *liveRuntime) Close() {
 	if r == nil {
 		return
+	}
+	if r.attBroadcaster != nil {
+		r.attBroadcaster.SetAvailable(false)
 	}
 	if r.ahrsSvc != nil {
 		r.ahrsSvc.Close()

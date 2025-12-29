@@ -895,7 +895,7 @@
   function getOwnshipHeadingDeg() {
     const trk = Number(lastGps?.track_deg);
     if (Number.isFinite(trk)) return (trk + 360) % 360;
-    const h = lastAttitude?.heading_deg;
+    const h = (lastSmoothedAttitude || lastAttitude || {})?.heading_deg;
     const hh = (typeof h === 'number') ? h : (h == null ? NaN : Number(h));
     if (Number.isFinite(hh)) return (hh + 360) % 360;
     return NaN;
@@ -1975,6 +1975,17 @@
   }
 
   let lastAttitude = null;
+  let lastSmoothedAttitude = null;
+  const attitudeRenderState = {
+    roll: null,
+    pitch: null,
+    heading: null,
+    lastTs: null,
+    initialized: false,
+  };
+  let attitudeStream = null;
+  let attitudeStreamRetryTimer = null;
+  let attitudeStreamBackoffMs = 1000;
   let lastGps = null;
 
   function fitSideTapeCanvas(canvas, ctx) {
@@ -2199,7 +2210,7 @@
     ctx.fillStyle = surface2;
     ctx.fillRect(0, 0, w, h);
 
-    const a = lastAttitude || {};
+    const a = lastSmoothedAttitude || lastAttitude || {};
     const valid = !!a.valid;
     const hdg = valid && a.heading_deg != null ? wrap360(a.heading_deg) : null;
 
@@ -2311,7 +2322,8 @@
     ctx.arc(0, 0, r, 0, Math.PI * 2);
     ctx.clip();
 
-    const a = lastAttitude || {};
+    const smoothed = advanceAttitudeRender();
+    const a = smoothed || lastSmoothedAttitude || lastAttitude || {};
     const valid = !!a.valid;
     const roll = valid && a.roll_deg != null ? clamp(a.roll_deg, -90, 90) : 0;
     const pitch = valid && a.pitch_deg != null ? clamp(a.pitch_deg, -45, 45) : 0;
@@ -2469,6 +2481,80 @@
     });
   }
 
+  function updateAttitudeTextFromDisplay() {
+    const att = lastSmoothedAttitude || lastAttitude || null;
+    setAttitudeText(att ? { attitude: att } : { attitude: null });
+  }
+
+  function advanceAttitudeRender() {
+    const target = lastAttitude;
+    if (!target) {
+      lastSmoothedAttitude = null;
+      attitudeRenderState.roll = null;
+      attitudeRenderState.pitch = null;
+      attitudeRenderState.heading = null;
+      attitudeRenderState.initialized = false;
+      attitudeRenderState.lastTs = null;
+      return null;
+    }
+    const now = (typeof performance === 'object' && typeof performance?.now === 'function') ? performance.now() : Date.now();
+    if (attitudeRenderState.lastTs == null) {
+      attitudeRenderState.lastTs = now;
+    }
+    const dt = Math.min(200, Math.max(0, now - attitudeRenderState.lastTs));
+    attitudeRenderState.lastTs = now;
+    const smoothingMs = 90;
+    const alpha = attitudeRenderState.initialized ? Math.min(1, dt / smoothingMs) : 1;
+
+    const merged = { ...target };
+
+    const rollTarget = toNumber(target.roll_deg);
+    const pitchTarget = toNumber(target.pitch_deg);
+    const headingTarget = toNumber(target.heading_deg);
+
+    const smoothRoll = smoothScalar(attitudeRenderState.roll, rollTarget, alpha);
+    const smoothPitch = smoothScalar(attitudeRenderState.pitch, pitchTarget, alpha);
+    const smoothHeadingVal = smoothHeading(attitudeRenderState.heading, headingTarget, alpha);
+
+    merged.roll_deg = smoothRoll ?? rollTarget ?? null;
+    merged.pitch_deg = smoothPitch ?? pitchTarget ?? null;
+    merged.heading_deg = smoothHeadingVal ?? headingTarget ?? null;
+
+    attitudeRenderState.roll = merged.roll_deg;
+    attitudeRenderState.pitch = merged.pitch_deg;
+    attitudeRenderState.heading = merged.heading_deg;
+    attitudeRenderState.initialized = merged.roll_deg != null || merged.pitch_deg != null || merged.heading_deg != null;
+    lastSmoothedAttitude = merged;
+    return merged;
+  }
+
+  function smoothScalar(previous, target, alpha) {
+    if (target == null || !Number.isFinite(target)) return null;
+    if (previous == null || !Number.isFinite(previous) || alpha >= 1) {
+      return target;
+    }
+    if (alpha <= 0) return previous;
+    return previous + (target - previous) * alpha;
+  }
+
+  function smoothHeading(previous, target, alpha) {
+    if (target == null || !Number.isFinite(target)) return null;
+    const nextTarget = wrap360(target);
+    if (previous == null || !Number.isFinite(previous) || alpha >= 1) {
+      return nextTarget;
+    }
+    let delta = nextTarget - previous;
+    if (delta > 180) delta -= 360;
+    if (delta < -180) delta += 360;
+    return wrap360(previous + delta * alpha);
+  }
+
+  function toNumber(v) {
+    if (v == null) return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+
   function setAttitudeText(s) {
     const a = s?.attitude || {};
     const g = s?.gps || {};
@@ -2602,8 +2688,8 @@
       }
       const s = await resp.json();
       setStatusText(s);
-      setAttitudeText(s);
       lastAttitude = s?.attitude || null;
+      updateAttitudeTextFromDisplay();
       lastGps = s?.gps || null;
       lastTraffic = s?.traffic || null;
       drawAttitude();
@@ -2618,6 +2704,41 @@
       setConnectionState(false);
       if (stStatusSubtitle) stStatusSubtitle.textContent = 'Waiting for data...';
     }
+  }
+
+  function scheduleAttitudeStreamRetry() {
+    if (attitudeStreamRetryTimer) return;
+    const delay = attitudeStreamBackoffMs;
+    attitudeStreamRetryTimer = setTimeout(() => {
+      attitudeStreamRetryTimer = null;
+      startAttitudeStream();
+    }, delay);
+    attitudeStreamBackoffMs = Math.min(attitudeStreamBackoffMs * 2, 15000);
+  }
+
+  function startAttitudeStream() {
+    if (!window.EventSource) return;
+    if (attitudeStream) return;
+    const es = new EventSource('/api/attitude/live');
+    attitudeStream = es;
+    attitudeStreamBackoffMs = 1000;
+    es.onmessage = (event) => {
+      attitudeStreamBackoffMs = 1000;
+      try {
+        const data = JSON.parse(event.data || 'null');
+        if (!data) return;
+        lastAttitude = data;
+        updateAttitudeTextFromDisplay();
+        drawAttitude();
+      } catch (err) {
+        console.error('attitude stream parse failed', err);
+      }
+    };
+    es.onerror = () => {
+      es.close();
+      attitudeStream = null;
+      scheduleAttitudeStreamRetry();
+    };
   }
 
   // Initial view.
@@ -2642,12 +2763,19 @@
   renderTrafficTable([]);
 
   poll();
+  startAttitudeStream();
   setInterval(poll, 1000);
   // Redraw the instrument a bit faster than the status poll so it stays crisp on resize/theme changes.
   setInterval(drawAttitude, 100);
   setInterval(drawRadar, 100);
   window.addEventListener('resize', drawAttitude);
   window.addEventListener('resize', drawRadar);
+  window.addEventListener('beforeunload', () => {
+    if (attitudeStream) {
+      attitudeStream.close();
+      attitudeStream = null;
+    }
+  });
 
   btnAhrsLevel?.addEventListener('click', () => postAhrs('/api/ahrs/level', ahrsMsg));
   btnAhrsZeroDrift?.addEventListener('click', () => postAhrs('/api/ahrs/zero-drift', ahrsMsg));

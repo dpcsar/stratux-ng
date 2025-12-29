@@ -154,6 +154,37 @@ func decodeAttitudeFromFrames(frames [][]byte) web.AttitudeSnapshot {
 	return out
 }
 
+func attitudeSnapshotFromAHRS(snap ahrs.Snapshot) web.AttitudeSnapshot {
+	att := web.AttitudeSnapshot{}
+	attValid := snap.Valid
+	if snap.IMUDetected && !snap.StartupReady {
+		attValid = false
+	}
+	att.Valid = attValid
+	if attValid {
+		roll := snap.RollDeg
+		pitch := snap.PitchDeg
+		att.RollDeg = &roll
+		att.PitchDeg = &pitch
+		if snap.PressureAltValid {
+			v := snap.PressureAltFeet
+			att.PressureAltFt = &v
+		}
+		if snap.StartupReady && snap.GLoadValid {
+			g := snap.GLoadG
+			gmin := snap.GLoadMinG
+			gmax := snap.GLoadMaxG
+			att.GLoad = &g
+			att.GMin = &gmin
+			att.GMax = &gmax
+		}
+	}
+	if !snap.UpdatedAt.IsZero() {
+		att.LastUpdateUTC = snap.UpdatedAt.UTC().Format(time.RFC3339Nano)
+	}
+	return att
+}
+
 func decodeTrafficFromFrames(frames [][]byte) []web.TrafficSnapshot {
 	// Keep the decode logic local to main for now. We only need enough fields
 	// to render targets on the web map.
@@ -447,6 +478,7 @@ func main() {
 
 	status := web.NewStatus()
 	status.SetStatic(cfg.GDL90.Dest, cfg.GDL90.Interval.String(), staticInfoSnapshot(resolvedConfigPath, cfg))
+	attitudeBroadcaster := web.NewAttitudeBroadcaster()
 
 	applyCh := make(chan applyRequest)
 	applyFunc := func(nextCfg config.Config) error {
@@ -468,7 +500,7 @@ func main() {
 	proxy := &ahrsProxy{}
 	go func() {
 		for {
-			err := web.Serve(ctx, cfg.Web.Listen, status, web.SettingsStore{ConfigPath: resolvedConfigPath, Apply: applyFunc}, logBuf, proxy)
+			err := web.Serve(ctx, cfg.Web.Listen, status, web.SettingsStore{ConfigPath: resolvedConfigPath, Apply: applyFunc}, logBuf, proxy, attitudeBroadcaster)
 			if ctx.Err() != nil {
 				return
 			}
@@ -520,7 +552,7 @@ func main() {
 	log.Printf("ownship icao=%s callsign=%s", cfg.Ownship.ICAO, cfg.Ownship.Callsign)
 
 	go func() {
-		rt, err := newLiveRuntime(ctx, cfg, resolvedConfigPath, status, sender)
+		rt, err := newLiveRuntime(ctx, cfg, resolvedConfigPath, status, sender, attitudeBroadcaster)
 		if err != nil {
 			log.Printf("runtime init failed: %v", err)
 			cancel()
@@ -628,27 +660,28 @@ func main() {
 				if extra := rt.DrainUAT978UplinkFrames(50); len(extra) > 0 {
 					frames = append(frames, extra...)
 				}
-				att := decodeAttitudeFromFrames(frames)
+				attFromFrames := decodeAttitudeFromFrames(frames)
+				att := attFromFrames
+				if haveAHRS {
+					att = attitudeSnapshotFromAHRS(snap)
+					if attFromFrames.HeadingDeg != nil && att.HeadingDeg == nil {
+						h := *attFromFrames.HeadingDeg
+						att.HeadingDeg = &h
+					}
+					if attFromFrames.PressureAltFt != nil && att.PressureAltFt == nil {
+						v := *attFromFrames.PressureAltFt
+						att.PressureAltFt = &v
+					}
+				}
 				status.SetTraffic(now.UTC(), decodeTrafficFromFrames(frames))
-				if haveAHRS && snap.IMUDetected && !snap.StartupReady {
-					att.Valid = false
-					att.RollDeg = nil
-					att.PitchDeg = nil
-					att.HeadingDeg = nil
-					att.PressureAltFt = nil
-					att.GLoad = nil
-					att.GMin = nil
-					att.GMax = nil
-				}
-				if haveAHRS && snap.StartupReady && snap.Valid && snap.GLoadValid {
-					g := snap.GLoadG
-					gmin := snap.GLoadMinG
-					gmax := snap.GLoadMaxG
-					att.GLoad = &g
-					att.GMin = &gmin
-					att.GMax = &gmax
-				}
 				status.SetAttitude(now.UTC(), att)
+				if attitudeBroadcaster != nil {
+					if att.HeadingDeg != nil {
+						attitudeBroadcaster.SetHeading(*att.HeadingDeg, true)
+					} else {
+						attitudeBroadcaster.SetHeading(0, false)
+					}
+				}
 				// Always record a "tick" time even if we fail mid-send.
 				status.MarkTick(now.UTC(), 0)
 				sent := 0

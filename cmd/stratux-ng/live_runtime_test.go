@@ -34,7 +34,7 @@ func TestLiveRuntime_ApplyDestAndInterval(t *testing.T) {
 	sender := &safeBroadcaster{b: b}
 	defer sender.Close()
 
-	r, err := newLiveRuntime(context.Background(), minimalCfg(t, "127.0.0.1:4000", 1*time.Second), "", st, sender)
+	r, err := newLiveRuntime(context.Background(), minimalCfg(t, "127.0.0.1:4000", 1*time.Second), "", st, sender, nil)
 	if err != nil {
 		t.Fatalf("newLiveRuntime() error: %v", err)
 	}
@@ -73,7 +73,7 @@ func TestLiveRuntime_RejectsWebListenChange(t *testing.T) {
 	defer sender.Close()
 
 	cfg := minimalCfg(t, "127.0.0.1:4000", 1*time.Second)
-	r, err := newLiveRuntime(context.Background(), cfg, "", st, sender)
+	r, err := newLiveRuntime(context.Background(), cfg, "", st, sender, nil)
 	if err != nil {
 		t.Fatalf("newLiveRuntime() error: %v", err)
 	}
