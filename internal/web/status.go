@@ -82,8 +82,8 @@ type DecoderStatusSnapshot struct {
 }
 
 type UAT978DecodedSnapshot struct {
-	Towers  []uat978.TowerSnapshot  `json:"towers,omitempty"`
-	Weather uat978.WeatherSnapshot  `json:"weather,omitempty"`
+	Towers  []uat978.TowerSnapshot `json:"towers,omitempty"`
+	Weather uat978.WeatherSnapshot `json:"weather,omitempty"`
 }
 
 func (s *Status) SetADSB1090Decoder(_ time.Time, snap DecoderStatusSnapshot) {

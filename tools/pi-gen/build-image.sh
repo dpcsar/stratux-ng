@@ -31,6 +31,34 @@ require_cmd git
 require_cmd docker
 require_cmd go
 
+host_arch="$(uname -m)"
+if [[ "${host_arch}" != "aarch64" && "${host_arch}" != "arm64" ]]; then
+  if ! command -v qemu-aarch64-static >/dev/null 2>&1; then
+    echo "error: qemu-aarch64-static not found (install qemu-user-static)" >&2
+    echo "hint: sudo apt-get install -y qemu-user-static" >&2
+    exit 1
+  fi
+fi
+
+docker_usable() {
+  docker info >/dev/null 2>&1
+}
+
+sudo_docker_usable() {
+  sudo -n docker info >/dev/null 2>&1
+}
+
+RUN_DOCKER_AS_ROOT=0
+if ! docker_usable; then
+  if sudo_docker_usable; then
+    RUN_DOCKER_AS_ROOT=1
+  else
+    echo "error: docker is installed but not usable (need docker group membership or passwordless sudo)" >&2
+    echo "hint: try: sudo usermod -aG docker $USER && reboot (or log out/in)" >&2
+    exit 1
+  fi
+fi
+
 mkdir -p "${BUILD_DIR}"
 
 # 1) Build the Stratux-NG binary for arm64.
@@ -134,7 +162,11 @@ EOF
   # pi-gen’s recommended Docker entrypoint is build-docker.sh.
   # If your pi-gen checkout does not have it, run pi-gen per its upstream docs.
   if [[ -x ./build-docker.sh ]]; then
-    ./build-docker.sh
+    if [[ "${RUN_DOCKER_AS_ROOT}" -eq 1 ]]; then
+      sudo -n ./build-docker.sh
+    else
+      ./build-docker.sh
+    fi
   else
     echo "error: ./build-docker.sh not found in pi-gen checkout" >&2
     echo "hint: check pi-gen upstream docs; your checkout may be different" >&2
