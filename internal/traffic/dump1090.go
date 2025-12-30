@@ -25,11 +25,13 @@ type MetadataUpdate struct {
 	HasAlt      bool
 	OnGround    bool
 	HasOnGround bool
+	Squawk      string
+	HasSquawk   bool
 }
 
 // Empty reports whether the update contains any useful metadata.
 func (m MetadataUpdate) Empty() bool {
-	return !m.HasTail && !m.HasGround && !m.HasTrack && !m.HasVvel && !m.HasAlt && !m.HasOnGround
+	return !m.HasTail && !m.HasGround && !m.HasTrack && !m.HasVvel && !m.HasAlt && !m.HasOnGround && !m.HasSquawk
 }
 
 // ParseDump1090RawJSON parses a single line from dump1090's Stratux NDJSON
@@ -54,12 +56,21 @@ func ParseDump1090RawJSON(raw json.RawMessage) (TrafficUpdate, bool) {
 		ICAO: icao,
 		Meta: MetadataUpdate{ICAO: icao},
 	}
+	out.Source = Source1090
 
 	if msg.Tail != nil {
 		tail := strings.ToUpper(strings.TrimSpace(*msg.Tail))
 		if tail != "" {
 			out.Meta.Tail = tail
 			out.Meta.HasTail = true
+		}
+	}
+
+	if msg.Squawk != nil {
+		sq := strings.TrimSpace(*msg.Squawk)
+		if sq != "" {
+			out.Meta.Squawk = sq
+			out.Meta.HasSquawk = true
 		}
 	}
 
@@ -185,6 +196,7 @@ type dump1090RawMessage struct {
 	Vvel            *int     `json:"Vvel"`
 	OnGround        *bool    `json:"OnGround"`
 	Tail            *string  `json:"Tail"`
+	Squawk          *string  `json:"Squawk"`
 	EmitterCategory *int     `json:"Emitter_category"`
 }
 

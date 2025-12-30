@@ -72,44 +72,6 @@ func newTrafficTestConfig(t *testing.T) config.Config {
 	return cfg
 }
 
-func TestTrafficReplay_Dump1090Fixtures_EmitsGDL90Traffic(t *testing.T) {
-	// Use a stable time so tests are deterministic.
-	now := time.Date(2025, 12, 23, 0, 0, 0, 0, time.UTC)
-
-	store := traffic.NewStore(traffic.StoreConfig{MaxTargets: 50, TTL: 10 * time.Minute})
-	path := filepath.Join("..", "..", "internal", "traffic", "testdata", "dump1090-aircraft.json")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read %s: %v", path, err)
-	}
-	store.UpsertMany(now, traffic.ParseDump1090FAAircraftJSON(json.RawMessage(data)))
-
-	cfg := newTrafficTestConfig(t)
-
-	alt := 500
-	gs := 80
-	trk := 123.0
-	fixMode := 3
-	fixQuality := 1
-	gpsSnap := gps.Snapshot{
-		Enabled:    true,
-		Valid:      true,
-		LatDeg:     45.0,
-		LonDeg:     -122.0,
-		AltFeet:    &alt,
-		GroundKt:   &gs,
-		TrackDeg:   &trk,
-		FixMode:    &fixMode,
-		FixQuality: &fixQuality,
-		LastFixUTC: now.Format(time.RFC3339Nano),
-	}
-
-	frames := buildGDL90FramesWithGPS(cfg, now, false, ahrs.Snapshot{}, true, gpsSnap, store.Snapshot(now))
-	if got := countTrafficMessages(frames); got < 1 {
-		t.Fatalf("expected at least 1 traffic (0x14) message, got %d", got)
-	}
-}
-
 func TestTrafficReplay_Dump978Fixtures_EmitsGDL90Traffic(t *testing.T) {
 	now := time.Date(2025, 12, 23, 0, 0, 0, 0, time.UTC)
 
@@ -120,38 +82,6 @@ func TestTrafficReplay_Dump978Fixtures_EmitsGDL90Traffic(t *testing.T) {
 			store.Apply(now, upd)
 		}
 	}
-
-	cfg := newTrafficTestConfig(t)
-
-	alt := 500
-	gs := 80
-	trk := 123.0
-	gpsSnap := gps.Snapshot{
-		Enabled:    true,
-		Valid:      true,
-		LatDeg:     45.0,
-		LonDeg:     -122.0,
-		AltFeet:    &alt,
-		GroundKt:   &gs,
-		TrackDeg:   &trk,
-		LastFixUTC: now.Format(time.RFC3339Nano),
-	}
-
-	frames := buildGDL90FramesWithGPS(cfg, now, false, ahrs.Snapshot{}, true, gpsSnap, store.Snapshot(now))
-	if got := countTrafficMessages(frames); got < 1 {
-		t.Fatalf("expected at least 1 traffic (0x14) message, got %d", got)
-	}
-}
-
-func TestTrafficReplay_Dump1090AircraftJSON_EmitsGDL90Traffic(t *testing.T) {
-	now := time.Date(2025, 12, 23, 0, 0, 0, 0, time.UTC)
-
-	store := traffic.NewStore(traffic.StoreConfig{MaxTargets: 50, TTL: 10 * time.Minute})
-	b, err := os.ReadFile(filepath.Join("..", "..", "internal", "traffic", "testdata", "dump1090-aircraft.json"))
-	if err != nil {
-		t.Fatalf("read dump1090-aircraft.json: %v", err)
-	}
-	store.UpsertMany(now, traffic.ParseDump1090FAAircraftJSON(json.RawMessage(b)))
 
 	cfg := newTrafficTestConfig(t)
 

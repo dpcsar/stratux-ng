@@ -12,7 +12,6 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -23,6 +22,7 @@ import (
 	"stratux-ng/internal/gdl90"
 	"stratux-ng/internal/gps"
 	"stratux-ng/internal/replay"
+	"stratux-ng/internal/traffic"
 	"stratux-ng/internal/udp"
 	"stratux-ng/internal/web"
 	"stratux-ng/internal/wifi"
@@ -160,92 +160,78 @@ func attitudeSnapshotFromPayload(att gdl90.Attitude, haveAHRS bool, snap ahrs.Sn
 	return out
 }
 
-func decodeTrafficFromFrames(frames [][]byte) []web.TrafficSnapshot {
-	// Keep the decode logic local to main for now. We only need enough fields
-	// to render targets on the web map.
-	const latLonResolution = 180.0 / 8388608.0
-	const trackResolution = 360.0 / 256.0
-
-	trafficByICAO := map[string]web.TrafficSnapshot{}
-	order := make([]string, 0, 16)
-
-	decodeSigned24 := func(b0, b1, b2 byte) int32 {
-		u := int32(b0)<<16 | int32(b1)<<8 | int32(b2)
-		// Sign-extend 24-bit.
-		if (u & 0x00800000) != 0 {
-			u |= ^int32(0x00FFFFFF)
-		}
-		return u
+func trafficReportsFromSnapshots(snaps []traffic.TargetSnapshot) []gdl90.Traffic {
+	if len(snaps) == 0 {
+		return nil
 	}
-
-	decodeSigned12 := func(v uint16) int16 {
-		x := int16(v & 0x0FFF)
-		if (x & 0x0800) != 0 {
-			x |= ^int16(0x0FFF)
-		}
-		return x
-	}
-
-	for _, frame := range frames {
-		msg, crcOK, err := gdl90.Unframe(frame)
-		if err != nil || !crcOK || len(msg) < 28 {
+	reports := make([]gdl90.Traffic, 0, len(snaps))
+	for _, snap := range snaps {
+		if !snap.PositionValid {
 			continue
 		}
-		if msg[0] != 0x14 {
-			continue
-		}
-
-		icao := fmt.Sprintf("%02X%02X%02X", msg[2], msg[3], msg[4])
-		if _, ok := trafficByICAO[icao]; !ok {
-			order = append(order, icao)
-		}
-
-		lat24 := decodeSigned24(msg[5], msg[6], msg[7])
-		lon24 := decodeSigned24(msg[8], msg[9], msg[10])
-		lat := float64(lat24) * latLonResolution
-		lon := float64(lon24) * latLonResolution
-
-		alt12 := (uint16(msg[11]) << 4) | (uint16(msg[12]) >> 4)
-		altFeet := 0
-		if alt12 != 0x0FFF {
-			altFeet = int(alt12)*25 - 1000
-		}
-
-		flags := msg[12] & 0x0F
-		extrap := (flags & 0x04) != 0
-		onGround := (flags & 0x08) == 0
-
-		spd12 := (uint16(msg[14]) << 4) | (uint16(msg[15]) >> 4)
-		groundKt := int(spd12 & 0x0FFF)
-
-		vv12 := (uint16(msg[15]&0x0F) << 8) | uint16(msg[16])
-		vvelFpm := int(decodeSigned12(vv12)) * 64
-
-		trk := float64(msg[17]) * trackResolution
-
-		tail := strings.TrimRight(string(msg[19:27]), " ")
-
-		trafficByICAO[icao] = web.TrafficSnapshot{
-			ICAO:         icao,
-			Tail:         tail,
-			LatDeg:       lat,
-			LonDeg:       lon,
-			AltFeet:      altFeet,
-			GroundKt:     groundKt,
-			TrackDeg:     trk,
-			VvelFpm:      vvelFpm,
-			OnGround:     onGround,
-			Extrapolated: extrap,
-		}
+		reports = append(reports, snap.Traffic)
 	}
+	if len(reports) == 0 {
+		return nil
+	}
+	return reports
+}
 
-	// Stable output for UI.
-	sort.Strings(order)
-	out := make([]web.TrafficSnapshot, 0, len(order))
-	for _, icao := range order {
-		out = append(out, trafficByICAO[icao])
+func buildTrafficStatusSnapshots(now time.Time, gpsSnap gps.Snapshot, gpsValid bool, snaps []traffic.TargetSnapshot) []web.TrafficSnapshot {
+	if len(snaps) == 0 {
+		return nil
+	}
+	out := make([]web.TrafficSnapshot, 0, len(snaps))
+	var ownLat, ownLon float64
+	if gpsValid {
+		ownLat = gpsSnap.LatDeg
+		ownLon = gpsSnap.LonDeg
+	}
+	for _, snap := range snaps {
+		ts := web.TrafficSnapshot{
+			ICAO:            icaoStringFromBytes(snap.Traffic.ICAO),
+			Tail:            strings.TrimSpace(snap.Traffic.Tail),
+			LatDeg:          snap.Traffic.LatDeg,
+			LonDeg:          snap.Traffic.LonDeg,
+			AltFeet:         snap.Traffic.AltFeet,
+			GroundKt:        snap.Traffic.GroundKt,
+			TrackDeg:        snap.Traffic.TrackDeg,
+			VvelFpm:         snap.Traffic.VvelFpm,
+			OnGround:        snap.Traffic.OnGround,
+			Extrapolated:    snap.Traffic.Extrapolated,
+			PositionValid:   snap.PositionValid,
+			Source:          string(snap.Source),
+			Squawk:          strings.TrimSpace(snap.Squawk),
+			EmitterCategory: snap.Traffic.EmitterCategory,
+		}
+		if !snap.SeenAt.IsZero() {
+			ts.SeenUnixNano = snap.SeenAt.UTC().UnixNano()
+		}
+		if gpsValid && snap.PositionValid {
+			dist := haversineNm(ownLat, ownLon, snap.Traffic.LatDeg, snap.Traffic.LonDeg)
+			ts.DistanceNm = &dist
+		}
+		out = append(out, ts)
 	}
 	return out
+}
+
+func icaoStringFromBytes(icao [3]byte) string {
+	return fmt.Sprintf("%02X%02X%02X", icao[0], icao[1], icao[2])
+}
+
+func haversineNm(lat1, lon1, lat2, lon2 float64) float64 {
+	const earthRadiusMeters = 6371000.0
+	toRad := func(deg float64) float64 {
+		return deg * math.Pi / 180.0
+	}
+	dLat := toRad(lat2 - lat1)
+	dLon := toRad(lon2 - lon1)
+	lat1Rad := toRad(lat1)
+	lat2Rad := toRad(lat2)
+	a := math.Sin(dLat/2)*math.Sin(dLat/2) + math.Cos(lat1Rad)*math.Cos(lat2Rad)*math.Sin(dLon/2)*math.Sin(dLon/2)
+	c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
+	return (earthRadiusMeters * c) / 1852.0
 }
 
 type ctxSleeper struct{ ctx context.Context }
@@ -648,15 +634,17 @@ func main() {
 				} else {
 					status.SetAHRSSensors(now.UTC(), web.AHRSSensorsSnapshot{Enabled: false})
 				}
+				trafficSnaps := rt.TrafficSnapshots(now.UTC())
+				liveTraffic := trafficReportsFromSnapshots(trafficSnaps)
 				if curCfg.GPS.Enable {
-					frames = buildGDL90FramesWithGPS(curCfg, now.UTC(), haveAHRS, snap, haveGPS, gpsSnap, rt.TrafficTargets(now.UTC()))
+					frames = buildGDL90FramesWithGPS(curCfg, now.UTC(), haveAHRS, snap, haveGPS, gpsSnap, liveTraffic)
 				} else {
 					frames = buildGDL90FramesNoGPS(curCfg, now.UTC(), haveAHRS, snap)
 				}
 				if extra := rt.DrainUAT978UplinkFrames(50); len(extra) > 0 {
 					frames = append(frames, extra...)
 				}
-				status.SetTraffic(now.UTC(), decodeTrafficFromFrames(frames))
+				status.SetTraffic(now.UTC(), buildTrafficStatusSnapshots(now.UTC(), gpsSnap, haveGPS && gpsSnap.Valid, trafficSnaps))
 				// Always record a "tick" time even if we fail mid-send.
 				status.MarkTick(now.UTC(), 0)
 				sent := 0

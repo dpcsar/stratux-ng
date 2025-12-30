@@ -1,0 +1,3 @@
+{"Icao_addr":11256099,"DF":17,"CA":5,"TypeCode":17,"SubtypeCode":0,"Position_valid":true,"Lat":45.0001,"Lng":-122.0001,"Alt":5500,"NACp":9,"Speed_valid":true,"Speed":135.5,"Track":180.0,"Vvel":-64,"OnGround":false,"Tail":"ALPHA123","Squawk":"1234","Emitter_category":3}
+{"Icao_addr":14611542,"DF":17,"CA":5,"TypeCode":11,"SubtypeCode":1,"Position_valid":true,"Lat":46.2001,"Lng":-123.1002,"Alt":2500,"NACp":8,"Speed_valid":true,"Speed":90.0,"Track":270.0,"Vvel":0,"OnGround":true,"Tail":"BRAVO77","Emitter_category":2}
+{"Icao_addr":14611542,"Position_valid":false,"Tail":"B77","Speed_valid":true,"Speed":0,"Track":0.0,"OnGround":true,"Squawk":"0456"}

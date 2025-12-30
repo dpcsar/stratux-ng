@@ -24,13 +24,40 @@ type Store struct {
 }
 
 type target struct {
-	traffic gdl90.Traffic
-	seenAt  time.Time
+	traffic     gdl90.Traffic
+	seenAt      time.Time
+	hasPosition bool
+	squawk      string
+	source      Source
 }
 
 type evictionCandidate struct {
 	ico  [3]byte
 	seen time.Time
+}
+
+// TargetSnapshot exposes the latest state for a traffic target, including
+// metadata-only entries (no position).
+type TargetSnapshot struct {
+	Traffic       gdl90.Traffic
+	PositionValid bool
+	SeenAt        time.Time
+	Squawk        string
+	Source        Source
+}
+
+func hasValidPosition(t gdl90.Traffic) bool {
+	return !(t.LatDeg == 0 && t.LonDeg == 0)
+}
+
+func icaoLess(a, b [3]byte) bool {
+	if a[0] != b[0] {
+		return a[0] < b[0]
+	}
+	if a[1] != b[1] {
+		return a[1] < b[1]
+	}
+	return a[2] < b[2]
 }
 
 func (s *Store) evictIfNeededLocked() {
@@ -115,23 +142,42 @@ func (s *Store) Apply(nowUTC time.Time, update TrafficUpdate) {
 	defer s.mu.Unlock()
 
 	tgt, exists := s.targets[upd.ICAO]
+	if !exists && upd.Traffic == nil && upd.Meta.Empty() {
+		return
+	}
+	hadPrevious := exists
+	if !exists {
+		tgt = target{traffic: gdl90.Traffic{ICAO: upd.ICAO}}
+		exists = true
+	}
 	prevTraffic := tgt.traffic
+	updated := false
 
 	if upd.Traffic != nil {
 		traffic := *upd.Traffic
-		if exists {
+		if hadPrevious {
 			s.carryForwardMetadata(&traffic, prevTraffic, upd.Meta)
 		}
 		tgt.traffic = traffic
 		tgt.seenAt = nowUTC
-		exists = true
+		tgt.hasPosition = hasValidPosition(traffic)
+		updated = true
 	}
 
-	if exists && !upd.Meta.Empty() {
+	if !upd.Meta.Empty() {
 		tgt.traffic = applyMetadata(tgt.traffic, upd.Meta)
+		tgt.seenAt = nowUTC
+		updated = true
 	}
 
-	if upd.Traffic != nil || (exists && !upd.Meta.Empty()) {
+	if upd.Meta.HasSquawk {
+		tgt.squawk = upd.Meta.Squawk
+	}
+	if upd.Source != SourceUnknown {
+		tgt.source = upd.Source
+	}
+
+	if updated {
 		s.targets[upd.ICAO] = tgt
 	}
 
@@ -141,42 +187,46 @@ func (s *Store) Apply(nowUTC time.Time, update TrafficUpdate) {
 }
 
 func (s *Store) Snapshot(nowUTC time.Time) []gdl90.Traffic {
-	if s == nil {
+	cloned := s.snapshotTargets(nowUTC)
+	if len(cloned) == 0 {
 		return nil
 	}
-	if nowUTC.IsZero() {
-		nowUTC = time.Now().UTC()
-	}
-
-	s.mu.Lock()
-	// Purge stale.
-	if s.cfg.TTL > 0 {
-		cutoff := nowUTC.UTC().Add(-s.cfg.TTL)
-		for k, v := range s.targets {
-			if v.seenAt.Before(cutoff) {
-				delete(s.targets, k)
-			}
+	out := make([]gdl90.Traffic, 0, len(cloned))
+	for _, v := range cloned {
+		if !v.hasPosition {
+			continue
 		}
-	}
-
-	out := make([]gdl90.Traffic, 0, len(s.targets))
-	for _, v := range s.targets {
 		out = append(out, v.traffic)
 	}
-	s.mu.Unlock()
-
+	if len(out) == 0 {
+		return nil
+	}
 	sort.Slice(out, func(i, j int) bool {
-		ai := out[i].ICAO
-		aj := out[j].ICAO
-		if ai[0] != aj[0] {
-			return ai[0] < aj[0]
-		}
-		if ai[1] != aj[1] {
-			return ai[1] < aj[1]
-		}
-		return ai[2] < aj[2]
+		return icaoLess(out[i].ICAO, out[j].ICAO)
 	})
+	return out
+}
 
+// SnapshotDetailed returns all tracked targets, including metadata-only entries
+// that lack a valid position.
+func (s *Store) SnapshotDetailed(nowUTC time.Time) []TargetSnapshot {
+	cloned := s.snapshotTargets(nowUTC)
+	if len(cloned) == 0 {
+		return nil
+	}
+	out := make([]TargetSnapshot, 0, len(cloned))
+	for _, v := range cloned {
+		out = append(out, TargetSnapshot{
+			Traffic:       v.traffic,
+			PositionValid: v.hasPosition,
+			SeenAt:        v.seenAt,
+			Squawk:        v.squawk,
+			Source:        v.source,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return icaoLess(out[i].Traffic.ICAO, out[j].Traffic.ICAO)
+	})
 	return out
 }
 
@@ -224,4 +274,31 @@ func applyMetadata(t gdl90.Traffic, meta MetadataUpdate) gdl90.Traffic {
 		t.OnGround = meta.OnGround
 	}
 	return t
+}
+
+func (s *Store) snapshotTargets(nowUTC time.Time) []target {
+	if s == nil {
+		return nil
+	}
+	if nowUTC.IsZero() {
+		nowUTC = time.Now().UTC()
+	} else {
+		nowUTC = nowUTC.UTC()
+	}
+
+	s.mu.Lock()
+	if s.cfg.TTL > 0 {
+		cutoff := nowUTC.Add(-s.cfg.TTL)
+		for k, v := range s.targets {
+			if v.seenAt.Before(cutoff) {
+				delete(s.targets, k)
+			}
+		}
+	}
+	cloned := make([]target, 0, len(s.targets))
+	for _, v := range s.targets {
+		cloned = append(cloned, v)
+	}
+	s.mu.Unlock()
+	return cloned
 }

@@ -9,6 +9,7 @@ type TrafficUpdate struct {
 	ICAO    [3]byte
 	Traffic *gdl90.Traffic
 	Meta    MetadataUpdate
+	Source  Source
 }
 
 // validICAO returns the update's ICAO or false if unavailable.
@@ -67,5 +68,5 @@ func NewTrafficUpdateFromTraffic(t gdl90.Traffic) TrafficUpdate {
 	meta.OnGround = t.OnGround
 	meta.HasOnGround = true
 
-	return TrafficUpdate{ICAO: t.ICAO, Traffic: &t, Meta: meta}
+	return TrafficUpdate{ICAO: t.ICAO, Traffic: &t, Meta: meta, Source: SourceUnknown}
 }

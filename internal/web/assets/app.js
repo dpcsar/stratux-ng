@@ -135,6 +135,8 @@
   const trGdl90Targets = document.getElementById('tr-gdl90-targets');
   const trGdl90TableHead = document.getElementById('tr-gdl90-table-head');
   const trGdl90TableBody = document.getElementById('tr-gdl90-table-body');
+  const trModeSTableBody = document.getElementById('tr-modes-table-body');
+  const trModeSCount = document.getElementById('tr-modes-count');
   const trafficColumnToggleInputs = document.querySelectorAll('[data-traffic-col-toggle]');
 
   const trAdsbBadge = document.getElementById('tr-adsb-badge');
@@ -191,6 +193,7 @@
   let ownshipTrack = null;
 
   let lastTraffic = null;
+  let lastTrafficPositioned = [];
   let radarRangeNm = 5;
   const radarRangesNm = [2, 5, 10, 20, 40];
   let lastRadarVisibleCount = 0;
@@ -231,15 +234,62 @@
 
   const trafficColumns = [
     { key: 'target', label: 'Target', required: true },
+    { key: 'squawk', label: 'Squawk', defaultVisible: true },
     { key: 'alt', label: 'Altitude', defaultVisible: true },
+    { key: 'distance', label: 'Distance', defaultVisible: true },
     { key: 'gs', label: 'Ground Speed', defaultVisible: true },
     { key: 'track', label: 'Track', defaultVisible: true },
     { key: 'vs', label: 'Vertical Speed', defaultVisible: true },
     { key: 'age', label: 'Age', defaultVisible: true },
     { key: 'flags', label: 'Flags', defaultVisible: true },
+    { key: 'category', label: 'Category', defaultVisible: true },
   ];
 
   const trafficColumnVisibility = new Map();
+
+  const emitterCategoryLabels = {
+    0x01: 'Light',
+    0x02: 'Small',
+    0x03: 'Large',
+    0x04: 'Heavy',
+    0x05: 'HVY+',
+    0x06: 'Rotorcraft',
+    0x07: 'Glider',
+    0x08: 'LTA',
+    0x09: 'Parachute',
+    0x0a: 'UAV',
+    0x0b: 'Space',
+    0x0c: 'Emergency',
+    0x0d: 'Service',
+    0x0e: 'Obstacle',
+    0x0f: 'Point',
+  };
+
+  function formatEmitterCategory(code) {
+    const n = Number(code);
+    if (!Number.isFinite(n) || n <= 0) return '';
+    return emitterCategoryLabels[n] || `Cat ${n}`;
+  }
+
+  function trafficSourceKey(value) {
+    const raw = String(value || '').trim().toLowerCase();
+    if (raw === '1090') return '1090';
+    if (raw === '978') return '978';
+    return 'unknown';
+  }
+
+  function trafficSourceLabel(value) {
+    const key = trafficSourceKey(value);
+    if (key === '1090') return '1090 MHz';
+    if (key === '978') return '978 MHz';
+    return 'Unknown';
+  }
+
+  function trafficDistanceValue(target) {
+    const d = Number(target?.distance_nm);
+    if (Number.isFinite(d) && d >= 0) return d;
+    return Number.POSITIVE_INFINITY;
+  }
 
   function lsGetNumber(key, fallback) {
     try {
@@ -576,9 +626,19 @@
         if (tail && icao) return `${tail} (${icao})`;
         return tail || icao || '--';
       }
+      case 'squawk': {
+        const sq = String(t.squawk || '').trim();
+        return sq || '--';
+      }
       case 'alt': {
         const alt = Number(t.alt_feet);
         return Number.isFinite(alt) ? `${fmtInt(alt)} ft` : '--';
+      }
+      case 'distance': {
+        if (t.distance_nm == null) return '--';
+        const dist = Number(t.distance_nm);
+        if (!Number.isFinite(dist) || dist < 0) return '--';
+        return `${fmtNum(dist, dist < 10 ? 1 : 0)} nm`;
       }
       case 'gs': {
         const gs = Number(t.ground_kt);
@@ -605,6 +665,9 @@
         if (t.extrapolated) flags.push('XTRP');
         return flags.join(' · ') || '--';
       }
+      case 'category': {
+        return formatEmitterCategory(t.emitter_category) || '--';
+      }
       default:
         return '--';
     }
@@ -623,12 +686,25 @@
       .map((col) => `<th scope="col">${escapeHtml(col.label)}</th>`)
       .join('');
 
+    const list = Array.isArray(trafficList) ? [...trafficList] : [];
+    list.sort((a, b) => {
+      const da = trafficDistanceValue(a);
+      const db = trafficDistanceValue(b);
+      if (da !== db) return da - db;
+      const ia = String(a?.icao || '');
+      const ib = String(b?.icao || '');
+      return ia.localeCompare(ib);
+    });
+    lastTrafficPositioned = list;
+
     const rows = [];
-    for (const target of Array.isArray(trafficList) ? trafficList : []) {
+    for (const target of list) {
       const cells = cols
         .map((col) => `<td>${escapeHtml(formatTrafficCellValue(target, col.key))}</td>`)
         .join('');
-      rows.push(`<tr>${cells}</tr>`);
+      const sourceKey = trafficSourceKey(target?.source);
+      const rowTitle = trafficSourceLabel(target?.source);
+      rows.push(`<tr class="traffic-source-${sourceKey}" data-source="${sourceKey}" title="${escapeHtml(rowTitle)}">${cells}</tr>`);
     }
 
     if (!rows.length) {
@@ -636,6 +712,50 @@
     }
 
     trGdl90TableBody.innerHTML = rows.join('');
+  }
+
+  function renderTrafficModeSTable(list) {
+    if (!trModeSTableBody || !trModeSCount) return;
+    const entries = Array.isArray(list) ? [...list] : [];
+    entries.sort((a, b) => {
+      const ageA = Number(a?.age_sec);
+      const ageB = Number(b?.age_sec);
+      const safeA = Number.isFinite(ageA) ? ageA : Number.POSITIVE_INFINITY;
+      const safeB = Number.isFinite(ageB) ? ageB : Number.POSITIVE_INFINITY;
+      if (safeA !== safeB) return safeA - safeB;
+      const ia = String(a?.icao || '');
+      const ib = String(b?.icao || '');
+      return ia.localeCompare(ib);
+    });
+    const rows = [];
+    for (const target of entries) {
+      const sourceKey = trafficSourceKey(target?.source);
+      const sourceTitle = trafficSourceLabel(target?.source);
+      const targetCell = escapeHtml(formatTrafficCellValue(target, 'target'));
+      const squawkCell = escapeHtml(formatTrafficCellValue(target, 'squawk'));
+      const altCell = escapeHtml(formatTrafficCellValue(target, 'alt'));
+      const ageCell = escapeHtml(formatTrafficCellValue(target, 'age'));
+      const sourceCell = escapeHtml(sourceTitle);
+      rows.push(
+        `<tr class="traffic-source-${sourceKey}" data-source="${sourceKey}" title="${escapeHtml(sourceTitle)}">` +
+          `<td>${targetCell}</td>` +
+          `<td>${squawkCell}</td>` +
+          `<td>${altCell}</td>` +
+          `<td>${ageCell}</td>` +
+          `<td>${sourceCell}</td>` +
+        '</tr>',
+      );
+    }
+
+    if (!rows.length) {
+      rows.push('<tr class="traffic-table-empty-row"><td colspan="5">No Mode S / no-position traffic</td></tr>');
+      trModeSCount.textContent = 'No recent hits';
+    } else {
+      const label = entries.length === 1 ? '1 recent hit' : `${fmtInt(entries.length)} recent hits`;
+      trModeSCount.textContent = label;
+    }
+
+    trModeSTableBody.innerHTML = rows.join('');
   }
 
   function initTrafficColumnPreferences() {
@@ -672,7 +792,7 @@
         if (!col.required) {
           lsSet(trafficColumnStorageKey(key), next ? '1' : '0');
         }
-        renderTrafficTable(Array.isArray(lastTraffic) ? lastTraffic : []);
+        renderTrafficTable(Array.isArray(lastTrafficPositioned) ? lastTrafficPositioned : []);
       });
     });
   }
@@ -1056,6 +1176,7 @@
 
     // Draw targets.
     for (const t of list) {
+      if (t?.position_valid === false) continue;
       const lat = Number(t?.lat_deg);
       const lon = Number(t?.lon_deg);
       if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
@@ -1369,6 +1490,7 @@
     };
 
     for (const t of list) {
+      if (t?.position_valid === false) continue;
       const icao = String(t?.icao || '').trim();
       if (!icao) continue;
       const lat = Number(t?.lat_deg);
@@ -1810,10 +1932,12 @@
 
     // Traffic page.
     const traffic = Array.isArray(s?.traffic) ? s.traffic : [];
+    const positionedTraffic = traffic.filter((t) => t?.position_valid !== false);
+    const bearinglessTraffic = traffic.filter((t) => t?.position_valid === false);
     setInput(trGdl90Dest, dest || '--');
     setInput(trGdl90Interval, interval || '--');
     setInput(trGdl90Frames, frames ? fmtInt(frames) : '0');
-    setInput(trGdl90Targets, traffic.length ? fmtInt(traffic.length) : '0');
+    setInput(trGdl90Targets, positionedTraffic.length ? fmtInt(positionedTraffic.length) : '0');
 
     if (trGdl90State) {
       if (!dest) {
@@ -1825,7 +1949,8 @@
       }
     }
 
-    renderTrafficTable(traffic);
+    renderTrafficTable(positionedTraffic);
+    renderTrafficModeSTable(bearinglessTraffic);
 
     setTrafficFeedCard(
       s?.adsb1090,

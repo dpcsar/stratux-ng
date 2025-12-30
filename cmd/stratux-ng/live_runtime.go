@@ -398,11 +398,11 @@ func (r *liveRuntime) Close() {
 	}
 }
 
-func (r *liveRuntime) TrafficTargets(nowUTC time.Time) []gdl90.Traffic {
+func (r *liveRuntime) TrafficSnapshots(nowUTC time.Time) []traffic.TargetSnapshot {
 	if r == nil || r.trafficStore == nil {
 		return nil
 	}
-	return r.trafficStore.Snapshot(nowUTC)
+	return r.trafficStore.SnapshotDetailed(nowUTC)
 }
 
 func (r *liveRuntime) ADSB1090DecoderSnapshot(nowUTC time.Time) (web.DecoderStatusSnapshot, bool) {

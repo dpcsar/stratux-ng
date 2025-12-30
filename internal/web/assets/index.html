@@ -383,9 +383,17 @@
                 <div class="traffic-label">Targets</div>
                 <div class="traffic-table-controls" role="group" aria-label="Toggle traffic columns">
                   <label class="traffic-toggle">
+                    <input type="checkbox" data-traffic-col="squawk" data-traffic-col-toggle checked />
+                    <span>Squawk</span>
+                  </label>
+                  <label class="traffic-toggle">
                     <input type="checkbox" data-traffic-col="alt" data-traffic-col-toggle checked />
                     <span>Altitude</span>
                   </label>
+                    <label class="traffic-toggle">
+                      <input type="checkbox" data-traffic-col="distance" data-traffic-col-toggle checked />
+                      <span>Distance</span>
+                    </label>
                   <label class="traffic-toggle">
                     <input type="checkbox" data-traffic-col="gs" data-traffic-col-toggle checked />
                     <span>Ground Speed</span>
@@ -406,8 +414,14 @@
                     <input type="checkbox" data-traffic-col="flags" data-traffic-col-toggle checked />
                     <span>Flags</span>
                   </label>
+                    <label class="traffic-toggle">
+                      <input type="checkbox" data-traffic-col="category" data-traffic-col-toggle checked />
+                      <span>Category</span>
+                    </label>
                 </div>
               </div>
+
+              <p class="traffic-note">Rows stay color-coded by SDR (blue = 1090 MHz, yellow = 978 MHz).</p>
 
               <div class="traffic-table-wrap">
                 <table class="traffic-table-grid" aria-label="Traffic targets table">
@@ -415,6 +429,27 @@
                     <tr id="tr-gdl90-table-head"></tr>
                   </thead>
                   <tbody id="tr-gdl90-table-body"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="traffic-table traffic-modes-table" aria-label="Mode S and no-position traffic list">
+              <div class="traffic-table-headline">
+                <div class="traffic-label">Basic Mode S / No-Position Messages</div>
+              </div>
+              <p class="traffic-modes-note">Stratux keeps bearingless hits for roughly 30 seconds. Rows stay color-coded by SDR (blue = 1090 MHz, yellow = 978 MHz). <span id="tr-modes-count">No recent hits</span></p>
+              <div class="traffic-table-wrap traffic-modes-table-wrap">
+                <table class="traffic-table-grid" aria-label="Mode S targets">
+                  <thead>
+                    <tr>
+                      <th scope="col">Target</th>
+                      <th scope="col">Squawk</th>
+                      <th scope="col">Altitude</th>
+                      <th scope="col">Age</th>
+                      <th scope="col">Source</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tr-modes-table-body"></tbody>
                 </table>
               </div>
             </div>

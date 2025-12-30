@@ -106,16 +106,21 @@ func (s *Status) SetGPS(_ time.Time, snap gps.Snapshot) {
 // This is intended for visualizing traffic on the web map and is not a
 // certified traffic display.
 type TrafficSnapshot struct {
-	ICAO         string  `json:"icao"`
-	Tail         string  `json:"tail,omitempty"`
-	LatDeg       float64 `json:"lat_deg"`
-	LonDeg       float64 `json:"lon_deg"`
-	AltFeet      int     `json:"alt_feet"`
-	GroundKt     int     `json:"ground_kt"`
-	TrackDeg     float64 `json:"track_deg"`
-	VvelFpm      int     `json:"vvel_fpm"`
-	OnGround     bool    `json:"on_ground"`
-	Extrapolated bool    `json:"extrapolated"`
+	ICAO            string   `json:"icao"`
+	Tail            string   `json:"tail,omitempty"`
+	LatDeg          float64  `json:"lat_deg"`
+	LonDeg          float64  `json:"lon_deg"`
+	AltFeet         int      `json:"alt_feet"`
+	GroundKt        int      `json:"ground_kt"`
+	TrackDeg        float64  `json:"track_deg"`
+	VvelFpm         int      `json:"vvel_fpm"`
+	OnGround        bool     `json:"on_ground"`
+	Extrapolated    bool     `json:"extrapolated"`
+	PositionValid   bool     `json:"position_valid"`
+	Source          string   `json:"source,omitempty"`
+	Squawk          string   `json:"squawk,omitempty"`
+	EmitterCategory byte     `json:"emitter_category,omitempty"`
+	DistanceNm      *float64 `json:"distance_nm,omitempty"`
 
 	// Derived fields for UI.
 	LastSeenUTC string  `json:"last_seen_utc,omitempty"`
@@ -136,7 +141,9 @@ func (s *Status) SetTraffic(nowUTC time.Time, traffic []TrafficSnapshot) {
 	seen := nowUTC.UTC().UnixNano()
 	out := make([]TrafficSnapshot, 0, len(traffic))
 	for _, t := range traffic {
-		t.SeenUnixNano = seen
+		if t.SeenUnixNano == 0 {
+			t.SeenUnixNano = seen
+		}
 		t.LastSeenUTC = ""
 		t.AgeSec = 0
 		out = append(out, t)

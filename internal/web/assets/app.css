@@ -6,6 +6,8 @@
   --muted: #b7b7c4;
   --accent: #7dd3fc;
   --danger: #fca5a5;
+  --traffic-1090: #37b5f8;
+  --traffic-978: #facc15;
 
   --radius: 14px;
   --pad: 14px;
@@ -25,6 +27,8 @@
     --muted: #5b5b6a;
     --accent: #0369a1;
     --danger: #b91c1c;
+    --traffic-1090: #0e7490;
+    --traffic-978: #d97706;
     --shadow: 0 10px 30px rgba(0,0,0,0.10);
   }
 }
@@ -327,6 +331,40 @@ h2 { margin: 6px 0 6px; font-size: 18px; }
 .traffic-table-empty-row td {
   text-align: center;
   color: var(--muted);
+}
+
+.traffic-modes-table {
+  margin-top: 32px;
+}
+
+.traffic-note,
+.traffic-modes-note {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.traffic-modes-note span {
+  display: inline-block;
+  margin-left: 8px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.traffic-modes-table-wrap {
+  margin-top: 12px;
+}
+
+.traffic-table-grid tbody tr.traffic-source-1090 td:first-child {
+  border-left: 3px solid var(--traffic-1090);
+}
+
+.traffic-table-grid tbody tr.traffic-source-978 td:first-child {
+  border-left: 3px solid var(--traffic-978);
+}
+
+.traffic-table-grid tbody tr.traffic-source-unknown td:first-child {
+  border-left: 3px solid rgba(127,127,140,0.35);
 }
 
 .traffic-feed-grid {

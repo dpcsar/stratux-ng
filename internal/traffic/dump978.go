@@ -170,5 +170,6 @@ func (m dump978Message) toUpdate() (TrafficUpdate, bool) {
 		ICAO:    icao,
 		Traffic: &traffic,
 		Meta:    meta,
+		Source:  Source978,
 	}, true
 }
