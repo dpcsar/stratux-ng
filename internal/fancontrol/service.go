@@ -213,7 +213,16 @@ func (s *Service) Start(ctx context.Context) error {
 		break
 	}
 	if drv == nil {
-		err := fmt.Errorf("fancontrol: unable to initialize backend %q: %v", normalizedBackend, openErrs)
+		var errMsgs []string
+		for _, e := range openErrs {
+			errMsgs = append(errMsgs, e.Error())
+		}
+		err := fmt.Errorf(
+			"fancontrol: unable to initialize backend %q (tried %v): %s",
+			normalizedBackend,
+			backendsToTry,
+			strings.Join(errMsgs, "; "),
+		)
 		s.setErr(err.Error())
 		return err
 	}

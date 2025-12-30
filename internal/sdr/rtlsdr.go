@@ -162,8 +162,9 @@ func UpsertFlagValue(args []string, flag string, value string) []string {
 				args[i+1] = value
 				return args
 			}
-			// Malformed; append value.
-			return append(args, value)
+			// Malformed: trailing flag with no value; convert to --flag=value form.
+			args[i] = flag + "=" + value
+			return args
 		}
 	}
 

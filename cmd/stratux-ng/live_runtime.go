@@ -264,11 +264,16 @@ func (r *liveRuntime) initDecoders(ctx context.Context) error {
 	if r.cfg.ADSB1090.Enable {
 		band := r.cfg.ADSB1090
 		if strings.TrimSpace(band.Decoder.Command) != "" && isDump1090Command(band.Decoder.Command) {
-			// If sdr.serial_tag is "auto", use auto-detected serial; otherwise keep config.
-			if sdr.IsAutoTag(band.SDR.SerialTag) && adsbDev != nil {
+			// If sdr.serial_tag is "auto", use auto-detected serial and index; otherwise keep config.
+			originalAuto := sdr.IsAutoTag(band.SDR.SerialTag)
+			var idx *int
+			if originalAuto && adsbDev != nil {
 				band.SDR.SerialTag = adsbDev.Serial
+				idx = &adsbDev.Index
+			} else {
+				idx = band.SDR.Index
 			}
-			band.Decoder.Args = upsertDump1090DeviceArgs(band.Decoder.Args, band.SDR.SerialTag, band.SDR.Index)
+			band.Decoder.Args = upsertDump1090DeviceArgs(band.Decoder.Args, band.SDR.SerialTag, idx)
 		}
 		r.cfg.ADSB1090 = band
 		endpoint := strings.TrimSpace(band.Decoder.JSONAddr)
