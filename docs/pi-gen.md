@@ -35,6 +35,11 @@ Typical decoder command lines (examples; adjust for your install):
 - 978 traffic (`dump978-fa`): `--sdr driver=rtlsdr,serial=stx:978:0 --json-port 30978`
 - 978 weather / FIS-B uplinks (`dump978-fa`): add `--raw-port 30979`
 
+If you only have **one** RTL-SDR dongle and it is already used for 1090, you cannot also run 978 via RTL/Soapy at the same time.
+In that case, use a Stratux UATRadio for 978 and run `dump978-fa` in `--stratuxv3` mode, e.g.:
+
+- `dump978-fa --stratuxv3 /dev/stratux-uatradio --json-port 30978 --raw-port 30979`
+
 Notes for 978 weather (FIS-B):
 - Stratux-NG does not “decode products” in the image build; it relays **UAT uplinks** as **GDL90 Uplink (0x07)** frames (Stratux-style).
 - You must enable the raw uplink TCP endpoint in config (`uat978.decoder.raw_listen` or `uat978.decoder.raw_addr`) and run `dump978-fa` with `--raw-port`.
@@ -103,6 +108,10 @@ Optional: run decoders as separate services (instead of Stratux-NG supervising t
 
 **Udev rules (recommended)**
 - GPS stable symlink: `configs/udev/99-stratux-gps.rules.example` → `/etc/udev/rules.d/99-stratux-gps.rules`
+
+Note: Stratux-NG images intentionally do **not** ship the large set of legacy Stratux peripheral udev rules (e.g. Ping/Pong/UATRadio/SoftRF variants) by default. If you have a niche/older device that still needs custom udev matching or driver binding, add your own rules under `/etc/udev/rules.d/` on the device (or bake them into the image stage under `tools/pi-gen/stage-stratux-ng/.../files/etc/udev/rules.d/`).
+
+If you are using a Stratux UATRadio for 978, there is an example rule in `configs/udev/99-stratux-uatradio.rules.example`.
 
 ### Suggested pi-gen structure
 

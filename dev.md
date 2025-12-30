@@ -156,6 +156,16 @@ sudo apt install -y git build-essential cmake pkg-config \
   libboost-all-dev rtl-sdr soapysdr-tools soapysdr-module-rtlsdr libsoapysdr-dev
 ```
 
+SDR selection default (recommended):
+
+- Stratux-NG’s default mode is **auto-detect**: it runs `rtl_test -t` at startup and assigns distinct RTL-SDR dongles to 1090 and 978.
+- This avoids per-machine edits to `/data/stratux-ng/config.yaml`.
+
+Override (only if you need to pin a specific dongle):
+
+- Set `adsb1090.sdr.serial_tag` / `uat978.sdr.serial_tag` to your programmed EEPROM serial strings, and/or
+- Provide explicit decoder flags in `adsb1090.decoder.args` / `uat978.decoder.args`.
+
 2) Prevent “device busy” (DVB driver grabbing RTL-SDR dongles):
 
 ```

@@ -48,23 +48,19 @@ adsb1090:
         args:
             - --device-type
             - rtlsdr
-            - --device
-            - stx:1090:0
             - --net
             - --net-stratux-port
             - "30006"
             - --modeac
         json_listen: 127.0.0.1:30006
     sdr:
-        serial_tag: stx:1090:0
+        serial_tag: auto
 
 uat978:
     enable: true
     decoder:
         command: dump978-fa
         args:
-            - --sdr
-            - driver=rtlsdr,serial=stx:978:0
             - --json-port
             - "30978"
             - --raw-port
@@ -72,4 +68,4 @@ uat978:
         json_listen: 127.0.0.1:30978
         raw_listen: 127.0.0.1:30979
     sdr:
-        serial_tag: stx:978:0
+        serial_tag: auto

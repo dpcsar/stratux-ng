@@ -8,6 +8,10 @@ What it does:
 - Installs `stratux-ng` + a systemd unit
 - Seeds `/data/stratux-ng/config.yaml` (for first boot; persistence is handled separately)
 
+Note: The image stage only includes the udev rules Stratux-NG actively relies on (e.g. the GPS symlink rule). It intentionally does not carry over the full set of legacy Stratux peripheral udev rules. If you need a custom rule for older/niche hardware, add it under `/etc/udev/rules.d/` on-device or bake it into `stage-stratux-ng/.../files/etc/udev/rules.d/`.
+
+For Stratux UATRadio (978 via `dump978-fa --stratuxv3 ...`), see the example rule at `configs/udev/99-stratux-uatradio.rules.example`.
+
 ## Prerequisites (host)
 
 - Linux host with `docker` and `git`
