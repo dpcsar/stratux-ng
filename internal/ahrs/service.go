@@ -43,6 +43,7 @@ type Snapshot struct {
 
 	RollDeg    float64
 	PitchDeg   float64
+	SlipSkidDeg float64
 	YawRateDps float64
 
 	GLoadValid bool
@@ -494,6 +495,15 @@ func (s *Service) run(ctx context.Context) {
 			// Compute roll/pitch from accel only (gravity vector).
 			accRollRad := math.Atan2(ay, az)
 			accPitchRad := math.Atan2(-ax, math.Sqrt(ay*ay+az*az))
+			// Slip/skid ("ball") approximation: lateral specific force vs down.
+			// This intentionally uses the accelerometer-derived frame, similar to a real
+			// inclinometer ball.
+			slipSkidDeg := (math.Atan2(ay, az) * 180 / math.Pi)
+			if slipSkidDeg > 20 {
+				slipSkidDeg = 20
+			} else if slipSkidDeg < -20 {
+				slipSkidDeg = -20
+			}
 			// G-meter: signed load factor along body Z (normal axis).
 			// With our body frame convention (Z positive down), level flight is ~+1G.
 			// This can go negative during inverted/negative-G maneuvers.
@@ -592,6 +602,7 @@ func (s *Service) run(ctx context.Context) {
 			s.snap.Valid = true
 			s.snap.RollDeg = roll + s.rollOffsetDeg
 			s.snap.PitchDeg = pitch + s.pitchOffsetDeg
+			s.snap.SlipSkidDeg = slipSkidDeg
 			s.snap.YawRateDps = yawRateDps
 			// G-meter (load factor): signed normal-axis accel in G.
 			s.snap.GLoadG = gLoad

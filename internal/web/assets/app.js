@@ -2104,6 +2104,7 @@
   const attitudeRenderState = {
     roll: null,
     pitch: null,
+    slipSkid: null,
     heading: null,
     lastTs: null,
     initialized: false,
@@ -2428,8 +2429,11 @@
     ctx.fillRect(0, 0, w, h);
 
     const cx = w / 2;
-    const cy = h / 2;
-    const r = Math.max(10, Math.min(w, h) * 0.46);
+    // Make a little room for the slip/skid tube beneath the instrument.
+    const r = Math.max(10, Math.min(w, h) * 0.42);
+    const tubeH = Math.max(8, r * 0.11);
+    const tubeGap = Math.max(6, r * 0.08);
+    const cy = (h / 2) - (tubeH + tubeGap) * 0.55;
 
     // Bezel.
     ctx.save();
@@ -2452,6 +2456,7 @@
     const valid = !!a.valid;
     const roll = valid && a.roll_deg != null ? clamp(a.roll_deg, -90, 90) : 0;
     const pitch = valid && a.pitch_deg != null ? clamp(a.pitch_deg, -45, 45) : 0;
+    const slipSkid = valid && a.slip_skid_deg != null ? clamp(a.slip_skid_deg, -20, 20) : 0;
 
     // Background rotates opposite aircraft roll.
     const rollRad = (-roll * Math.PI) / 180;
@@ -2530,7 +2535,9 @@
       ctx.stroke();
     }
 
-    // Bank pointer.
+    // Bank pointer (moves with roll).
+    ctx.save();
+    ctx.rotate(rollRad);
     ctx.fillStyle = text;
     ctx.beginPath();
     ctx.moveTo(0, -r * 1.02);
@@ -2538,6 +2545,7 @@
     ctx.lineTo(r * 0.05, -r * 0.92);
     ctx.closePath();
     ctx.fill();
+    ctx.restore();
     ctx.restore();
 
     // If AHRS not valid, overlay a clear message.
@@ -2580,6 +2588,64 @@
     }
     ctx.restore();
 
+    // Slip/skid indicator (classic "ball in tube") below the circle.
+    {
+      const tubeW = r * 1.05;
+      const tubeY = cy + r + tubeGap;
+      const tubeX = cx - tubeW / 2;
+      const tubeR = tubeH / 2;
+
+      const maxSlipDeg = 12;
+      const nx = clamp(slipSkid, -maxSlipDeg, maxSlipDeg) / maxSlipDeg;
+      const ballR = Math.max(4, r * 0.045);
+      const ballTravel = (tubeW / 2) - tubeR - ballR - Math.max(2, r * 0.015);
+      const ballX = cx + nx * ballTravel;
+      const ballY = tubeY + tubeH / 2;
+
+      // Rounded tube.
+      const rr = (x, y, w2, h2, rad) => {
+        const r2 = Math.max(0, Math.min(rad, Math.min(w2, h2) / 2));
+        ctx.beginPath();
+        ctx.moveTo(x + r2, y);
+        ctx.lineTo(x + w2 - r2, y);
+        ctx.quadraticCurveTo(x + w2, y, x + w2, y + r2);
+        ctx.lineTo(x + w2, y + h2 - r2);
+        ctx.quadraticCurveTo(x + w2, y + h2, x + w2 - r2, y + h2);
+        ctx.lineTo(x + r2, y + h2);
+        ctx.quadraticCurveTo(x, y + h2, x, y + h2 - r2);
+        ctx.lineTo(x, y + r2);
+        ctx.quadraticCurveTo(x, y, x + r2, y);
+        ctx.closePath();
+      };
+
+      ctx.save();
+      ctx.fillStyle = cssVarRGBA('--surface2', 0.85) || surface2;
+      rr(tubeX, tubeY, tubeW, tubeH, tubeR);
+      ctx.fill();
+
+      ctx.strokeStyle = muted;
+      ctx.lineWidth = Math.max(1, r * 0.010);
+      rr(tubeX, tubeY, tubeW, tubeH, tubeR);
+      ctx.stroke();
+
+      // Reference marks.
+      ctx.strokeStyle = muted;
+      ctx.lineWidth = Math.max(1, r * 0.010);
+      ctx.lineCap = 'round';
+      const markH = tubeH * 0.55;
+      ctx.beginPath();
+      ctx.moveTo(cx, ballY - markH / 2);
+      ctx.lineTo(cx, ballY + markH / 2);
+      ctx.stroke();
+
+      // Ball.
+      ctx.fillStyle = text;
+      ctx.beginPath();
+      ctx.arc(ballX, ballY, ballR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
     // Separate bottom heading tape.
     drawHeadingTape();
 
@@ -2620,6 +2686,7 @@
       lastSmoothedAttitude = null;
       attitudeRenderState.roll = null;
       attitudeRenderState.pitch = null;
+      attitudeRenderState.slipSkid = null;
       attitudeRenderState.heading = null;
       attitudeRenderState.initialized = false;
       attitudeRenderState.lastTs = null;
@@ -2638,20 +2705,24 @@
 
     const rollTarget = toNumber(target.roll_deg);
     const pitchTarget = toNumber(target.pitch_deg);
+    const slipTarget = toNumber(target.slip_skid_deg);
     const headingTarget = toNumber(target.heading_deg);
 
     const smoothRoll = smoothScalar(attitudeRenderState.roll, rollTarget, alpha);
     const smoothPitch = smoothScalar(attitudeRenderState.pitch, pitchTarget, alpha);
+    const smoothSlip = smoothScalar(attitudeRenderState.slipSkid, slipTarget, alpha);
     const smoothHeadingVal = smoothHeading(attitudeRenderState.heading, headingTarget, alpha);
 
     merged.roll_deg = smoothRoll ?? rollTarget ?? null;
     merged.pitch_deg = smoothPitch ?? pitchTarget ?? null;
+    merged.slip_skid_deg = smoothSlip ?? slipTarget ?? null;
     merged.heading_deg = smoothHeadingVal ?? headingTarget ?? null;
 
     attitudeRenderState.roll = merged.roll_deg;
     attitudeRenderState.pitch = merged.pitch_deg;
+    attitudeRenderState.slipSkid = merged.slip_skid_deg;
     attitudeRenderState.heading = merged.heading_deg;
-    attitudeRenderState.initialized = merged.roll_deg != null || merged.pitch_deg != null || merged.heading_deg != null;
+    attitudeRenderState.initialized = merged.roll_deg != null || merged.pitch_deg != null || merged.slip_skid_deg != null || merged.heading_deg != null;
     lastSmoothedAttitude = merged;
     return merged;
   }

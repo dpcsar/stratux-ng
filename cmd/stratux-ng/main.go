@@ -107,8 +107,10 @@ func attitudeSnapshotFromAHRS(snap ahrs.Snapshot) web.AttitudeSnapshot {
 	if attValid {
 		roll := snap.RollDeg
 		pitch := snap.PitchDeg
+		slip := snap.SlipSkidDeg
 		att.RollDeg = &roll
 		att.PitchDeg = &pitch
+		att.SlipSkidDeg = &slip
 		if snap.PressureAltValid {
 			v := snap.PressureAltFeet
 			att.PressureAltFt = &v
@@ -143,6 +145,10 @@ func attitudeSnapshotFromPayload(att gdl90.Attitude, haveAHRS bool, snap ahrs.Sn
 		if out.PitchDeg == nil {
 			pitch := att.PitchDeg
 			out.PitchDeg = &pitch
+		}
+		if out.SlipSkidDeg == nil {
+			slip := att.SlipSkidDeg
+			out.SlipSkidDeg = &slip
 		}
 		if out.GLoad == nil {
 			g := att.GLoad
@@ -939,12 +945,17 @@ func buildAttitudePayload(cfg config.Config, now time.Time, haveAHRS bool, ahrsS
 		yawRate = ahrsSnap.YawRateDps
 	}
 
+	slipSkidDeg := 0.0
+	if cfg.AHRS.Enable && haveAHRS && ahrsSnap.Valid {
+		slipSkidDeg = ahrsSnap.SlipSkidDeg
+	}
+
 	return gdl90.Attitude{
 		Valid:                ahrsValid,
 		RollDeg:              roll,
 		PitchDeg:             pitch,
 		HeadingDeg:           headingDeg,
-		SlipSkidDeg:          0,
+		SlipSkidDeg:          slipSkidDeg,
 		YawRateDps:           yawRate,
 		GLoad:                gLoad,
 		IndicatedAirspeedKt:  groundKt,
