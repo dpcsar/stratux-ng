@@ -51,12 +51,12 @@ jobs:
           cache: true
 
       - name: Set up QEMU (for multi-arch containers)
-        if: ${{ matrix.runner == 'ubuntu-latest' }}
         uses: docker/setup-qemu-action@v3
 
       - name: Install qemu-user-static (amd64 cross-build)
-        if: ${{ matrix.runner == 'ubuntu-latest' }}
         run: |
-        uses: docker/setup-qemu-action@v3
+          sudo apt-get update
+          sudo apt-get install -y qemu-user-static
 
-      - name: Install qemu-user-static (amd64 cross-build)
+      - name: Make image (pi-gen)
+        run: make image
