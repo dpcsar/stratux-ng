@@ -71,6 +71,7 @@ type DecoderStatusSnapshot struct {
 	Enabled      bool   `json:"enabled"`
 	SerialTag    string `json:"serial_tag,omitempty"`
 	Command      string `json:"command,omitempty"`
+	Args         []string `json:"args,omitempty"`
 	JSONEndpoint string `json:"json_endpoint,omitempty"`
 	RawEndpoint  string `json:"raw_endpoint,omitempty"`
 

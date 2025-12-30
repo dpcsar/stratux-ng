@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,11 +16,45 @@ import (
 	"stratux-ng/internal/fancontrol"
 	"stratux-ng/internal/gdl90"
 	"stratux-ng/internal/gps"
+	"stratux-ng/internal/sdr"
 	"stratux-ng/internal/traffic"
 	"stratux-ng/internal/uat978"
 	"stratux-ng/internal/udp"
 	"stratux-ng/internal/web"
 )
+
+func isDump1090Command(cmd string) bool {
+	base := strings.ToLower(filepath.Base(strings.TrimSpace(cmd)))
+	return strings.HasPrefix(base, "dump1090")
+}
+
+func isDump978Command(cmd string) bool {
+	base := strings.ToLower(filepath.Base(strings.TrimSpace(cmd)))
+	return strings.HasPrefix(base, "dump978")
+}
+
+func upsertDump1090DeviceArgs(args []string, serialTag string, index *int) []string {
+	if sdr.HasAnyFlag(args, "--net-only", "--ifile") {
+		return args
+	}
+	serialTag = strings.TrimSpace(serialTag)
+	if serialTag != "" {
+		return sdr.UpsertFlagValue(args, "--device", serialTag)
+	}
+	if index != nil {
+		return sdr.UpsertFlagValue(args, "--device", strconv.Itoa(*index))
+	}
+	return args
+}
+
+func upsertDump978DeviceArgs(args []string, serialTag string) []string {
+	// If configured for Stratux v3 UAT dongle (serial port), do not inject SDR args.
+	if sdr.HasAnyFlag(args, "--stratuxv3", "--stdin", "--file") {
+		return args
+	}
+	soapy := sdr.BuildDump978SoapyRTLSDRArg(serialTag)
+	return sdr.UpsertFlagValue(args, "--sdr", soapy)
+}
 
 type liveRuntime struct {
 	resolvedConfigPath string
@@ -187,9 +223,54 @@ func (r *liveRuntime) initDecoders(ctx context.Context) error {
 	if r == nil {
 		return fmt.Errorf("runtime is nil")
 	}
+
+	// Best-effort SDR auto-detection.
+	//
+	// The shipped config.yaml is intended to be usable across machines. If the
+	// config's SDR selectors are set to "auto" (or empty), we enumerate RTL-SDRs
+	// and assign devices to 1090/978 before launching supervised decoders.
+	var detected []sdr.RTLSDRDevice
+	var adsbDev *sdr.RTLSDRDevice
+	var uatDev *sdr.RTLSDRDevice
+	needDetect := false
+	if r.cfg.ADSB1090.Enable && strings.TrimSpace(r.cfg.ADSB1090.Decoder.Command) != "" && isDump1090Command(r.cfg.ADSB1090.Decoder.Command) {
+		if sdr.IsAutoTag(r.cfg.ADSB1090.SDR.SerialTag) {
+			needDetect = true
+		}
+	}
+	if r.cfg.UAT978.Enable && strings.TrimSpace(r.cfg.UAT978.Decoder.Command) != "" && isDump978Command(r.cfg.UAT978.Decoder.Command) {
+		if sdr.IsAutoTag(r.cfg.UAT978.SDR.SerialTag) {
+			needDetect = true
+		}
+	}
+	if needDetect {
+		devs, err := sdr.DetectRTLSDRDevices(ctx)
+		if err != nil {
+			log.Printf("sdr autodetect failed: %v", err)
+		} else {
+			detected = devs
+			adsbDev, uatDev = sdr.AutoAssign1090And978(devs)
+			log.Printf("sdr autodetect devices=%s", sdr.DebugFormatDevices(devs))
+			if adsbDev != nil {
+				log.Printf("sdr autodetect assigned adsb1090=%d:%s", adsbDev.Index, adsbDev.Serial)
+			}
+			if uatDev != nil {
+				log.Printf("sdr autodetect assigned uat978=%d:%s", uatDev.Index, uatDev.Serial)
+			}
+		}
+	}
+
 	// 1090
 	if r.cfg.ADSB1090.Enable {
 		band := r.cfg.ADSB1090
+		if strings.TrimSpace(band.Decoder.Command) != "" && isDump1090Command(band.Decoder.Command) {
+			// If sdr.serial_tag is "auto", use auto-detected serial; otherwise keep config.
+			if sdr.IsAutoTag(band.SDR.SerialTag) && adsbDev != nil {
+				band.SDR.SerialTag = adsbDev.Serial
+			}
+			band.Decoder.Args = upsertDump1090DeviceArgs(band.Decoder.Args, band.SDR.SerialTag, band.SDR.Index)
+		}
+		r.cfg.ADSB1090 = band
 		endpoint := strings.TrimSpace(band.Decoder.JSONAddr)
 		if endpoint == "" {
 			endpoint = strings.TrimSpace(band.Decoder.JSONListen)
@@ -261,6 +342,15 @@ func (r *liveRuntime) initDecoders(ctx context.Context) error {
 			r.uat978Agg = uat978.NewAggregator(uat978.AggregatorConfig{})
 		}
 		band := r.cfg.UAT978
+		if strings.TrimSpace(band.Decoder.Command) != "" && isDump978Command(band.Decoder.Command) {
+			// If sdr.serial_tag is "auto", use auto-detected serial; otherwise keep config.
+			// Only applies to RTL-SDR mode (not --stratuxv3).
+			if sdr.IsAutoTag(band.SDR.SerialTag) && uatDev != nil {
+				band.SDR.SerialTag = uatDev.Serial
+			}
+			band.Decoder.Args = upsertDump978DeviceArgs(band.Decoder.Args, band.SDR.SerialTag)
+		}
+		r.cfg.UAT978 = band
 		endpoint := strings.TrimSpace(band.Decoder.JSONAddr)
 		if endpoint == "" {
 			endpoint = strings.TrimSpace(band.Decoder.JSONListen)
@@ -270,6 +360,9 @@ func (r *liveRuntime) initDecoders(ctx context.Context) error {
 			rawEndpoint = strings.TrimSpace(band.Decoder.RawListen)
 		}
 		log.Printf("uat978 enabled json_endpoint=%s raw_endpoint=%s", endpoint, rawEndpoint)
+		if needDetect && len(detected) == 1 && r.cfg.ADSB1090.Enable {
+			log.Printf("sdr autodetect warning: only 1 RTL-SDR detected; if both 1090 and 978 are enabled, one decoder may fail")
+		}
 		if cmd := strings.TrimSpace(band.Decoder.Command); cmd != "" {
 			log.Printf("uat978 supervising decoder cmd=%s args=%q", cmd, band.Decoder.Args)
 			sup, err := decoder.NewSupervisor(decoder.SupervisorConfig{
@@ -435,6 +528,7 @@ func (r *liveRuntime) ADSB1090DecoderSnapshot(nowUTC time.Time) (web.DecoderStat
 		Enabled:      true,
 		SerialTag:    strings.TrimSpace(cur.SDR.SerialTag),
 		Command:      strings.TrimSpace(cur.Decoder.Command),
+		Args:         append([]string(nil), cur.Decoder.Args...),
 		JSONEndpoint: endpoint,
 	}
 	if r.adsb1090Sup != nil {
@@ -467,6 +561,7 @@ func (r *liveRuntime) UAT978DecoderSnapshot(nowUTC time.Time) (web.DecoderStatus
 		Enabled:      true,
 		SerialTag:    strings.TrimSpace(cur.SDR.SerialTag),
 		Command:      strings.TrimSpace(cur.Decoder.Command),
+		Args:         append([]string(nil), cur.Decoder.Args...),
 		JSONEndpoint: ep,
 		RawEndpoint:  rawEP,
 	}

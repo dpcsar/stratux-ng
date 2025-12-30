@@ -69,6 +69,10 @@ type DecoderConfig struct {
 //
 // For RTL-SDR-class devices, the recommended approach is programming a unique
 // EEPROM serial string (e.g. stratux:1090, stratux:978) and selecting by it.
+//
+// Stratux-NG's primary/default behavior is best-effort auto-detection when the
+// serial tag is empty or set to "auto" (so the same config can be reused across
+// machines).
 type SDRSelector struct {
 	// SerialTag is a stable identifier such as "stratux:1090" or "stratux:978".
 	SerialTag string `yaml:"serial_tag"`

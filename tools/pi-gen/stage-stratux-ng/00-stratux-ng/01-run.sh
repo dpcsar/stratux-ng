@@ -37,4 +37,10 @@ systemctl enable stratux-ng
 if ! grep -q '^dtparam=i2c_arm=on' /boot/firmware/config.txt 2>/dev/null; then
   printf '\n# Stratux-NG\ndtparam=i2c_arm=on\n' >> /boot/firmware/config.txt
 fi
+
+# Ensure hardware PWM is available for fan control on GPIO18/19.
+# Without this overlay, /sys/class/pwm may be empty on Pi 3/4.
+if ! grep -Eq '^dtoverlay=pwm-2chan\b' /boot/firmware/config.txt 2>/dev/null; then
+  printf '\n# Stratux-NG\n# Enable hardware PWM for fan control (GPIO18/19)\ndtoverlay=pwm-2chan\n' >> /boot/firmware/config.txt
+fi
 EOF

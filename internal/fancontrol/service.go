@@ -92,12 +92,6 @@ func normalizeBackend(s string) string {
 	if s == "" {
 		s = "auto"
 	}
-	if s == "auto" {
-		if isRaspberryPi5() {
-			return "gpio"
-		}
-		return "pwm"
-	}
 	return s
 }
 
@@ -178,22 +172,48 @@ func (s *Service) Start(ctx context.Context) error {
 		sn.Enabled = true
 	})
 
-	backend := normalizeBackend(s.cfg.Backend)
-	s.backend = backend
+	normalizedBackend := normalizeBackend(s.cfg.Backend)
 	s.setState(func(sn *Snapshot) {
-		sn.Backend = backend
+		// This may be updated below once we successfully select a concrete backend.
+		sn.Backend = normalizedBackend
 	})
-	var drv pwmDriver
-	var err error
-	switch backend {
-	case "pwm":
-		drv, err = openPWMFn(s.cfg.PWMPin)
-	case "gpio":
-		drv, err = openGPIOFn(s.cfg.PWMPin)
-	default:
-		err = fmt.Errorf("fancontrol: unknown backend %q", s.cfg.Backend)
+
+	var backendsToTry []string
+	if normalizedBackend == "auto" {
+		// Prefer sysfs PWM on Pi 3/4 (if overlay enabled). Prefer GPIO on Pi 5.
+		// Always keep a fallback so the service can still run in a degraded "on/off"
+		// mode or when PWM overlay is missing.
+		if isRaspberryPi5() {
+			backendsToTry = []string{"gpio", "pwm"}
+		} else {
+			backendsToTry = []string{"pwm", "gpio"}
+		}
+	} else {
+		backendsToTry = []string{normalizedBackend}
 	}
-	if err != nil {
+
+	var drv pwmDriver
+	var openErrs []error
+	for _, backend := range backendsToTry {
+		var err error
+		switch backend {
+		case "pwm":
+			drv, err = openPWMFn(s.cfg.PWMPin)
+		case "gpio":
+			drv, err = openGPIOFn(s.cfg.PWMPin)
+		default:
+			err = fmt.Errorf("fancontrol: unknown backend %q", s.cfg.Backend)
+		}
+		if err != nil {
+			openErrs = append(openErrs, err)
+			continue
+		}
+		s.backend = backend
+		s.setState(func(sn *Snapshot) { sn.Backend = backend })
+		break
+	}
+	if drv == nil {
+		err := fmt.Errorf("fancontrol: unable to initialize backend %q: %v", normalizedBackend, openErrs)
 		s.setErr(err.Error())
 		return err
 	}
