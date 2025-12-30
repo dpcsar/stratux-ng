@@ -35,28 +35,3 @@ jobs:
 
       - name: build
         run: make build
-
-  image:
-    name: Image build
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.22'
-          cache: true
-
-      - name: Set up QEMU (for multi-arch containers)
-        uses: docker/setup-qemu-action@v3
-
-      - name: Install qemu-user-static (amd64 cross-build)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y qemu-user-static
-
-      - name: Make image (pi-gen)
-        run: make image
