@@ -10,8 +10,8 @@ permissions:
 
 jobs:
   image:
-    name: Build pi-gen image (arm64)
-    runs-on: ubuntu-24.04-arm64
+    name: Build pi-gen image
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
@@ -31,6 +31,11 @@ jobs:
           fi
           sudo systemctl start docker || sudo service docker start || true
           docker version
+
+      - name: Install QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user-static
 
       - name: Build image
         env:
