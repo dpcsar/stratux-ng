@@ -44,3 +44,42 @@ func TestParseDump978RawUplinkLine_RejectsOversize(t *testing.T) {
 		t.Fatalf("expected not ok")
 	}
 }
+
+func TestParseDump978RawUplinkLineWithMeta_ParsesSS(t *testing.T) {
+	line := []byte("+01020304;rs=0;ss=123;\n")
+	payload, ss, hasSS, ok := ParseDump978RawUplinkLineWithMeta(line)
+	if !ok {
+		t.Fatalf("expected ok")
+	}
+	if len(payload) != dump978UplinkBytes {
+		t.Fatalf("expected %d bytes, got %d", dump978UplinkBytes, len(payload))
+	}
+	if !hasSS {
+		t.Fatalf("expected hasSS")
+	}
+	if ss != 123 {
+		t.Fatalf("expected ss=123, got %d", ss)
+	}
+}
+
+func TestParseDump978RawUplinkLineWithMeta_MissingSS(t *testing.T) {
+	line := []byte("+01020304;rs=0;foo=bar;\n")
+	_, _, hasSS, ok := ParseDump978RawUplinkLineWithMeta(line)
+	if !ok {
+		t.Fatalf("expected ok")
+	}
+	if hasSS {
+		t.Fatalf("expected hasSS=false")
+	}
+}
+
+func TestParseDump978RawUplinkLineWithMeta_InvalidSS(t *testing.T) {
+	line := []byte("+01020304;ss=abc;\n")
+	_, _, hasSS, ok := ParseDump978RawUplinkLineWithMeta(line)
+	if !ok {
+		t.Fatalf("expected ok")
+	}
+	if hasSS {
+		t.Fatalf("expected hasSS=false")
+	}
+}

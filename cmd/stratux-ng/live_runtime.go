@@ -15,6 +15,7 @@ import (
 	"stratux-ng/internal/gdl90"
 	"stratux-ng/internal/gps"
 	"stratux-ng/internal/traffic"
+	"stratux-ng/internal/uat978"
 	"stratux-ng/internal/udp"
 	"stratux-ng/internal/web"
 )
@@ -33,6 +34,7 @@ type liveRuntime struct {
 	uat978Stream   *decoder.NDJSONClient
 	uat978Raw      *decoder.LineClient
 	uat978UplinkQ  chan []byte
+	uat978Agg      *uat978.Aggregator
 
 	trafficStore *traffic.Store
 
@@ -255,6 +257,9 @@ func (r *liveRuntime) initDecoders(ctx context.Context) error {
 
 	// 978
 	if r.cfg.UAT978.Enable {
+		if r.uat978Agg == nil {
+			r.uat978Agg = uat978.NewAggregator(uat978.AggregatorConfig{})
+		}
 		band := r.cfg.UAT978
 		endpoint := strings.TrimSpace(band.Decoder.JSONAddr)
 		if endpoint == "" {
@@ -329,9 +334,18 @@ func (r *liveRuntime) initDecoders(ctx context.Context) error {
 				return fmt.Errorf("uat978 raw: %w", err)
 			}
 			if err := lc.Start(ctx, func(line []byte) error {
-				payload, ok := traffic.ParseDump978RawUplinkLine(line)
+				payload, ss, hasSS, ok := traffic.ParseDump978RawUplinkLineWithMeta(line)
 				if !ok {
 					return nil
+				}
+				if r.uat978Agg != nil {
+					if decoded, ok := uat978.DecodeUplinkFrame(payload); ok {
+						signalDb := 0.0
+						if hasSS {
+							signalDb = uat978.SignalStrengthDbFromAmplitude(ss)
+						}
+						r.uat978Agg.Add(time.Now().UTC(), decoded, signalDb, hasSS)
+					}
 				}
 				frame := gdl90.UATUplinkFrame(payload)
 				select {
@@ -489,6 +503,14 @@ func (r *liveRuntime) DrainUAT978UplinkFrames(max int) [][]byte {
 		}
 	}
 	return out
+}
+
+func (r *liveRuntime) UAT978DecodedSnapshot(nowUTC time.Time) ([]uat978.TowerSnapshot, uat978.WeatherSnapshot, bool) {
+	if r == nil || r.uat978Agg == nil {
+		return nil, uat978.WeatherSnapshot{}, false
+	}
+	towers, weather := r.uat978Agg.Snapshot(nowUTC)
+	return towers, weather, true
 }
 
 func (r *liveRuntime) FanSnapshot() (fancontrol.Snapshot, bool) {

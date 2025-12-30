@@ -154,11 +154,11 @@
   const trUatRaw = document.getElementById('tr-uat-raw');
   const trUatError = document.getElementById('tr-uat-error');
 
-  const wxRawEndpoint = document.getElementById('wx-raw-endpoint');
-  const wxRawState = document.getElementById('wx-raw-state');
-  const wxRawLines = document.getElementById('wx-raw-lines');
-  const wxRawLastSeen = document.getElementById('wx-raw-last-seen');
-  const wxRawError = document.getElementById('wx-raw-error');
+  const wxProductsTableBody = document.getElementById('wx-products-table-body');
+  const wxTextTableBody = document.getElementById('wx-text-table-body');
+
+  const twCount = document.getElementById('tw-count');
+  const twTableBody = document.getElementById('tw-table-body');
 
   // Map UI.
   const mapLeafletEl = document.getElementById('map-leaflet');
@@ -749,6 +749,131 @@
     }
 
     trModeSTableBody.innerHTML = rows.join('');
+  }
+
+  function formatLatLon(latDeg, lonDeg, digits = 3) {
+    const lat = Number(latDeg);
+    const lon = Number(lonDeg);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return '--';
+    return `(${fmtNum(lat, digits)}, ${fmtNum(lon, digits)})`;
+  }
+
+  function formatDb(db) {
+    const x = Number(db);
+    if (!Number.isFinite(x)) return '--';
+    return `${fmtNum(x, 1)} dB`;
+  }
+
+  function renderTowersTable(towers) {
+    if (!twTableBody) return;
+    const list = Array.isArray(towers) ? [...towers] : [];
+    list.sort((a, b) => {
+      const ca = Number(a?.messages_last_min);
+      const cb = Number(b?.messages_last_min);
+      const sa = Number.isFinite(ca) ? ca : 0;
+      const sb = Number.isFinite(cb) ? cb : 0;
+      if (sa !== sb) return sb - sa;
+      const ka = String(a?.key || '');
+      const kb = String(b?.key || '');
+      return ka.localeCompare(kb);
+    });
+
+    if (twCount) {
+      if (!list.length) {
+        twCount.textContent = 'No towers yet';
+      } else {
+        twCount.textContent = list.length === 1 ? '1 tower' : `${fmtInt(list.length)} towers`;
+      }
+    }
+
+    const rows = [];
+    for (const t of list) {
+      const towerLabel = formatLatLon(t?.lat_deg, t?.lon_deg, 3);
+      const msgMin = Number(t?.messages_last_min);
+      const msgMinCell = Number.isFinite(msgMin) ? fmtInt(msgMin) : '--';
+
+      const hasSig = t?.has_signal_strength === true;
+      const sigNow = hasSig ? formatDb(t?.signal_now_db) : '--';
+      const sigAvg = hasSig ? formatDb(t?.signal_avg_1min_db) : '--';
+      const sigMax = hasSig ? formatDb(t?.signal_max_db) : '--';
+      const lastSeen = String(t?.last_seen_utc || '');
+
+      rows.push(
+        '<tr>' +
+          `<td>${escapeHtml(towerLabel)}</td>` +
+          `<td>${escapeHtml(msgMinCell)}</td>` +
+          `<td>${escapeHtml(sigNow)}</td>` +
+          `<td>${escapeHtml(sigAvg)}</td>` +
+          `<td>${escapeHtml(sigMax)}</td>` +
+          `<td>${escapeHtml(lastSeen || '--')}</td>` +
+        '</tr>'
+      );
+    }
+
+    if (!rows.length) {
+      rows.push('<tr class="traffic-table-empty-row"><td colspan="6">No decoded towers</td></tr>');
+    }
+    twTableBody.innerHTML = rows.join('');
+  }
+
+  function renderWeatherProductsTable(products) {
+    if (!wxProductsTableBody) return;
+    const list = Array.isArray(products) ? [...products] : [];
+    list.sort((a, b) => {
+      const ca = Number(a?.messages_last_min);
+      const cb = Number(b?.messages_last_min);
+      const sa = Number.isFinite(ca) ? ca : 0;
+      const sb = Number.isFinite(cb) ? cb : 0;
+      if (sa !== sb) return sb - sa;
+      const ia = Number(a?.product_id);
+      const ib = Number(b?.product_id);
+      return (Number.isFinite(ia) ? ia : 0) - (Number.isFinite(ib) ? ib : 0);
+    });
+
+    const rows = [];
+    for (const p of list) {
+      const pid = Number(p?.product_id);
+      const name = String(p?.product_name || '').trim();
+      const label = name ? name : (Number.isFinite(pid) ? `Product ${fmtInt(pid)}` : 'Product');
+      const msgMin = Number(p?.messages_last_min);
+      const total = Number(p?.messages_total);
+      const lastSeen = String(p?.last_seen_utc || '');
+      rows.push(
+        '<tr>' +
+          `<td>${escapeHtml(label)}</td>` +
+          `<td>${escapeHtml(Number.isFinite(msgMin) ? fmtInt(msgMin) : '--')}</td>` +
+          `<td>${escapeHtml(Number.isFinite(total) ? fmtInt(total) : '--')}</td>` +
+          `<td>${escapeHtml(lastSeen || '--')}</td>` +
+        '</tr>'
+      );
+    }
+
+    if (!rows.length) {
+      rows.push('<tr class="traffic-table-empty-row"><td colspan="4">No decoded products</td></tr>');
+    }
+    wxProductsTableBody.innerHTML = rows.join('');
+  }
+
+  function renderWeatherTextTable(text) {
+    if (!wxTextTableBody) return;
+    const list = Array.isArray(text) ? [...text] : [];
+    const rows = [];
+    for (const t of list) {
+      const received = String(t?.received_utc || '');
+      const tower = formatLatLon(t?.tower_lat_deg, t?.tower_lon_deg, 3);
+      const msg = String(t?.text || '');
+      rows.push(
+        '<tr>' +
+          `<td>${escapeHtml(received || '--')}</td>` +
+          `<td>${escapeHtml(tower)}</td>` +
+          `<td>${escapeHtml(msg || '--')}</td>` +
+        '</tr>'
+      );
+    }
+    if (!rows.length) {
+      rows.push('<tr class="traffic-table-empty-row"><td colspan="3">No decoded text yet</td></tr>');
+    }
+    wxTextTableBody.innerHTML = rows.join('');
   }
 
   function initTrafficColumnPreferences() {
@@ -1933,14 +2058,12 @@
       '978 radio',
     );
 
-    // Weather page (relay health, not decoded products).
+    // Weather page: best-effort decoded summary.
     const uat = s?.uat978 || {};
-    const raw = uat?.raw_stream || {};
-    setInput(wxRawEndpoint, uat?.raw_endpoint || '');
-    setInput(wxRawState, raw?.state || '');
-    setInput(wxRawLines, raw?.lines == null ? '' : String(raw.lines));
-    setInput(wxRawLastSeen, raw?.last_seen_utc || '');
-    setInput(wxRawError, raw?.last_error || '');
+    const decoded = uat?.decoded || {};
+    renderTowersTable(decoded?.towers);
+    renderWeatherProductsTable(decoded?.weather?.products);
+    renderWeatherTextTable(decoded?.weather?.text);
   }
 
   let attAhrsBusyCount = 0;

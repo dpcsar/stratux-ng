@@ -15,12 +15,16 @@ Working now:
 - **978** uplink relay from `dump978-fa` raw TCP (`--raw-port`) → **GDL90 Uplink (0x07)** (EFB weather)
 
 Not yet:
-- “Pretty” decoded FIS-B product visualization in the web UI (later milestone)
-- “Towers” page (UAT ground stations / GBTs): the UI entry exists but is currently a placeholder; implementing this requires decoding/deriving ground-station identity + signal stats from 978 UAT uplinks and exposing it via the status/API.
+- Full, “pretty” decoded FIS-B product visualization (e.g., map overlays like NEXRAD tiles) (later milestone)
 - Flashable SD image build pipeline (pi-gen stage implementation; see [docs/pi-gen.md](docs/pi-gen.md))
 
 Web UI note:
 - The web UI is still **work in progress**. Expect ongoing iteration (layout/navigation polish, additional pages for traffic/weather/towers parity, and more detailed status/config tooling).
+
+Weather/Towers note:
+- Stratux-NG always relays 978 raw uplinks as GDL90 message `0x07` for EFB weather.
+- The Weather and Towers pages also show a **best-effort decode summary** derived from the raw uplink stream (product counters, recent DLAC text lines, and approximate tower/signal stats when `ss=` is available).
+- This decode summary is exposed in `/api/status` under `uat978.decoded`.
 
 This is a **new implementation** (new repository) with a modular architecture and reproducible builds, intended to support:
 

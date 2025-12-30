@@ -586,6 +586,9 @@ func main() {
 					status.SetADSB1090Decoder(now.UTC(), ds)
 				}
 				if ds, ok := rt.UAT978DecoderSnapshot(now.UTC()); ok {
+					if towers, weather, ok2 := rt.UAT978DecodedSnapshot(now.UTC()); ok2 {
+						ds.Decoded = &web.UAT978DecodedSnapshot{Towers: towers, Weather: weather}
+					}
 					status.SetUAT978Decoder(now.UTC(), ds)
 				}
 				var gpsSnap gps.Snapshot

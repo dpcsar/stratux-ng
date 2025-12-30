@@ -533,42 +533,54 @@
       </section>
 
       <section id="view-weather" class="view" aria-label="Weather">
-        <div class="status-panel status-panel-utility" aria-label="Weather status">
+        <div class="status-panel status-panel-utility card" aria-label="Weather status">
           <div class="status-panel-head">
             <div class="status-panel-lead">
               <div class="status-panel-title">Weather</div>
-              <div class="status-panel-subtitle muted">Stratux-NG relays 978 UAT uplinks (FIS-B) to EFBs; this UI shows relay health (not decoded products).</div>
+              <div class="status-panel-subtitle muted">Stratux-NG relays 978 UAT uplinks (FIS-B) to EFBs. This page shows a best-effort decode summary; uplink stream health is on the Status page.</div>
             </div>
           </div>
 
           <div class="status-panel-body">
-            <div class="panel-grid" aria-label="Weather sections">
-              <div class="panel-card" aria-label="978 Uplink Relay">
-                <div class="panel-card-head">
-                  <div class="panel-card-title">978 Uplink Relay</div>
-                  <div class="panel-card-subtitle">Health of the raw FIS-B stream.</div>
+            <div class="panel-form" aria-label="Weather sections">
+              <div class="panel-kv" aria-label="Decoded Products section">
+                <div class="status-metrics-label status-metrics-label-system">Decoded Products</div>
+                <div class="panel-card-subtitle">UAT FIS-B products observed in the last minute.</div>
+                <div class="panel-card" aria-label="Decoded Products">
+                  <div class="panel-card-body">
+                    <div class="traffic-table-wrap">
+                      <table class="traffic-table-grid" aria-label="Decoded weather products">
+                        <thead>
+                          <tr>
+                            <th scope="col">Product</th>
+                            <th scope="col">Msg/min</th>
+                            <th scope="col">Total</th>
+                            <th scope="col">Last Seen (UTC)</th>
+                          </tr>
+                        </thead>
+                        <tbody id="wx-products-table-body"></tbody>
+                      </table>
+                    </div>
+                  </div>
                 </div>
-                <div class="panel-card-body">
-                  <div class="panel-kv">
-                    <div class="panel-kv-row">
-                      <span class="panel-kv-key">Raw Endpoint</span>
-                      <span id="wx-raw-endpoint" class="panel-kv-val">--</span>
-                    </div>
-                    <div class="panel-kv-row">
-                      <span class="panel-kv-key">State</span>
-                      <span id="wx-raw-state" class="panel-kv-val">--</span>
-                    </div>
-                    <div class="panel-kv-row">
-                      <span class="panel-kv-key">Lines</span>
-                      <span id="wx-raw-lines" class="panel-kv-val">--</span>
-                    </div>
-                    <div class="panel-kv-row">
-                      <span class="panel-kv-key">Last Seen (UTC)</span>
-                      <span id="wx-raw-last-seen" class="panel-kv-val">--</span>
-                    </div>
-                    <div class="panel-kv-row">
-                      <span class="panel-kv-key">Last Error</span>
-                      <span id="wx-raw-error" class="panel-kv-val">--</span>
+              </div>
+
+              <div class="panel-kv" aria-label="Text Reports section">
+                <div class="status-metrics-label status-metrics-label-system">Text Reports</div>
+                <div class="panel-card-subtitle">Recent decoded DLAC text lines (product 413).</div>
+                <div class="panel-card" aria-label="Text Reports">
+                  <div class="panel-card-body">
+                    <div class="traffic-table-wrap">
+                      <table class="traffic-table-grid" aria-label="Decoded text reports">
+                        <thead>
+                          <tr>
+                            <th scope="col">Received (UTC)</th>
+                            <th scope="col">Tower</th>
+                            <th scope="col">Text</th>
+                          </tr>
+                        </thead>
+                        <tbody id="wx-text-table-body"></tbody>
+                      </table>
                     </div>
                   </div>
                 </div>
@@ -579,30 +591,36 @@
       </section>
 
       <section id="view-towers" class="view" aria-label="Towers">
-        <div class="status-panel status-panel-utility" aria-label="Towers status">
+        <div class="status-panel status-panel-utility card" aria-label="Towers status">
           <div class="status-panel-head">
             <div class="status-panel-lead">
               <div class="status-panel-title">Towers</div>
-              <div class="status-panel-subtitle muted">Upstream Stratux shows nearby UAT ground stations; Stratux-NG will surface tower metadata when the decoder lands.</div>
+              <div class="status-panel-subtitle muted">Best-effort decode of nearby 978 UAT ground stations from uplink frames.</div>
             </div>
           </div>
 
           <div class="status-panel-body">
-            <div class="panel-grid">
-              <div class="panel-card" aria-label="Notes">
-                <div class="panel-card-head">
-                  <div class="panel-card-title">Notes</div>
-                  <div class="panel-card-subtitle">Current limitations</div>
-                </div>
-                <div class="panel-card-body">
-                  <div class="panel-kv">
-                    <div class="panel-kv-row">
-                      <span class="panel-kv-key">978 MHz</span>
-                      <span class="panel-kv-val">Use the Weather page to monitor raw uplink health; tower metadata is not yet decoded.</span>
-                    </div>
-                    <div class="panel-kv-row">
-                      <span class="panel-kv-key">1090 MHz</span>
-                      <span class="panel-kv-val">Tower discovery will return once Stratux-NG parses ground-station traffic.</span>
+            <div class="panel-form" aria-label="Towers sections">
+              <div class="panel-kv" aria-label="UAT Towers section">
+                <div class="status-metrics-label status-metrics-label-system">UAT Towers</div>
+                <div class="panel-card-subtitle">Last-minute message rates and signal strength (when available).</div>
+                <div class="panel-card" aria-label="UAT Towers">
+                  <div class="panel-card-body">
+                    <p id="tw-count" class="traffic-note muted">--</p>
+                    <div class="traffic-table-wrap">
+                      <table class="traffic-table-grid" aria-label="UAT towers table">
+                        <thead>
+                          <tr>
+                            <th scope="col">Tower</th>
+                            <th scope="col">Msg/min</th>
+                            <th scope="col">Sig Now</th>
+                            <th scope="col">Sig Avg</th>
+                            <th scope="col">Sig Max</th>
+                            <th scope="col">Last Seen (UTC)</th>
+                          </tr>
+                        </thead>
+                        <tbody id="tw-table-body"></tbody>
+                      </table>
                     </div>
                   </div>
                 </div>

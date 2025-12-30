@@ -8,6 +8,7 @@ import (
 	"stratux-ng/internal/decoder"
 	"stratux-ng/internal/fancontrol"
 	"stratux-ng/internal/gps"
+	"stratux-ng/internal/uat978"
 )
 
 type DiskSnapshot struct {
@@ -76,6 +77,13 @@ type DecoderStatusSnapshot struct {
 	Supervisor decoder.Snapshot        `json:"supervisor"`
 	Stream     *decoder.NDJSONSnapshot `json:"stream,omitempty"`
 	RawStream  *decoder.LineSnapshot   `json:"raw_stream,omitempty"`
+
+	Decoded *UAT978DecodedSnapshot `json:"decoded,omitempty"`
+}
+
+type UAT978DecodedSnapshot struct {
+	Towers  []uat978.TowerSnapshot  `json:"towers,omitempty"`
+	Weather uat978.WeatherSnapshot  `json:"weather,omitempty"`
 }
 
 func (s *Status) SetADSB1090Decoder(_ time.Time, snap DecoderStatusSnapshot) {
