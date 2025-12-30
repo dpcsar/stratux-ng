@@ -440,8 +440,7 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	logBuf := web.NewLogBuffer(4000)
-	log.SetOutput(io.MultiWriter(os.Stdout, logBuf))
+	log.SetOutput(os.Stdout)
 
 	status := web.NewStatus()
 	status.SetStatic(cfg.GDL90.Dest, cfg.GDL90.Interval.String(), staticInfoSnapshot(resolvedConfigPath, cfg))
@@ -466,7 +465,7 @@ func main() {
 	proxy := &ahrsProxy{}
 	go func() {
 		for {
-			err := web.Serve(ctx, cfg.Web.Listen, status, web.SettingsStore{ConfigPath: resolvedConfigPath, Apply: applyFunc}, logBuf, proxy)
+			err := web.Serve(ctx, cfg.Web.Listen, status, web.SettingsStore{ConfigPath: resolvedConfigPath, Apply: applyFunc}, proxy)
 			if ctx.Err() != nil {
 				return
 			}

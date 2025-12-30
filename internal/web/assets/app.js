@@ -8,8 +8,6 @@
     { key: 'weather', el: document.getElementById('view-weather') },
     { key: 'towers', el: document.getElementById('view-towers') },
     { key: 'settings', el: document.getElementById('view-settings') },
-    { key: 'logs', el: document.getElementById('view-logs') },
-    { key: 'about', el: document.getElementById('view-about') },
   ];
 
   const drawer = document.getElementById('drawer');
@@ -520,11 +518,6 @@
   const uiVsiOwnshipRounding = document.getElementById('ui-vsi-ownship-rounding');
   const uiVsiMsg = document.getElementById('ui-vsi-msg');
 
-  const logsText = document.getElementById('logs-text');
-  const logsMeta = document.getElementById('logs-meta');
-  const logsTail = document.getElementById('logs-tail');
-  const logsRefresh = document.getElementById('logs-refresh');
-
   setConnectionState(null);
 
 
@@ -927,46 +920,6 @@
     if (lastGps) setMapHud(lastGps);
   }
 
-  async function loadLogs() {
-    if (!logsText) return;
-
-    const tail = parseInt(logsTail?.value || '200', 10) || 200;
-    logsText.textContent = 'Loading…';
-    if (logsMeta) logsMeta.textContent = '';
-
-    try {
-      const url = `/api/logs?format=text&tail=${encodeURIComponent(String(tail))}`;
-      const resp = await fetch(url, { cache: 'no-store' });
-      if (!resp.ok) {
-        if (resp.status === 404) {
-          logsText.textContent = 'Logs endpoint is not enabled in this build.';
-        } else {
-          logsText.textContent = `Failed to load logs: HTTP ${resp.status}`;
-        }
-        return;
-      }
-      const text = await resp.text();
-      logsText.textContent = text || '(no logs)';
-
-      // Optional: pull dropped/meta from JSON snapshot.
-      try {
-        const j = await fetch(`/api/logs?tail=${encodeURIComponent(String(tail))}`, { cache: 'no-store' });
-        if (j.ok) {
-          const js = await j.json();
-          const dropped = (typeof js.dropped === 'number') ? js.dropped : 0;
-          if (logsMeta) logsMeta.textContent = `Updated ${timeNow()}${dropped ? ` · dropped ${dropped}` : ''}`;
-        } else if (logsMeta) {
-          logsMeta.textContent = `Updated ${timeNow()}`;
-        }
-      } catch {
-        if (logsMeta) logsMeta.textContent = `Updated ${timeNow()}`;
-      }
-    } catch (e) {
-      logsText.textContent = `Failed to load logs: ${String(e)}`;
-    }
-  }
-
-
   function setView(key) {
     for (const v of views) {
       v.el.classList.toggle('active', v.key === key);
@@ -985,7 +938,6 @@
       // ignore
     }
 
-    if (key === 'logs') loadLogs();
     if (key === 'settings') loadSettings();
     if (key === 'radar') drawRadar();
     if (key === 'map') {
@@ -2942,9 +2894,7 @@
 
   // Initial view.
   const initial = (location.hash || '#status').slice(1);
-  setView(['attitude', 'radar', 'map', 'status', 'traffic', 'weather', 'towers', 'settings', 'logs', 'about'].includes(initial) ? initial : 'status');
-  logsRefresh?.addEventListener('click', loadLogs);
-  logsTail?.addEventListener('change', loadLogs);
+  setView(['attitude', 'radar', 'map', 'status', 'traffic', 'weather', 'towers', 'settings'].includes(initial) ? initial : 'status');
 
   loadSettings();
   settingsForm?.addEventListener('submit', (e) => {

@@ -1026,7 +1026,7 @@ h2 { margin: 6px 0 6px; font-size: 18px; }
   margin-right: 0;
 }
 
-/* Stratux-like sections + rows (used on Status/Traffic/Weather/Towers/Settings/Logs/About). */
+/* Stratux-like sections + rows (used on Status/Traffic/Weather/Towers/Settings/About). */
 .st-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
@@ -1123,7 +1123,7 @@ h2 { margin: 6px 0 6px; font-size: 18px; }
   grid-column: 1 / -1;
 }
 
-/* Settings/Logs helper layouts. */
+/* Settings helper layouts. */
 .st-row.st-field {
   grid-template-columns: minmax(140px, 260px) 1fr;
   align-items: center;

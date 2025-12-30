@@ -27,7 +27,7 @@ type AHRSController interface {
 	Orientation() (forwardAxis int, gravity [3]float64, gravityOK bool)
 }
 
-func Handler(status *Status, settings SettingsStore, logs *LogBuffer, ahrsCtl AHRSController) http.Handler {
+func Handler(status *Status, settings SettingsStore, ahrsCtl AHRSController) http.Handler {
 	mux := http.NewServeMux()
 
 	assetsFS, err := fs.Sub(embeddedAssets, "assets")
@@ -306,13 +306,6 @@ func Handler(status *Status, settings SettingsStore, logs *LogBuffer, ahrsCtl AH
 	// Kept intentionally small.
 	mux.Handle("/api/settings", settings.Handler())
 
-	if logs != nil {
-		mux.Handle("/api/logs", logs.Handler())
-	}
-
-	// About.
-	mux.Handle("/api/about", AboutHandler())
-
 	if assetsFS != nil {
 		fileServer := http.FileServer(http.FS(assetsFS))
 		mux.Handle("/assets/", http.StripPrefix("/assets/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -364,14 +357,14 @@ func Handler(status *Status, settings SettingsStore, logs *LogBuffer, ahrsCtl AH
 	return mux
 }
 
-func Serve(ctx context.Context, listenAddr string, status *Status, settings SettingsStore, logs *LogBuffer, ahrsCtl AHRSController) error {
+func Serve(ctx context.Context, listenAddr string, status *Status, settings SettingsStore, ahrsCtl AHRSController) error {
 	if status == nil {
 		status = NewStatus()
 	}
 
 	srv := &http.Server{
 		Addr:              listenAddr,
-		Handler:           Handler(status, settings, logs, ahrsCtl),
+		Handler:           Handler(status, settings, ahrsCtl),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,

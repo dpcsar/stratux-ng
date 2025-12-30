@@ -746,78 +746,6 @@
         </div>
       </section>
 
-      <section id="view-logs" class="view" aria-label="Logs">
-        <div class="status-panel status-panel-utility" aria-label="Logs view">
-          <div class="status-panel-head">
-            <div class="status-panel-lead">
-              <div class="status-panel-title">Logs</div>
-              <div class="status-panel-subtitle muted">Recent Stratux-NG logs from <a href="/api/logs?format=text">/api/logs</a>.</div>
-            </div>
-          </div>
-
-          <div class="status-panel-body">
-            <div class="panel-grid">
-              <div class="panel-card" aria-label="Log controls">
-                <div class="panel-card-head">
-                  <div class="panel-card-title">Controls</div>
-                  <div class="panel-card-subtitle">Select a tail length and refresh.</div>
-                </div>
-                <div class="panel-card-body">
-                  <div class="panel-form-row">
-                    <label for="logs-tail">Tail</label>
-                    <select id="logs-tail">
-                      <option value="200" selected>200 lines</option>
-                      <option value="500">500 lines</option>
-                      <option value="2000">2000 lines</option>
-                    </select>
-                  </div>
-                  <div class="panel-actions">
-                    <button id="logs-refresh" type="button" class="primary">Refresh</button>
-                    <span id="logs-meta" class="panel-form-msg muted"></span>
-                  </div>
-                </div>
-              </div>
-
-              <div class="panel-card panel-card-wide" aria-label="Log output">
-                <div class="panel-card-head">
-                  <div class="panel-card-title">Output</div>
-                  <div class="panel-card-subtitle">Latest lines streamed from Stratux-NG.</div>
-                </div>
-                <div class="panel-card-body">
-                  <pre id="logs-text" class="panel-pre">Loading…</pre>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="view-about" class="view" aria-label="About">
-        <div class="status-panel status-panel-utility" aria-label="About view">
-          <div class="status-panel-head">
-            <div class="status-panel-lead">
-              <div class="status-panel-title">About</div>
-              <div class="status-panel-subtitle muted">Build/runtime details and diagnostics.</div>
-            </div>
-          </div>
-
-          <div class="status-panel-body">
-            <div class="panel-grid">
-              <div class="panel-card" aria-label="Diagnostics">
-                <div class="panel-card-head">
-                  <div class="panel-card-title">Diagnostics</div>
-                  <div class="panel-card-subtitle">Raw build/runtime JSON.</div>
-                </div>
-                <div class="panel-card-body">
-                  <p class="muted">Use the API endpoint to pull the exact Stratux-NG build info, git hash, and runtime wiring used for debugging.</p>
-                  <a class="panel-link" href="/api/about">/api/about</a>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
     </main>
 
     <nav class="bottomnav" aria-label="Primary">
@@ -844,8 +772,6 @@
         <button class="drawer-item drawerbtn" data-view="weather" type="button">Weather</button>
         <button class="drawer-item drawerbtn" data-view="towers" type="button">Towers</button>
         <button class="drawer-item drawerbtn" data-view="settings" type="button">Settings</button>
-        <button class="drawer-item drawerbtn" data-view="logs" type="button">Logs</button>
-        <button class="drawer-item drawerbtn" data-view="about" type="button">About</button>
       </div>
     </aside>
 
