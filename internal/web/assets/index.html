@@ -613,132 +613,134 @@
       </section>
 
       <section id="view-settings" class="view" aria-label="Settings">
-        <div class="status-panel status-panel-form" aria-label="Settings form">
+        <div class="status-panel status-panel-form card" aria-label="Settings form">
           <div class="status-panel-head">
             <div class="status-panel-lead">
               <div class="status-panel-title">Settings</div>
-              <div class="status-panel-subtitle muted">Edits are saved to your YAML config and applied immediately.</div>
             </div>
           </div>
 
           <div class="status-panel-body">
             <form id="settings-form" class="panel-form" autocomplete="off">
-              <div class="panel-form-group" aria-label="Web UI display settings">
-                <div class="panel-card-head">
-                  <div class="panel-card-title">Web UI Only (Display)</div>
-                  <div class="panel-card-subtitle">Saved in this browser only; does not change emitted GDL90 data.</div>
+              <div class="settings-stack" aria-label="Settings sections">
+                <div class="panel-form-section" aria-label="Web UI display settings">
+                  <div class="status-metrics-label-system">Web UI Only (Display)</div>
+                  <div class="panel-form-group">
+                    <div class="panel-card-body">
+                      <div class="panel-form-row">
+                        <label for="ui-vsi-traffic-deadband">Traffic vertical speed deadband (fpm)</label>
+                        <input id="ui-vsi-traffic-deadband" type="number" min="0" step="1" placeholder="50" />
+                      </div>
+                      <div class="panel-form-row">
+                        <label for="ui-vsi-traffic-rounding">Traffic vertical speed rounding (fpm)</label>
+                        <input id="ui-vsi-traffic-rounding" type="number" min="0" step="1" placeholder="10" />
+                      </div>
+                      <div class="panel-form-row">
+                        <label for="ui-vsi-ownship-rounding">Ownship vertical speed rounding (fpm)</label>
+                        <input id="ui-vsi-ownship-rounding" type="number" min="0" step="1" placeholder="10" />
+                      </div>
+                      <span id="ui-vsi-msg" class="panel-form-msg muted"></span>
+                    </div>
+                  </div>
                 </div>
-                <div class="panel-card-body">
-                  <div class="panel-form-row">
-                    <label for="ui-vsi-traffic-deadband">Traffic vertical speed deadband (fpm)</label>
-                    <input id="ui-vsi-traffic-deadband" type="number" min="0" step="1" placeholder="50" />
-                  </div>
-                  <div class="panel-form-row">
-                    <label for="ui-vsi-traffic-rounding">Traffic vertical speed rounding (fpm)</label>
-                    <input id="ui-vsi-traffic-rounding" type="number" min="0" step="1" placeholder="10" />
-                  </div>
-                  <div class="panel-form-row">
-                    <label for="ui-vsi-ownship-rounding">Ownship vertical speed rounding (fpm)</label>
-                    <input id="ui-vsi-ownship-rounding" type="number" min="0" step="1" placeholder="10" />
-                  </div>
-                  <span id="ui-vsi-msg" class="panel-form-msg muted"></span>
-                </div>
-              </div>
 
-              <div class="panel-form-group" aria-label="Configuration">
-                <div class="panel-card-head">
-                  <div class="panel-card-title">Configuration</div>
-                  <div class="panel-card-subtitle">Persisted in Stratux-NG config.</div>
+                <div class="panel-form-section" aria-label="Configuration">
+                  <div class="status-metrics-label-system">Configuration</div>
+                  <div class="panel-form-group">
+                    <div class="panel-card-body">
+                      <div class="panel-form-row">
+                        <label for="set-interval">Interval (e.g. 1s)</label>
+                        <input id="set-interval" type="text" placeholder="1s" />
+                      </div>
+                      <div class="panel-form-row">
+                        <label for="set-ownship-icao">Ownship ICAO (hex)</label>
+                        <input id="set-ownship-icao" type="text" placeholder="F00000" />
+                      </div>
+                      <div class="panel-form-row">
+                        <label for="set-ownship-callsign">Ownship callsign</label>
+                        <input id="set-ownship-callsign" type="text" placeholder="STRATUX" />
+                      </div>
+                      <div class="panel-actions">
+                        <button id="btn-save" type="submit" class="primary">Save</button>
+                        <span id="save-msg" class="panel-form-msg muted"></span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div class="panel-card-body">
-                  <div class="panel-form-row">
-                    <label for="set-interval">Interval (e.g. 1s)</label>
-                    <input id="set-interval" type="text" placeholder="1s" />
-                  </div>
-                  <div class="panel-form-row">
-                    <label for="set-ownship-icao">Ownship ICAO (hex)</label>
-                    <input id="set-ownship-icao" type="text" placeholder="F00000" />
-                  </div>
-                  <div class="panel-form-row">
-                    <label for="set-ownship-callsign">Ownship callsign</label>
-                    <input id="set-ownship-callsign" type="text" placeholder="STRATUX" />
-                  </div>
-                  <div class="panel-actions">
-                    <button id="btn-save" type="submit" class="primary">Save</button>
-                    <span id="save-msg" class="panel-form-msg muted"></span>
-                  </div>
-                </div>
-              </div>
 
-              <div class="panel-form-group" aria-label="Wi-Fi access point">
-                <div class="panel-card-head">
-                  <div class="panel-card-title">Wi-Fi Access Point</div>
-                  <div class="panel-card-subtitle">SSID, password, and management IP for Stratux-NG AP mode.</div>
+                <div class="panel-form-section" aria-label="Wi-Fi access point">
+                  <div class="status-metrics-label-system">Wi-Fi Access Point</div>
+                  <div class="panel-form-group">
+                    <div class="panel-card-body">
+                      <div class="panel-form-row">
+                        <label for="set-wifi-ap-ssid">SSID</label>
+                        <input id="set-wifi-ap-ssid" type="text" placeholder="stratux" />
+                      </div>
+                      <div class="panel-form-row">
+                        <label for="set-wifi-ap-pass">Password</label>
+                        <input id="set-wifi-ap-pass" type="password" placeholder="(optional)" />
+                      </div>
+                      <div class="panel-form-row">
+                        <label for="set-wifi-ap-ip">IP Address</label>
+                        <input id="set-wifi-ap-ip" type="text" placeholder="192.168.10.1" />
+                      </div>
+                      <div class="panel-actions">
+                        <button id="btn-save-ap" type="button" class="primary">Update AP</button>
+                        <span id="save-ap-msg" class="panel-form-msg muted"></span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div class="panel-card-body">
-                  <div class="panel-form-row">
-                    <label for="set-wifi-ap-ssid">SSID</label>
-                    <input id="set-wifi-ap-ssid" type="text" placeholder="stratux" />
-                  </div>
-                  <div class="panel-form-row">
-                    <label for="set-wifi-ap-pass">Password</label>
-                    <input id="set-wifi-ap-pass" type="password" placeholder="(optional)" />
-                  </div>
-                  <div class="panel-form-row">
-                    <label for="set-wifi-ap-ip">IP Address</label>
-                    <input id="set-wifi-ap-ip" type="text" placeholder="192.168.10.1" />
-                  </div>
-                  <div class="panel-actions">
-                    <button id="btn-save-ap" type="button" class="primary">Update AP</button>
-                    <span id="save-ap-msg" class="panel-form-msg muted"></span>
-                  </div>
-                </div>
-              </div>
 
-              <div class="panel-form-group" aria-label="Wi-Fi client">
-                <div class="panel-card-head">
-                  <div class="panel-card-title">Wi-Fi Client</div>
+                <div class="panel-form-section" aria-label="Wi-Fi client">
+                  <div class="status-metrics-label-system">Wi-Fi Client</div>
                   <div class="panel-card-subtitle">Connect Stratux-NG to an upstream hotspot.</div>
-                </div>
-                <div class="panel-card-body">
-                  <div class="panel-form-row">
-                    <label for="set-wifi-client-ssid">SSID</label>
-                    <input id="set-wifi-client-ssid" type="text" placeholder="Hotspot Name" />
-                  </div>
-                  <div class="panel-form-row">
-                    <label for="set-wifi-client-pass">Password</label>
-                    <input id="set-wifi-client-pass" type="password" placeholder="Password" />
-                  </div>
-                  <div class="panel-kv panel-form-kv">
-                    <div class="panel-kv-row">
-                      <span class="panel-kv-key">Status</span>
-                      <span id="st-wifi-client-state" class="panel-kv-val">--</span>
+                  <div class="panel-form-group">
+                    <div class="panel-card-body">
+                      <div class="panel-form-row">
+                        <label for="set-wifi-client-ssid">SSID</label>
+                        <input id="set-wifi-client-ssid" type="text" placeholder="Hotspot Name" />
+                      </div>
+                      <div class="panel-form-row">
+                        <label for="set-wifi-client-pass">Password</label>
+                        <input id="set-wifi-client-pass" type="password" placeholder="Password" />
+                      </div>
+                      <div class="panel-kv panel-form-kv">
+                        <div class="panel-kv-row">
+                          <span class="panel-kv-key">Status</span>
+                          <span id="st-wifi-client-state" class="panel-kv-val">--</span>
+                        </div>
+                        <div class="panel-kv-row">
+                          <span class="panel-kv-key">IP</span>
+                          <span id="st-wifi-client-ip" class="panel-kv-val">--</span>
+                        </div>
+                      </div>
+                      <div class="panel-actions">
+                        <button id="btn-save-client" type="button" class="primary">Connect Client</button>
+                        <span id="save-client-msg" class="panel-form-msg muted"></span>
+                      </div>
                     </div>
-                    <div class="panel-kv-row">
-                      <span class="panel-kv-key">IP</span>
-                      <span id="st-wifi-client-ip" class="panel-kv-val">--</span>
-                    </div>
-                  </div>
-                  <div class="panel-actions">
-                    <button id="btn-save-client" type="button" class="primary">Connect Client</button>
-                    <span id="save-client-msg" class="panel-form-msg muted"></span>
                   </div>
                 </div>
-              </div>
 
-              <div class="panel-form-group" aria-label="AHRS calibration">
-                <div class="panel-card-head">
-                  <div class="panel-card-title">AHRS Calibration</div>
+                <div class="panel-form-section" aria-label="AHRS calibration">
+                  <div class="status-metrics-label-system">AHRS Calibration</div>
                   <div class="panel-card-subtitle">Commands affect the connected AHRS immediately.</div>
-                </div>
-                <div class="panel-card-body">
-                  <div class="panel-button-row">
-                    <button id="btn-ahrs-level" type="button">Set Level</button>
-                    <button id="btn-ahrs-zero-drift" type="button">Zero Drift</button>
-                    <button id="btn-ahrs-orient-forward" type="button">Set Forward (hold so nose-end points up)</button>
-                    <button id="btn-ahrs-orient-done" type="button">Finish Orientation (hold level, mounted)</button>
+                  <div class="panel-form-group">
+                    <div class="panel-card-body">
+                      <div class="panel-button-row">
+                        <button id="btn-ahrs-level" type="button" class="primary">Set Level</button>
+                        <button id="btn-ahrs-zero-drift" type="button" class="primary">Zero Drift</button>
+                      </div>
+                      <div class="panel-button-row">
+                        <button id="btn-ahrs-orient-forward" type="button" class="primary">Set Forward (hold so nose-end points up)</button>
+                      </div>
+                      <div class="panel-button-row">
+                        <button id="btn-ahrs-orient-done" type="button" class="primary">Finish Orientation (hold level, mounted)</button>
+                      </div>
+                      <span id="ahrs-msg" class="panel-form-msg muted"></span>
+                    </div>
                   </div>
-                  <span id="ahrs-msg" class="panel-form-msg muted"></span>
                 </div>
               </div>
             </form>

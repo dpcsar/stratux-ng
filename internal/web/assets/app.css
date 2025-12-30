@@ -481,6 +481,42 @@ h2 { margin: 6px 0 6px; font-size: 18px; }
   align-items: stretch;
 }
 
+#view-settings .settings-stack {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(520px, 1fr));
+  gap: 18px;
+  align-items: start;
+  justify-items: center;
+}
+
+/* Keep each Settings section readable on wide screens. */
+#view-settings .panel-form-section {
+  width: 100%;
+  max-width: 980px;
+}
+
+#view-settings .panel-form-group {
+  width: 100%;
+  margin-left: 0;
+  margin-right: 0;
+}
+
+#view-settings .panel-form-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#view-settings .panel-form-section .status-metrics-label,
+#view-settings .panel-form-section .status-metrics-label-system {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+#view-settings .panel-form-section .panel-card-subtitle {
+  margin-top: -4px;
+}
+
 .panel-card,
 .panel-form-group {
   border: 1px solid rgba(127,127,140,0.25);
@@ -1733,7 +1769,11 @@ h2 { margin: 6px 0 6px; font-size: 18px; }
   font-size: 13px;
 }
 
-input[type="text"], textarea, select {
+input[type="text"],
+input[type="password"],
+input[type="number"],
+textarea,
+select {
   width: 100%;
   padding: 10px 12px;
   border-radius: 12px;
