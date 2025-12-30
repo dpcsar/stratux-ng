@@ -8,15 +8,8 @@ permissions:
 
 jobs:
   checks:
-    name: Checks (${{ matrix.runner }})
-    runs-on: ${{ matrix.runner }}
-
-    strategy:
-      fail-fast: false
-      matrix:
-        runner:
-          - ubuntu-latest
-          - ubuntu-24.04-arm64
+    name: Checks
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
@@ -44,15 +37,8 @@ jobs:
         run: make build
 
   image:
-    name: Image build (${{ matrix.runner }})
-    runs-on: ${{ matrix.runner }}
-
-    strategy:
-      fail-fast: false
-      matrix:
-        runner:
-          - ubuntu-latest
-          - ubuntu-24.04-arm64
+    name: Image build
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
@@ -71,8 +57,6 @@ jobs:
       - name: Install qemu-user-static (amd64 cross-build)
         if: ${{ matrix.runner == 'ubuntu-latest' }}
         run: |
-          sudo apt-get update
-          sudo apt-get install -y qemu-user-static
+        uses: docker/setup-qemu-action@v3
 
-      - name: Make image (pi-gen)
-        run: make image
+      - name: Install qemu-user-static (amd64 cross-build)
