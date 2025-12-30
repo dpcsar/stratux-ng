@@ -1,0 +1,70 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  image:
+    name: Build pi-gen image (arm64)
+    runs-on: ubuntu-24.04-arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+
+      - name: Ensure Docker
+        run: |
+          if ! command -v docker >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y docker.io
+          fi
+          sudo systemctl start docker || sudo service docker start || true
+          docker version
+
+      - name: Build image
+        env:
+          PIGEN_ARCH: arm64
+        run: make image
+
+      - name: Collect deploy artifacts
+        run: |
+          mkdir -p dist
+          cp -a build/pi-gen-src/deploy/. dist/
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: stratux-ng_${{ github.ref_name }}_pigen_deploy
+          path: dist/**
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            dist/**

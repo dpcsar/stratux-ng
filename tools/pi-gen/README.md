@@ -12,6 +12,13 @@ What it does:
 
 - Linux host with `docker` and `git`
 - Go toolchain (for building the `stratux-ng` arm64 binary locally)
+- Ability to run privileged Docker containers (pi-gen needs loop devices/mounts)
+- Enough disk space for pi-gen builds
+
+Notes:
+- Native arm64 hosts/runners are simplest.
+- On amd64 hosts building an arm64 image, you typically need QEMU/binfmt enabled.
+- If `docker` is installed but not usable as your user, add yourself to the `docker` group (or run with passwordless sudo).
 
 ## Quick start
 

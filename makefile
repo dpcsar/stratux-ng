@@ -19,7 +19,7 @@ BIN := $(BIN_DIR)/$(APP_NAME)
 #   CONFIG=/data/stratux-ng/config.yaml make run
 CONFIG ?= ./config.yaml
 
-.PHONY: help test build run fmt vet staticcheck tidy clean image image-clean
+.PHONY: help test build run fmt fmt-check vet staticcheck tidy clean image image-clean
 
 help:
 	@printf "%s\n" "Targets:" \
@@ -27,6 +27,7 @@ help:
 	  "  make build       Build ./bin/stratux-ng" \
 	  "  make run         Run via go run (CONFIG=$(CONFIG))" \
 	  "  make fmt         gofmt all .go files" \
+	  "  make fmt-check   Fail if gofmt would change files" \
 	  "  make vet         go vet ./..." \
 	  "  make staticcheck Run staticcheck ./... (install: apt package go-staticcheck on Debian/Trixie)" \
 	  "  make tidy        go mod tidy" \
@@ -45,11 +46,24 @@ run:
 fmt:
 	gofmt -w .
 
+fmt-check:
+	@files=$$(gofmt -l .); \
+	if [ -n "$$files" ]; then \
+		echo "gofmt needed on:"; \
+		echo "$$files"; \
+		exit 1; \
+	fi
+
 vet:
 	go vet ./...
 
 staticcheck:
-	go-staticcheck ./...
+	@if command -v go-staticcheck >/dev/null 2>&1; then \
+		go-staticcheck ./...; \
+	else \
+		go install honnef.co/go/tools/cmd/staticcheck@latest; \
+		"$$(go env GOPATH)/bin/staticcheck" ./...; \
+	fi
 
 tidy:
 	go mod tidy

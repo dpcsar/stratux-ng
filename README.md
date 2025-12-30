@@ -12,7 +12,7 @@ It ingests ADS-B/UAT traffic (via external decoders), GPS and (optionally) AHRS 
 - 978 UAT ingest from FlightAware `dump978-fa` (traffic) and raw uplink relay as GDL90 Uplink (weather)
 - Optional AHRS (ICM-20948 + BMP280) and fan control
 
-Project status: active development / bring-up. A prebuilt SD image pipeline is planned (see [docs/pi-gen.md](docs/pi-gen.md)).
+Project status: active development / bring-up. A prebuilt SD image pipeline exists (pi-gen; see [docs/pi-gen.md](docs/pi-gen.md)).
 
 ## Quick start (run from source on a Pi)
 
