@@ -11,3 +11,11 @@ func snapshotDisk(_ time.Time) *DiskSnapshot {
 func snapshotNetwork(_ time.Time) *NetworkSnapshot {
 	return nil
 }
+
+func Shutdown() error {
+	return nil
+}
+
+func Reboot() error {
+	return nil
+}
