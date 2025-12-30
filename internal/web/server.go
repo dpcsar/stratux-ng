@@ -302,6 +302,34 @@ func Handler(status *Status, settings SettingsStore, ahrsCtl AHRSController) htt
 		w.Write([]byte(`{"ok":true}`))
 	})
 
+	mux.HandleFunc("/api/shutdown", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if err := Shutdown(); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"ok":true}`))
+	})
+
+	mux.HandleFunc("/api/reboot", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if err := Reboot(); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"ok":true}`))
+	})
+
 	// Settings API (read/write YAML config). Changes are applied immediately when supported.
 	// Kept intentionally small.
 	mux.Handle("/api/settings", settings.Handler())

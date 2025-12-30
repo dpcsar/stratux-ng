@@ -101,6 +101,10 @@
   const btnAhrsOrientDone = document.getElementById('btn-ahrs-orient-done');
   const ahrsMsg = document.getElementById('ahrs-msg');
 
+  const btnShutdown = document.getElementById('btn-shutdown');
+  const btnReboot = document.getElementById('btn-reboot');
+  const systemMsg = document.getElementById('system-msg');
+
   const btnAttAhrsLevel = document.getElementById('btn-att-ahrs-level');
   const btnAttAhrsZeroDrift = document.getElementById('btn-att-ahrs-zero-drift');
   const attAhrsMsg = document.getElementById('att-ahrs-msg');
@@ -2077,6 +2081,19 @@
     drawAttitude();
   }
 
+  async function postSystem(path, confirmMsg) {
+    if (!confirm(confirmMsg)) return;
+    if (systemMsg) systemMsg.textContent = 'Working…';
+    try {
+      const resp = await fetch(path, { method: 'POST' });
+      const text = await resp.text();
+      if (!resp.ok) throw new Error(text || `HTTP ${resp.status}`);
+      if (systemMsg) systemMsg.textContent = 'OK. Device is shutting down/rebooting.';
+    } catch (e) {
+      if (systemMsg) systemMsg.textContent = `Failed: ${String(e)}`;
+    }
+  }
+
   async function postAhrs(path, msgEl = ahrsMsg) {
     const isAttitudeUi = msgEl === attAhrsMsg;
     if (isAttitudeUi) {
@@ -3053,6 +3070,9 @@
   btnAhrsZeroDrift?.addEventListener('click', () => postAhrs('/api/ahrs/zero-drift', ahrsMsg));
   btnAhrsOrientForward?.addEventListener('click', () => postAhrs('/api/ahrs/orient/forward', ahrsMsg));
   btnAhrsOrientDone?.addEventListener('click', () => postAhrs('/api/ahrs/orient/done', ahrsMsg));
+
+  btnShutdown?.addEventListener('click', () => postSystem('/api/shutdown', 'Are you sure you want to SHUTDOWN the device?'));
+  btnReboot?.addEventListener('click', () => postSystem('/api/reboot', 'Are you sure you want to REBOOT the device?'));
 
   btnAttAhrsLevel?.addEventListener('click', () => postAhrs('/api/ahrs/level', attAhrsMsg));
   btnAttAhrsZeroDrift?.addEventListener('click', () => postAhrs('/api/ahrs/zero-drift', attAhrsMsg));

@@ -82,3 +82,11 @@ func localInterfaceAddrs() []string {
 	sort.Strings(out)
 	return out
 }
+
+func Shutdown() error {
+	return syscall.Reboot(syscall.LINUX_REBOOT_CMD_POWER_OFF)
+}
+
+func Reboot() error {
+	return syscall.Reboot(syscall.LINUX_REBOOT_CMD_RESTART)
+}
