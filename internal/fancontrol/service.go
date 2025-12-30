@@ -202,7 +202,7 @@ func (s *Service) Start(ctx context.Context) error {
 		case "gpio":
 			drv, err = openGPIOFn(s.cfg.PWMPin)
 		default:
-			err = fmt.Errorf("fancontrol: unknown backend %q", s.cfg.Backend)
+			err = fmt.Errorf("fancontrol: unknown backend %q", backend)
 		}
 		if err != nil {
 			openErrs = append(openErrs, err)
