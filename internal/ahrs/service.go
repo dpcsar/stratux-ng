@@ -41,10 +41,10 @@ type Snapshot struct {
 	OrientationSet         bool
 	OrientationForwardAxis int
 
-	RollDeg    float64
-	PitchDeg   float64
+	RollDeg     float64
+	PitchDeg    float64
 	SlipSkidDeg float64
-	YawRateDps float64
+	YawRateDps  float64
 
 	GLoadValid bool
 	GLoadG     float64

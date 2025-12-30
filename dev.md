@@ -24,7 +24,7 @@ Working now:
 
 Not yet:
 - Full, “pretty” decoded FIS-B product visualization (e.g., map overlays like NEXRAD tiles) (later milestone)
-- Flashable SD image build pipeline (pi-gen stage implementation; see [docs/pi-gen.md](docs/pi-gen.md))
+- Polished/reproducible SD image release process (pi-gen scaffolding exists; see [docs/pi-gen.md](docs/pi-gen.md))
 
 Web UI note:
 - The web UI is still **work in progress**. Expect ongoing iteration (layout/navigation polish, additional pages for traffic/weather/towers parity, and more detailed status/config tooling).

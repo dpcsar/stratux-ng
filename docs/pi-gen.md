@@ -52,6 +52,19 @@ It provides:
 - a custom pi-gen stage (`stage-stratux-ng/`) that installs Stratux-NG + decoders
 - a helper script that clones pi-gen, injects the custom stage, and runs pi-gen in Docker
 
+### Prerequisites (host)
+
+Building images uses pi-gen inside Docker and needs a host that can run privileged containers.
+
+- Linux host (or GitHub Actions runner) with Docker available
+- Ability to run privileged Docker containers (pi-gen uses loop devices and mounts)
+- Sufficient disk space (pi-gen builds can consume many GB)
+
+Notes:
+- On amd64 hosts/runners building an arm64 image, you typically need QEMU/binfmt configured (CI does this via `docker/setup-qemu-action`).
+- Many pi-gen setups also require `qemu-user-static` (for `qemu-aarch64-static`) on the host.
+- If Docker is installed but not usable as your user, add yourself to the `docker` group or run the build under passwordless sudo.
+
 ### Guiding principles
 
 - Put mutable state under `/data`.
