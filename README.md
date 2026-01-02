@@ -10,14 +10,11 @@ Working now:
 - **GDL90 over UDP** (heartbeat + ownship + traffic + device ID + Stratux heartbeat)
 - **Web UI + status API** (including decoder health)
 - **AHRS (ICM-20948 + BMP280)** + **fan control**
-- **1090** ingest from FlightAware `dump1090-fa` (`aircraft.json` polling) → **real GDL90 Traffic (0x14)**
+- **1090** ingest from FlightAware `dump1090-fa` (NDJSON over TCP) → **real GDL90 Traffic (0x14)**
 - **978** ingest from `dump978-fa` (JSON/NDJSON over TCP) → **real GDL90 Traffic (0x14)**
 - **978** uplink relay from `dump978-fa` raw TCP (`--raw-port`) → **GDL90 Uplink (0x07)** (EFB weather)
-
-Not yet:
-- “Pretty” decoded FIS-B product visualization in the web UI (later milestone)
-- “Towers” page (UAT ground stations / GBTs): the UI entry exists but is currently a placeholder; implementing this requires decoding/deriving ground-station identity + signal stats from 978 UAT uplinks and exposing it via the status/API.
-- Flashable SD image build pipeline (pi-gen stage implementation; see [docs/pi-gen.md](docs/pi-gen.md))
+- **Wi-Fi AP/Client Mode** configuration via Web UI
+- **Flashable SD image build pipeline** (pi-gen stage implementation)
 
 Web UI note:
 - The web UI is still **work in progress**. Expect ongoing iteration (layout/navigation polish, additional pages for traffic/weather/towers parity, and more detailed status/config tooling).
@@ -58,16 +55,12 @@ This is a **new implementation** (new repository) with a modular architecture an
 
 - External decoders are treated as data sources:
   - FlightAware `dump1090-fa` for 1090 MHz
-  - `dump978` / `dump978-fa` for 978 MHz
+  - FlightAware `dump978-fa` for 978 MHz
 
 Decoder I/O convention:
-- 1090 recommended: `dump1090-fa --write-json ...` (Stratux-NG polls `aircraft.json`)
+- 1090 recommended: `dump1090-fa --net-stratux-port ...` (Stratux-NG ingests NDJSON over TCP)
 - 978 traffic recommended: `dump978-fa --json-port ...` (Stratux-NG ingests NDJSON over TCP)
 - 978 weather recommended: `dump978-fa --raw-port ...` (Stratux-NG relays uplinks as GDL90 message `0x07`)
-
-SDR serial tag note (Stratux-style):
-- Many Stratux-tagged RTL-SDRs report USB serial strings like `stx:1090:0` and `stx:978:0` (as seen in `lsusb -v`).
-- Use the exact string reported by your dongle when passing `dump1090-fa --device-type soapy --device driver=rtlsdr,serial=<serial>` or `dump978-fa --sdr driver=rtlsdr,serial=<serial>`.
 
 ## Wi-Fi Configuration
 
@@ -171,11 +164,8 @@ sudo install -m 755 dump978-fa /usr/local/bin/dump978-fa
 5) Validate decoder output paths/ports (defaults used by [config.yaml](config.yaml)):
 
 ```
-# 1090 aircraft.json (dump1090-fa)
-# Note: this file only exists after dump1090-fa is running.
-# If you're using the provided systemd unit, systemd creates /run/dump1090-fa via RuntimeDirectory.
-ls -l /run/dump1090-fa/aircraft.json
-head /run/dump1090-fa/aircraft.json
+# 1090 Stratux JSON stream
+nc 127.0.0.1 30006 | head
 
 # 978 JSON/NDJSON
 nc 127.0.0.1 30978 | head
@@ -188,7 +178,6 @@ When you move from development (`go run ...`) to a flashable SD image, these are
 - Persistent config path
   - Mount an ext4 partition at `/data`
   - Put config at `/data/stratux-ng/config.yaml`
-  - See: [docs/sd-image-persistence.md](docs/sd-image-persistence.md)
 - Stable GPS device name (recommended)
   - Install the udev rule example: `configs/udev/99-stratux-gps.rules.example`
   - Configure `gps.device: /dev/stratux-gps` (avoid hard-coding `/dev/ttyACM0`)
@@ -477,7 +466,7 @@ Stratux-NG supports both:
 - [x] HTTP API + minimal UI
 - [x] Process supervision + stream reconnect for `dump1090-fa` / `dump978-fa`
 - [x] Record/replay mode for *GDL90 output frames* (repeatable EFB testing)
-- [ ] Raspberry Pi image build pipeline (pi-gen or equivalent)
+- [x] Raspberry Pi image build pipeline (pi-gen or equivalent)
 - [x] Hardware integration: SDR 1090, SDR 978, GPS, AHRS
 
 ## Contributing
