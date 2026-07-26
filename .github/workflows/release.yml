@@ -11,7 +11,18 @@ permissions:
 jobs:
   image:
     name: Build pi-gen image
-    runs-on: ubuntu-latest
+    # Build natively on arm64: pi-gen only needs QEMU/binfmt_misc user-mode
+    # emulation to cross-build an arm64 image on an x86_64 host. GitHub-hosted
+    # arm64 Linux runners are free/unlimited for public repos, and pi-gen's own
+    # scripts already skip the binfmt_misc requirement entirely when the host
+    # is native aarch64/arm64 (see build-docker.sh/scripts/dependencies_check).
+    # This avoids an entire class of QEMU/binfmt_misc breakage we hit trying to
+    # cross-build from ubuntu-latest (x86_64): upstream pi-gen changing its
+    # qemu package requirement between tags, and (seemingly) GitHub's hosted
+    # x86_64 runner environment not actually supporting working binfmt_misc
+    # registration inside a nested --privileged container regardless of how
+    # it's set up on the host.
+    runs-on: ubuntu-24.04-arm
 
     steps:
       - name: Checkout
@@ -31,16 +42,6 @@ jobs:
           fi
           sudo systemctl start docker || sudo service docker start || true
           docker version
-
-      - name: Install qemu-user-binfmt
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y qemu-user-binfmt
-
-      - name: Set up QEMU binfmt handlers
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
 
       - name: Build image
         env:
