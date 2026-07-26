@@ -32,7 +32,9 @@ help:
 	  "  make staticcheck Run staticcheck ./... (install: apt package go-staticcheck on Debian/Trixie)" \
 	  "  make jscheck     Syntax-check internal/web/assets/*.js with node --check" \
 	  "  make tidy        go mod tidy" \
-	  "  make clean       Remove ./bin"
+	  "  make clean       Remove ./bin" \
+	  "  make image       Build Raspberry Pi OS image via pi-gen (Docker)" \
+	  "  make image-clean Remove pi-gen Docker artifacts and ./build"
 
 test:
 	go test ./...

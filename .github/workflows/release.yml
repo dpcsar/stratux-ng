@@ -32,10 +32,10 @@ jobs:
           sudo systemctl start docker || sudo service docker start || true
           docker version
 
-      - name: Install qemu-user-static
+      - name: Install qemu-user-binfmt
         run: |
           sudo apt-get update
-          sudo apt-get install -y qemu-user-static
+          sudo apt-get install -y qemu-user-binfmt
 
       - name: Set up QEMU binfmt handlers
         uses: docker/setup-qemu-action@v3

@@ -10,7 +10,11 @@ PIGEN_DIR="${BUILD_DIR}/pi-gen-src"
 STAGE_SRC_DIR="${ROOT_DIR}/tools/pi-gen/stage-stratux-ng"
 
 PIGEN_REPO_URL="${PIGEN_REPO_URL:-https://github.com/RPi-Distro/pi-gen.git}"
-PIGEN_REF="${PIGEN_REF:-arm64}"
+# Pin to a known-good tag rather than tracking the (moving) arm64 branch tip:
+# upstream has changed qemu package requirements (qemu-aarch64-static ->
+# qemu-aarch64/qemu-user-binfmt) between tags, which broke our release build
+# without any change on our side. Override via PIGEN_REF if you need to bump it.
+PIGEN_REF="${PIGEN_REF:-2026-06-18-raspios-trixie-arm64}"
 PIGEN_RELEASE="${PIGEN_RELEASE:-trixie}"
 PIGEN_ARCH="${PIGEN_ARCH:-arm64}"
 
@@ -33,9 +37,9 @@ require_cmd go
 
 host_arch="$(uname -m)"
 if [[ "${host_arch}" != "aarch64" && "${host_arch}" != "arm64" ]]; then
-  if ! command -v qemu-aarch64-static >/dev/null 2>&1; then
-    echo "error: qemu-aarch64-static not found (install qemu-user-static)" >&2
-    echo "hint: sudo apt-get install -y qemu-user-static" >&2
+  if ! command -v qemu-aarch64 >/dev/null 2>&1; then
+    echo "error: qemu-aarch64 not found (install qemu-user-binfmt)" >&2
+    echo "hint: sudo apt-get install -y qemu-user-binfmt" >&2
     exit 1
   fi
 fi
