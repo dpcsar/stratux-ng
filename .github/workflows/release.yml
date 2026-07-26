@@ -32,11 +32,15 @@ jobs:
           sudo systemctl start docker || sudo service docker start || true
           docker version
 
-      - name: Install QEMU
+      - name: Install qemu-user-static
         run: |
           sudo apt-get update
-          sudo apt-get install -y qemu-user-static qemu-user-binfmt
-          sudo update-binfmts --enable qemu-aarch64 || true
+          sudo apt-get install -y qemu-user-static
+
+      - name: Set up QEMU binfmt handlers
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
 
       - name: Build image
         env:
