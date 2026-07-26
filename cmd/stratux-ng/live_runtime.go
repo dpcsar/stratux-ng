@@ -76,7 +76,14 @@ type liveRuntime struct {
 
 	cfg    config.Config
 	ticker *time.Ticker
-}
+	// logicalADSB1090/logicalUAT978 hold the validated-but-not-yet-runtime-mutated
+	// decoder band config (before initDecoders resolves "auto" SDR selection and
+	// upserts --device/--sdr args into cfg.ADSB1090/cfg.UAT978). Apply() diffs
+	// against these instead of cfg.ADSB1090/cfg.UAT978 directly, so SDR
+	// auto-detection side effects don't falsely look like a user-driven change
+	// that requires a restart.
+	logicalADSB1090 config.DecoderBandConfig
+	logicalUAT978   config.DecoderBandConfig}
 
 func decoderBandEqual(a, b config.DecoderBandConfig) bool {
 	if a.Enable != b.Enable {
@@ -172,6 +179,8 @@ func newLiveRuntime(ctx context.Context, cfg config.Config, resolvedConfigPath s
 		ahrsSvc:            ahrsSvc,
 		uat978UplinkQ:      make(chan []byte, 512),
 		trafficStore:       traffic.NewStore(traffic.StoreConfig{MaxTargets: 200, TTL: 30 * time.Second}),
+		logicalADSB1090:    c.ADSB1090,
+		logicalUAT978:      c.UAT978,
 	}
 
 	// Optional: external decoders (1090/dump1090-fa, 978/dump978-fa).
@@ -712,10 +721,14 @@ func (r *liveRuntime) Apply(next config.Config) error {
 	if c.Fan.Enable != r.cfg.Fan.Enable || c.Fan.PWMPin != r.cfg.Fan.PWMPin || c.Fan.PWMFrequency != r.cfg.Fan.PWMFrequency || c.Fan.TempTargetC != r.cfg.Fan.TempTargetC || c.Fan.PWMDutyMin != r.cfg.Fan.PWMDutyMin || c.Fan.UpdateInterval != r.cfg.Fan.UpdateInterval {
 		return fmt.Errorf("fan settings require restart")
 	}
-	if !decoderBandEqual(c.ADSB1090, r.cfg.ADSB1090) {
+	// Compare against the pre-mutation "logical" band config, not r.cfg.ADSB1090/
+	// r.cfg.UAT978 directly: initDecoders resolves SDR "auto" selection and
+	// upserts --device/--sdr args into r.cfg at startup, so comparing against
+	// the mutated copy would falsely require a restart on every apply.
+	if !decoderBandEqual(c.ADSB1090, r.logicalADSB1090) {
 		return fmt.Errorf("adsb1090 settings require restart")
 	}
-	if !decoderBandEqual(c.UAT978, r.cfg.UAT978) {
+	if !decoderBandEqual(c.UAT978, r.logicalUAT978) {
 		return fmt.Errorf("uat978 settings require restart")
 	}
 
@@ -740,7 +753,17 @@ func (r *liveRuntime) Apply(next config.Config) error {
 		r.ticker = time.NewTicker(c.GDL90.Interval)
 	}
 
+	// ADSB1090/UAT978 didn't logically change (checked above), so keep the
+	// already-running, runtime-resolved band config (resolved SDR serial/index
+	// and upserted decoder args) rather than reverting to the unresolved
+	// values from the freshly-submitted config.
+	resolvedADSB1090 := r.cfg.ADSB1090
+	resolvedUAT978 := r.cfg.UAT978
+	r.logicalADSB1090 = c.ADSB1090
+	r.logicalUAT978 = c.UAT978
 	r.cfg = c
+	r.cfg.ADSB1090 = resolvedADSB1090
+	r.cfg.UAT978 = resolvedUAT978
 	r.status.SetStatic(r.cfg.GDL90.Dest, r.cfg.GDL90.Interval.String(), staticInfoSnapshot(r.resolvedConfigPath, r.cfg))
 	return nil
 }

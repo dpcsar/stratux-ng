@@ -183,7 +183,7 @@ func trafficReportsFromSnapshots(snaps []traffic.TargetSnapshot) []gdl90.Traffic
 	return reports
 }
 
-func buildTrafficStatusSnapshots(now time.Time, gpsSnap gps.Snapshot, gpsValid bool, snaps []traffic.TargetSnapshot) []web.TrafficSnapshot {
+func buildTrafficStatusSnapshots(gpsSnap gps.Snapshot, gpsValid bool, snaps []traffic.TargetSnapshot) []web.TrafficSnapshot {
 	if len(snaps) == 0 {
 		return nil
 	}
@@ -306,6 +306,7 @@ func staticInfoSnapshot(resolvedConfigPath string, cfg config.Config) map[string
 		"replay":           cfg.GDL90.Replay.Enable,
 		"ownship_icao":     cfg.Ownship.ICAO,
 		"ownship_callsign": cfg.Ownship.Callsign,
+		"aircraft_active":  cfg.Aircraft.Active,
 	}
 }
 
@@ -531,7 +532,7 @@ func main() {
 
 	log.Printf("stratux-ng starting")
 	log.Printf("udp dest=%s interval=%s", cfg.GDL90.Dest, cfg.GDL90.Interval)
-	log.Printf("ownship icao=%s callsign=%s", cfg.Ownship.ICAO, cfg.Ownship.Callsign)
+	log.Printf("ownship icao=%s callsign=%s profile=%q", cfg.Ownship.ICAO, cfg.Ownship.Callsign, cfg.Aircraft.Active)
 
 	go func() {
 		rt, err := newLiveRuntime(ctx, cfg, resolvedConfigPath, status, sender)
@@ -652,7 +653,7 @@ func main() {
 				if extra := rt.DrainUAT978UplinkFrames(50); len(extra) > 0 {
 					frames = append(frames, extra...)
 				}
-				status.SetTraffic(now.UTC(), buildTrafficStatusSnapshots(now.UTC(), gpsSnap, haveGPS && gpsSnap.Valid, trafficSnaps))
+				status.SetTraffic(now.UTC(), buildTrafficStatusSnapshots(gpsSnap, haveGPS && gpsSnap.Valid, trafficSnaps))
 				// Always record a "tick" time even if we fail mid-send.
 				status.MarkTick(now.UTC(), 0)
 				sent := 0

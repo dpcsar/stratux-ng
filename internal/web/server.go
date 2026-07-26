@@ -333,6 +333,7 @@ func Handler(status *Status, settings SettingsStore, ahrsCtl AHRSController) htt
 	// Settings API (read/write YAML config). Changes are applied immediately when supported.
 	// Kept intentionally small.
 	mux.Handle("/api/settings", settings.Handler())
+	mux.Handle("/api/aircraft", settings.Handler())
 
 	if assetsFS != nil {
 		fileServer := http.FileServer(http.FS(assetsFS))

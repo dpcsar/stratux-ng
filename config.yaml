@@ -17,8 +17,17 @@ gps:
     baud: 9600
     horizontal_accuracy_m: 10
 ownship:
-    icao: F00000
-    callsign: STRATUX
+    icao: F00001
+    callsign: EV
+aircraft:
+    active: ev
+    profiles:
+        - name: STRATUX
+          icao: F00000
+          callsign: STRATUX
+        - name: ev
+          icao: F00001
+          callsign: EV
 ahrs:
     enable: true
     i2c_bus: 1
@@ -40,7 +49,12 @@ fan:
     update_interval: 5s
 web:
     listen: :80
-
+wifi:
+    ap_ssid: ""
+    ap_pass: ""
+    ap_ip: ""
+    client_ssid: ""
+    client_pass: ""
 adsb1090:
     enable: true
     decoder:
@@ -53,9 +67,13 @@ adsb1090:
             - "30006"
             - --modeac
         json_listen: 127.0.0.1:30006
+        json_addr: ""
+        raw_listen: ""
+        raw_addr: ""
     sdr:
         serial_tag: auto
-
+        index: null
+        path: ""
 uat978:
     enable: true
     decoder:
@@ -66,6 +84,10 @@ uat978:
             - --raw-port
             - "30979"
         json_listen: 127.0.0.1:30978
+        json_addr: ""
         raw_listen: 127.0.0.1:30979
+        raw_addr: ""
     sdr:
         serial_tag: auto
+        index: null
+        path: ""

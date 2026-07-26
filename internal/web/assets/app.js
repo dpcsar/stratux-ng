@@ -504,6 +504,15 @@
   const setOwnshipICAO = document.getElementById('set-ownship-icao');
   const setOwnshipCallsign = document.getElementById('set-ownship-callsign');
 
+  const setAircraftSelect = document.getElementById('set-aircraft-select');
+  const setAircraftNewName = document.getElementById('set-aircraft-new-name');
+  const btnAircraftAdd = document.getElementById('btn-aircraft-add');
+  const btnAircraftDelete = document.getElementById('btn-aircraft-delete');
+  const btnAircraftSave = document.getElementById('btn-aircraft-save');
+  const aircraftMsg = document.getElementById('aircraft-msg');
+  let aircraftProfiles = [];
+  let aircraftActive = '';
+
   const setWiFiAPSSID = document.getElementById('set-wifi-ap-ssid');
   const setWiFiAPPass = document.getElementById('set-wifi-ap-pass');
   const setWiFiAPIP = document.getElementById('set-wifi-ap-ip');
@@ -2888,7 +2897,118 @@
       saveMsg.textContent = `Settings unavailable (${String(e)})`;
     }
     loadWiFiSettings();
+    loadAircraftSettings();
   }
+
+  function renderAircraftSelect() {
+    if (!setAircraftSelect) return;
+    setAircraftSelect.innerHTML = '';
+    for (const p of aircraftProfiles) {
+      const opt = document.createElement('option');
+      opt.value = p.name;
+      opt.textContent = p.name;
+      if (p.name === aircraftActive) opt.selected = true;
+      setAircraftSelect.appendChild(opt);
+    }
+  }
+
+  function loadSelectedAircraftProfileIntoInputs() {
+    const name = setAircraftSelect ? setAircraftSelect.value : '';
+    const p = aircraftProfiles.find((x) => x.name === name);
+    if (!p) return;
+    if (setOwnshipICAO) setOwnshipICAO.value = p.icao || '';
+    if (setOwnshipCallsign) setOwnshipCallsign.value = p.callsign || '';
+  }
+
+  async function loadAircraftSettings() {
+    try {
+      const resp = await fetch('/api/aircraft', { cache: 'no-store' });
+      if (!resp.ok) throw new Error(`aircraft ${resp.status}`);
+      const p = await resp.json();
+      aircraftProfiles = Array.isArray(p.profiles) ? p.profiles : [];
+      aircraftActive = p.active || '';
+      renderAircraftSelect();
+    } catch (e) {
+      if (aircraftMsg) aircraftMsg.textContent = `Aircraft profiles unavailable (${String(e)})`;
+    }
+  }
+
+  async function saveAircraftProfiles() {
+    if (!setAircraftSelect || aircraftProfiles.length === 0) return;
+    const selected = setAircraftSelect.value;
+
+    // Stage the currently edited icao/callsign into the selected profile
+    // before saving so in-progress edits aren't lost when switching active.
+    const updated = aircraftProfiles.map((p) => {
+      if (p.name !== selected) return p;
+      return {
+        name: p.name,
+        icao: setOwnshipICAO ? setOwnshipICAO.value : p.icao,
+        callsign: setOwnshipCallsign ? setOwnshipCallsign.value : p.callsign,
+      };
+    });
+
+    if (aircraftMsg) aircraftMsg.textContent = 'Saving…';
+    try {
+      const resp = await fetch('/api/aircraft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: selected, profiles: updated }),
+      });
+      const text = await resp.text();
+      if (!resp.ok) throw new Error(text || `save ${resp.status}`);
+      if (aircraftMsg) aircraftMsg.textContent = `Saved and activated "${selected}".`;
+      await loadAircraftSettings();
+      await loadSettings();
+    } catch (e) {
+      if (aircraftMsg) aircraftMsg.textContent = `Save failed: ${String(e)}`;
+    }
+  }
+
+  function addAircraftProfile() {
+    const name = setAircraftNewName ? setAircraftNewName.value.trim() : '';
+    if (!name) {
+      if (aircraftMsg) aircraftMsg.textContent = 'Enter a profile name first.';
+      return;
+    }
+    if (aircraftProfiles.some((p) => p.name.toLowerCase() === name.toLowerCase())) {
+      if (aircraftMsg) aircraftMsg.textContent = `Profile "${name}" already exists.`;
+      return;
+    }
+    aircraftProfiles.push({ name, icao: 'F00000', callsign: name.toUpperCase().slice(0, 8) });
+    renderAircraftSelect();
+    if (setAircraftSelect) setAircraftSelect.value = name;
+    loadSelectedAircraftProfileIntoInputs();
+    if (setAircraftNewName) setAircraftNewName.value = '';
+    if (aircraftMsg) aircraftMsg.textContent = `Added "${name}". Click Save & Activate to persist.`;
+  }
+
+  async function deleteAircraftProfile() {
+    if (!setAircraftSelect || aircraftProfiles.length <= 1) {
+      if (aircraftMsg) aircraftMsg.textContent = 'At least one aircraft profile is required.';
+      return;
+    }
+    const name = setAircraftSelect.value;
+    const remaining = aircraftProfiles.filter((p) => p.name !== name);
+    const nextActive = remaining[0].name;
+
+    if (aircraftMsg) aircraftMsg.textContent = 'Deleting…';
+    try {
+      const resp = await fetch('/api/aircraft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: nextActive, profiles: remaining }),
+      });
+      const text = await resp.text();
+      if (!resp.ok) throw new Error(text || `delete ${resp.status}`);
+      if (aircraftMsg) aircraftMsg.textContent = `Deleted "${name}".`;
+      await loadAircraftSettings();
+      await loadSettings();
+    } catch (e) {
+      if (aircraftMsg) aircraftMsg.textContent = `Delete failed: ${String(e)}`;
+    }
+  }
+
 
   async function loadWiFiSettings() {
     try {
@@ -3043,6 +3163,11 @@
   });
   btnSaveAP?.addEventListener('click', saveAPSettings);
   btnSaveClient?.addEventListener('click', saveClientSettings);
+
+  setAircraftSelect?.addEventListener('change', loadSelectedAircraftProfileIntoInputs);
+  btnAircraftAdd?.addEventListener('click', addAircraftProfile);
+  btnAircraftDelete?.addEventListener('click', deleteAircraftProfile);
+  btnAircraftSave?.addEventListener('click', saveAircraftProfiles);
 
   uiVsiTrafficDeadband?.addEventListener('change', persistVsiUiFromInputs);
   uiVsiTrafficRounding?.addEventListener('change', persistVsiUiFromInputs);

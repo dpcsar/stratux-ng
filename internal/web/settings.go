@@ -176,6 +176,17 @@ func applySettingsPayload(cfg *config.Config, p SettingsPayloadIn) error {
 
 	cfg.Ownship.ICAO = strings.ToUpper(strings.TrimSpace(*p.OwnshipICAO))
 	cfg.Ownship.Callsign = strings.TrimSpace(*p.OwnshipCallsign)
+
+	// Keep the active aircraft profile (if any) in sync so
+	// config.DefaultAndValidate's ownship-mirroring doesn't clobber this edit
+	// with stale profile data.
+	for i := range cfg.Aircraft.Profiles {
+		if strings.EqualFold(cfg.Aircraft.Profiles[i].Name, cfg.Aircraft.Active) {
+			cfg.Aircraft.Profiles[i].ICAO = cfg.Ownship.ICAO
+			cfg.Aircraft.Profiles[i].Callsign = cfg.Ownship.Callsign
+			break
+		}
+	}
 	return nil
 }
 
@@ -231,6 +242,8 @@ func (s SettingsStore) save(cfg config.Config) error {
 
 func (s SettingsStore) Handler() http.Handler {
 	mux := http.NewServeMux()
+
+	mux.HandleFunc("/api/aircraft", s.handleAircraft)
 
 	mux.HandleFunc("/api/settings", func(w http.ResponseWriter, r *http.Request) {
 		if strings.TrimSpace(s.ConfigPath) == "" {

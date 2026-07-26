@@ -105,3 +105,77 @@ func TestLoad_RejectsUnknownField(t *testing.T) {
 	_, err := Load(path)
 	requireErrEq(t, err, "config contains unknown fields: field mode not found in type config.GDL90Config")
 }
+
+func TestLoad_AircraftProfileSynthesizedFromLegacyOwnship(t *testing.T) {
+	path := writeTempConfig(t, "gdl90:\n  dest: '127.0.0.1:4000'\nownship:\n  icao: ABC123\n  callsign: N12345\n")
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if len(cfg.Aircraft.Profiles) != 1 {
+		t.Fatalf("expected 1 synthesized profile, got %d: %+v", len(cfg.Aircraft.Profiles), cfg.Aircraft.Profiles)
+	}
+	p := cfg.Aircraft.Profiles[0]
+	if p.Name != "N12345" || p.ICAO != "ABC123" || p.Callsign != "N12345" {
+		t.Fatalf("unexpected synthesized profile: %+v", p)
+	}
+	if cfg.Aircraft.Active != "N12345" {
+		t.Fatalf("active=%q want N12345", cfg.Aircraft.Active)
+	}
+}
+
+func TestLoad_AircraftMultipleProfilesActiveMirroredToOwnship(t *testing.T) {
+	path := writeTempConfig(t, "gdl90:\n  dest: '127.0.0.1:4000'\n"+
+		"aircraft:\n  active: Arrow\n  profiles:\n"+
+		"    - name: Skyhawk\n      icao: AAA111\n      callsign: N111SH\n"+
+		"    - name: Arrow\n      icao: BBB222\n      callsign: N222AR\n")
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if cfg.Ownship.ICAO != "BBB222" || cfg.Ownship.Callsign != "N222AR" {
+		t.Fatalf("expected ownship mirrored from active profile, got %+v", cfg.Ownship)
+	}
+}
+
+func TestLoad_AircraftDefaultsActiveToFirstProfile(t *testing.T) {
+	path := writeTempConfig(t, "gdl90:\n  dest: '127.0.0.1:4000'\n"+
+		"aircraft:\n  profiles:\n"+
+		"    - name: Skyhawk\n      icao: AAA111\n      callsign: N111SH\n"+
+		"    - name: Arrow\n      icao: BBB222\n      callsign: N222AR\n")
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if cfg.Aircraft.Active != "Skyhawk" {
+		t.Fatalf("active=%q want Skyhawk", cfg.Aircraft.Active)
+	}
+	if cfg.Ownship.ICAO != "AAA111" {
+		t.Fatalf("ownship icao=%q want AAA111", cfg.Ownship.ICAO)
+	}
+}
+
+func TestLoad_AircraftUnknownActiveRejected(t *testing.T) {
+	path := writeTempConfig(t, "gdl90:\n  dest: '127.0.0.1:4000'\n"+
+		"aircraft:\n  active: Nope\n  profiles:\n"+
+		"    - name: Skyhawk\n      icao: AAA111\n      callsign: N111SH\n")
+	_, err := Load(path)
+	requireErrEq(t, err, `aircraft.active "Nope" does not match any aircraft.profiles name`)
+}
+
+func TestLoad_AircraftDuplicateProfileNameRejected(t *testing.T) {
+	path := writeTempConfig(t, "gdl90:\n  dest: '127.0.0.1:4000'\n"+
+		"aircraft:\n  profiles:\n"+
+		"    - name: Skyhawk\n      icao: AAA111\n      callsign: N111SH\n"+
+		"    - name: skyhawk\n      icao: BBB222\n      callsign: N222AR\n")
+	_, err := Load(path)
+	requireErrEq(t, err, `aircraft.profiles[1]: duplicate profile name "skyhawk"`)
+}
+
+func TestLoad_AircraftProfileRequiresICAOAndCallsign(t *testing.T) {
+	path := writeTempConfig(t, "gdl90:\n  dest: '127.0.0.1:4000'\n"+
+		"aircraft:\n  profiles:\n"+
+		"    - name: Skyhawk\n      icao: ''\n      callsign: N111SH\n")
+	_, err := Load(path)
+	requireErrEq(t, err, "aircraft.profiles[0].icao must be non-empty")
+}

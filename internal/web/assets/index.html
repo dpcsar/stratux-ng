@@ -662,13 +662,37 @@
                   </div>
                 </div>
 
-                <div class="panel-form-section" aria-label="Configuration">
-                  <div class="status-metrics-label-system">Configuration</div>
+                <div class="panel-form-section" aria-label="GDL90 output">
+                  <div class="status-metrics-label-system">GDL90 Output</div>
                   <div class="panel-form-group">
                     <div class="panel-card-body">
                       <div class="panel-form-row">
                         <label for="set-interval">Interval (e.g. 1s)</label>
                         <input id="set-interval" type="text" placeholder="1s" />
+                      </div>
+                      <div class="panel-actions">
+                        <button id="btn-save" type="submit" class="primary">Save</button>
+                        <span id="save-msg" class="panel-form-msg muted"></span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="panel-form-section" aria-label="Aircraft profiles">
+                  <div class="status-metrics-label-system">Aircraft Profile</div>
+                  <div class="panel-form-group">
+                    <div class="panel-card-body">
+                      <div class="panel-form-row">
+                        <label for="set-aircraft-select">Profile</label>
+                        <select id="set-aircraft-select"></select>
+                      </div>
+                      <div class="panel-form-row">
+                        <label for="set-aircraft-new-name">New profile name</label>
+                        <input id="set-aircraft-new-name" type="text" placeholder="e.g. N12345" />
+                      </div>
+                      <div class="panel-actions">
+                        <button id="btn-aircraft-add" type="button" class="primary">Add Profile</button>
+                        <button id="btn-aircraft-delete" type="button" class="primary">Delete Profile</button>
                       </div>
                       <div class="panel-form-row">
                         <label for="set-ownship-icao">Ownship ICAO (hex)</label>
@@ -679,12 +703,13 @@
                         <input id="set-ownship-callsign" type="text" placeholder="STRATUX" />
                       </div>
                       <div class="panel-actions">
-                        <button id="btn-save" type="submit" class="primary">Save</button>
-                        <span id="save-msg" class="panel-form-msg muted"></span>
+                        <button id="btn-aircraft-save" type="button" class="primary">Save &amp; Activate</button>
+                        <span id="aircraft-msg" class="panel-form-msg muted"></span>
                       </div>
                     </div>
                   </div>
                 </div>
+
 
                 <div class="panel-form-section" aria-label="Wi-Fi access point">
                   <div class="status-metrics-label-system">Wi-Fi Access Point</div>

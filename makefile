@@ -19,7 +19,7 @@ BIN := $(BIN_DIR)/$(APP_NAME)
 #   CONFIG=/data/stratux-ng/config.yaml make run
 CONFIG ?= ./config.yaml
 
-.PHONY: help test build run fmt fmt-check vet staticcheck tidy clean image image-clean
+.PHONY: help test build run fmt fmt-check vet staticcheck jscheck tidy clean image image-clean
 
 help:
 	@printf "%s\n" "Targets:" \
@@ -30,6 +30,7 @@ help:
 	  "  make fmt-check   Fail if gofmt would change files" \
 	  "  make vet         go vet ./..." \
 	  "  make staticcheck Run staticcheck ./... (install: apt package go-staticcheck on Debian/Trixie)" \
+	  "  make jscheck     Syntax-check internal/web/assets/*.js with node --check" \
 	  "  make tidy        go mod tidy" \
 	  "  make clean       Remove ./bin"
 
@@ -64,6 +65,17 @@ staticcheck:
 		go install honnef.co/go/tools/cmd/staticcheck@latest; \
 		"$$(go env GOPATH)/bin/staticcheck" ./...; \
 	fi
+
+jscheck:
+	@if ! command -v node >/dev/null 2>&1; then \
+		echo "node not found; skipping JS syntax check (install Node.js to enable)"; \
+		exit 0; \
+	fi
+	@status=0; \
+	for f in internal/web/assets/*.js; do \
+		node --check "$$f" || status=1; \
+	done; \
+	exit $$status
 
 tidy:
 	go mod tidy

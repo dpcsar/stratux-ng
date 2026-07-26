@@ -85,3 +85,48 @@ func TestLiveRuntime_RejectsWebListenChange(t *testing.T) {
 		t.Fatalf("expected error")
 	}
 }
+
+// TestLiveRuntime_ApplyUnrelatedChangeDoesNotRequireRestartAfterSDRAutodetect
+// guards against a regression where SDR auto-detection mutates the running
+// ADSB1090/UAT978 config (resolving "auto" and upserting --device args) and
+// a subsequent Apply() of an unrelated change (e.g. GDL90 interval) falsely
+// reported "adsb1090/uat978 settings require restart" because it compared
+// against the already-mutated runtime config instead of the pre-mutation one.
+func TestLiveRuntime_ApplyUnrelatedChangeDoesNotRequireRestartAfterSDRAutodetect(t *testing.T) {
+	st := web.NewStatus()
+
+	b, err := udp.NewBroadcaster("127.0.0.1:4000")
+	if err != nil {
+		t.Fatalf("NewBroadcaster() error: %v", err)
+	}
+	sender := &safeBroadcaster{b: b}
+	defer sender.Close()
+
+	cfg := minimalCfg(t, "127.0.0.1:4000", 1*time.Second)
+	cfg.ADSB1090 = config.DecoderBandConfig{
+		Enable: true,
+		Decoder: config.DecoderConfig{
+			Command:    "dump1090-fa",
+			Args:       []string{"--net-stratux-port", "30006"},
+			JSONListen: "127.0.0.1:0",
+		},
+		SDR: config.SDRSelector{SerialTag: "auto"},
+	}
+
+	r, err := newLiveRuntime(context.Background(), cfg, "", st, sender)
+	if err != nil {
+		t.Fatalf("newLiveRuntime() error: %v", err)
+	}
+	defer r.Close()
+
+	// Simulate a freshly-submitted config from a settings/aircraft save: same
+	// logical adsb1090 config as originally loaded, but with an unrelated
+	// change (GDL90 interval).
+	next := r.Config()
+	next.ADSB1090 = cfg.ADSB1090
+	next.GDL90.Interval = 250 * time.Millisecond
+
+	if err := r.Apply(next); err != nil {
+		t.Fatalf("Apply() error: %v", err)
+	}
+}

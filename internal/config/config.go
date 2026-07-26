@@ -13,13 +13,14 @@ import (
 )
 
 type Config struct {
-	GDL90   GDL90Config   `yaml:"gdl90"`
-	GPS     GPSConfig     `yaml:"gps"`
-	Ownship OwnshipConfig `yaml:"ownship"`
-	AHRS    AHRSConfig    `yaml:"ahrs"`
-	Fan     FanConfig     `yaml:"fan"`
-	Web     WebConfig     `yaml:"web"`
-	WiFi    WiFiConfig    `yaml:"wifi"`
+	GDL90    GDL90Config    `yaml:"gdl90"`
+	GPS      GPSConfig      `yaml:"gps"`
+	Ownship  OwnshipConfig  `yaml:"ownship"`
+	Aircraft AircraftConfig `yaml:"aircraft"`
+	AHRS     AHRSConfig     `yaml:"ahrs"`
+	Fan      FanConfig      `yaml:"fan"`
+	Web      WebConfig      `yaml:"web"`
+	WiFi     WiFiConfig     `yaml:"wifi"`
 
 	// External decoder inputs (planned): 1090 and 978.
 	//  - Both bands ingest newline-delimited JSON over TCP (dump1090-fa
@@ -178,6 +179,30 @@ type ReplayConfig struct {
 type OwnshipConfig struct {
 	ICAO     string `yaml:"icao"`
 	Callsign string `yaml:"callsign"`
+}
+
+// AircraftProfile is a single named aircraft configuration (ICAO + callsign).
+//
+// Stratux-NG supports multiple aircraft profiles so one appliance can be
+// moved between airframes (each with a distinct ICAO) without hand-editing
+// config.yaml every time.
+type AircraftProfile struct {
+	Name     string `yaml:"name"`
+	ICAO     string `yaml:"icao"`
+	Callsign string `yaml:"callsign"`
+}
+
+// AircraftConfig holds the set of aircraft profiles and which one is active.
+//
+// When Profiles is empty, DefaultAndValidate synthesizes a single profile
+// from the legacy top-level `ownship` block so existing single-aircraft
+// configs keep working unchanged. After validation, the active profile's
+// ICAO/Callsign are mirrored into Config.Ownship, which remains the single
+// effective ownship identity used by the rest of Stratux-NG (GDL90 packing,
+// status API, etc.).
+type AircraftConfig struct {
+	Active   string            `yaml:"active"`
+	Profiles []AircraftProfile `yaml:"profiles"`
 }
 
 // DefaultPath is the canonical appliance config path.
@@ -403,6 +428,61 @@ func DefaultAndValidate(cfg *Config) error {
 	}
 	if strings.TrimSpace(cfg.Ownship.Callsign) == "" {
 		cfg.Ownship.Callsign = "STRATUX"
+	}
+
+	// Aircraft profiles: support multiple named profiles so the appliance can
+	// be moved between airframes. When none are configured, migrate the
+	// legacy single ownship block into an implicit single profile.
+	if len(cfg.Aircraft.Profiles) == 0 {
+		name := strings.TrimSpace(cfg.Ownship.Callsign)
+		if name == "" {
+			name = "Default"
+		}
+		cfg.Aircraft.Profiles = []AircraftProfile{{
+			Name:     name,
+			ICAO:     cfg.Ownship.ICAO,
+			Callsign: cfg.Ownship.Callsign,
+		}}
+		cfg.Aircraft.Active = name
+	} else {
+		seen := make(map[string]struct{}, len(cfg.Aircraft.Profiles))
+		for i := range cfg.Aircraft.Profiles {
+			p := &cfg.Aircraft.Profiles[i]
+			p.Name = strings.TrimSpace(p.Name)
+			if p.Name == "" {
+				return fmt.Errorf("aircraft.profiles[%d].name must be non-empty", i)
+			}
+			if strings.TrimSpace(p.ICAO) == "" {
+				return fmt.Errorf("aircraft.profiles[%d].icao must be non-empty", i)
+			}
+			p.ICAO = strings.ToUpper(strings.TrimSpace(p.ICAO))
+			p.Callsign = strings.TrimSpace(p.Callsign)
+			if p.Callsign == "" {
+				return fmt.Errorf("aircraft.profiles[%d].callsign must be non-empty", i)
+			}
+			key := strings.ToLower(p.Name)
+			if _, dup := seen[key]; dup {
+				return fmt.Errorf("aircraft.profiles[%d]: duplicate profile name %q", i, p.Name)
+			}
+			seen[key] = struct{}{}
+		}
+		cfg.Aircraft.Active = strings.TrimSpace(cfg.Aircraft.Active)
+		if cfg.Aircraft.Active == "" {
+			cfg.Aircraft.Active = cfg.Aircraft.Profiles[0].Name
+		} else if _, ok := seen[strings.ToLower(cfg.Aircraft.Active)]; !ok {
+			return fmt.Errorf("aircraft.active %q does not match any aircraft.profiles name", cfg.Aircraft.Active)
+		}
+	}
+
+	// Mirror the active aircraft profile into the legacy ownship block so all
+	// downstream code (GDL90 packing, status API) continues to read a single
+	// effective ownship identity.
+	for _, p := range cfg.Aircraft.Profiles {
+		if strings.EqualFold(p.Name, cfg.Aircraft.Active) {
+			cfg.Ownship.ICAO = p.ICAO
+			cfg.Ownship.Callsign = p.Callsign
+			break
+		}
 	}
 
 	// AHRS defaults + validation.
