@@ -64,7 +64,7 @@ staticcheck:
 	@if command -v go-staticcheck >/dev/null 2>&1; then \
 		go-staticcheck ./...; \
 	else \
-		go install honnef.co/go/tools/cmd/staticcheck@latest; \
+		go install honnef.co/go/tools/cmd/staticcheck@v0.7.0; \
 		"$$(go env GOPATH)/bin/staticcheck" ./...; \
 	fi
 

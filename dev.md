@@ -266,7 +266,7 @@ Log format (written by record mode):
 ## Prerequisites
 
 - **Target OS:** Raspberry Pi OS 64-bit (arm64). Current dev target: **Pi OS trixie**.
-- **Tooling:** Go toolchain (**Go 1.22+**), plus typical Pi utilities for networking/AP setup
+- **Tooling:** Go toolchain (**Go 1.26+**), plus typical Pi utilities for networking/AP setup
 - **Decoders (optional):** FlightAware `dump1090-fa` (1090) and `dump978-fa`/`dump978` (978)
 
 ### Install build toolchain (Raspberry Pi OS 64-bit)
@@ -280,7 +280,7 @@ sudo apt install -y build-essential git pkg-config golang-go
 go version
 ```
 
-The `golang-go` package is currently Go 1.22 on Raspberry Pi OS trixie, installs under `/usr/lib/go`, and lands `/usr/lib/go/bin` in the default system `PATH`. Because the binary is registered system-wide, `sudo` and non-root shells use the same Go toolchain without additional PATH tweaks. If your image has an older package, install the `backports` repo or fetch a newer Go release.
+The `golang-go` apt package is currently Go 1.22 on Raspberry Pi OS trixie — older than the **Go 1.26** this repo's `go.mod` requires. Fetch a newer toolchain from [go.dev/dl](https://go.dev/dl/) (or a `backports` repo, if available) and install it under e.g. `/usr/local/go`, then put `/usr/local/go/bin` ahead of `/usr/lib/go/bin` in `PATH` (or symlink over the apt-provided toolchain) so `go version` reports 1.26+.
 
 ### Code quality (development)
 

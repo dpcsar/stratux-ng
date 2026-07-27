@@ -26,7 +26,7 @@
 - /api/settings POST requires the full schema and rejects unknown/duplicate keys; YAML writes are atomic (temp + rename).
 
 ## Dev workflow
-- Go 1.22.
+- Go 1.26 (go.mod pins this; CI/release runners match). Building directly on a Pi with the stock `golang-go` apt package (older, e.g. 1.22 on trixie) needs a newer toolchain — see dev.md.
 - `make test` / `make run` (CONFIG → STRATUX_NG_CONFIG) / `make build` / `make staticcheck`.
 
 ## Ground truth
