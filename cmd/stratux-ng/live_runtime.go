@@ -83,7 +83,8 @@ type liveRuntime struct {
 	// auto-detection side effects don't falsely look like a user-driven change
 	// that requires a restart.
 	logicalADSB1090 config.DecoderBandConfig
-	logicalUAT978   config.DecoderBandConfig}
+	logicalUAT978   config.DecoderBandConfig
+}
 
 func decoderBandEqual(a, b config.DecoderBandConfig) bool {
 	if a.Enable != b.Enable {
