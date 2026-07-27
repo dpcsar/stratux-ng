@@ -4,7 +4,7 @@ Stratux-NG is a modern, Raspberry Pi–focused, 64-bit-first avionics data appli
 
 ## Status
 
-This repository is in active bring-up, but the core “useful on real hardware” loop is now working.
+The core functionality is stable and has been tested on **Raspberry Pi 3** and **Raspberry Pi 5**.
 
 Working now:
 - **GDL90 over UDP** (heartbeat + ownship + traffic + device ID + Stratux heartbeat)
