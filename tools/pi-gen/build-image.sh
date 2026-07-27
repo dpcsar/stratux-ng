@@ -20,9 +20,9 @@ PIGEN_ARCH="${PIGEN_ARCH:-arm64}"
 
 # FlightAware decoder sources (overridable via environment variables).
 FLIGHTAWARE_DUMP1090_REPO="${FLIGHTAWARE_DUMP1090_REPO:-https://github.com/flightaware/dump1090.git}"
-FLIGHTAWARE_DUMP1090_REF="${FLIGHTAWARE_DUMP1090_REF:-v10.2}"
+FLIGHTAWARE_DUMP1090_REF="${FLIGHTAWARE_DUMP1090_REF:-v11.1}"
 FLIGHTAWARE_DUMP978_REPO="${FLIGHTAWARE_DUMP978_REPO:-https://github.com/flightaware/dump978.git}"
-FLIGHTAWARE_DUMP978_REF="${FLIGHTAWARE_DUMP978_REF:-v10.2}"
+FLIGHTAWARE_DUMP978_REF="${FLIGHTAWARE_DUMP978_REF:-v11.1}"
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || {
