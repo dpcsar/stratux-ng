@@ -7,9 +7,9 @@ CONFIG_FILE="${SCRIPT_DIR}/flightaware-versions.env"
 
 # Defaults if no overrides are provided.
 DUMP1090_REPO_DEFAULT="https://github.com/flightaware/dump1090.git"
-DUMP1090_REF_DEFAULT="v10.2"
+DUMP1090_REF_DEFAULT="v11.1"
 DUMP978_REPO_DEFAULT="https://github.com/flightaware/dump978.git"
-DUMP978_REF_DEFAULT="v10.2"
+DUMP978_REF_DEFAULT="v11.1"
 
 if [[ -f "${CONFIG_FILE}" ]]; then
   # shellcheck disable=SC1090
