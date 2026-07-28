@@ -1,0 +1,11 @@
+# Stratux UATRadio (FTDI 0403:7028)
+#
+# This binds the Stratux UATRadio USB device to the ftdi_sio driver so it shows up as
+# a /dev/ttyUSB* device, and also creates a stable symlink.
+#
+# This is intended for use with FlightAware dump978-fa in --stratuxv3 mode.
+# Example:
+#   dump978-fa --stratuxv3 /dev/stratux-uatradio --json-port 30978 --raw-port 30979
+
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="0403", ATTR{idProduct}=="7028", RUN+="/sbin/modprobe -q ftdi_sio", RUN+="/bin/sh -c 'echo 0403 7028 > /sys/bus/usb-serial/drivers/ftdi_sio/new_id'"
+SUBSYSTEM=="tty", SUBSYSTEMS=="usb", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="7028", SYMLINK+="stratux-uatradio", GROUP="dialout", MODE="0660"
