@@ -242,6 +242,7 @@ func (r *liveRuntime) initDecoders(ctx context.Context) error {
 	var detected []sdr.RTLSDRDevice
 	var adsbDev *sdr.RTLSDRDevice
 	var uatDev *sdr.RTLSDRDevice
+	var uatRadioFound bool
 	needDetect := false
 	if r.cfg.ADSB1090.Enable && strings.TrimSpace(r.cfg.ADSB1090.Decoder.Command) != "" && isDump1090Command(r.cfg.ADSB1090.Decoder.Command) {
 		if sdr.IsAutoTag(r.cfg.ADSB1090.SDR.SerialTag) {
@@ -358,6 +359,15 @@ func (r *liveRuntime) initDecoders(ctx context.Context) error {
 		}
 		band := r.cfg.UAT978
 		if strings.TrimSpace(band.Decoder.Command) != "" && isDump978Command(band.Decoder.Command) {
+			// Prefer the dedicated Stratux UATRadio (FTDI serial) if present, before
+			// falling back to RTL-SDR auto-assignment.
+			if !sdr.HasAnyFlag(band.Decoder.Args, "--stratuxv3", "--stdin", "--file", "--sdr") {
+				if path, found := sdr.DetectUATRadio(); found {
+					log.Printf("uat978 autodetect: Stratux UATRadio found at %s, using --stratuxv3", path)
+					band.Decoder.Args = append(band.Decoder.Args, "--stratuxv3", path)
+					uatRadioFound = true
+				}
+			}
 			// If sdr.serial_tag is "auto", use auto-detected serial; otherwise keep config.
 			// Only applies to RTL-SDR mode (not --stratuxv3).
 			if sdr.IsAutoTag(band.SDR.SerialTag) && uatDev != nil {
@@ -375,7 +385,7 @@ func (r *liveRuntime) initDecoders(ctx context.Context) error {
 			rawEndpoint = strings.TrimSpace(band.Decoder.RawListen)
 		}
 		log.Printf("uat978 enabled json_endpoint=%s raw_endpoint=%s", endpoint, rawEndpoint)
-		if needDetect && len(detected) == 1 && r.cfg.ADSB1090.Enable {
+		if needDetect && len(detected) == 1 && r.cfg.ADSB1090.Enable && !uatRadioFound {
 			log.Printf("sdr autodetect warning: only 1 RTL-SDR detected; if both 1090 and 978 are enabled, one decoder may fail")
 		}
 		if cmd := strings.TrimSpace(band.Decoder.Command); cmd != "" {

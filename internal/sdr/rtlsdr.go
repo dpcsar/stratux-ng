@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -226,4 +228,31 @@ func DebugFormatDevices(devs []RTLSDRDevice) string {
 	}
 	b.WriteString("]")
 	return b.String()
+}
+
+// DetectUATRadio checks for the Stratux UATRadio (FTDI 0403:7028) hardware
+// and returns the tty device path to use with dump978-fa's --stratuxv3 mode.
+//
+// It checks the udev-created stable symlink first (see
+// configs/udev/99-stratux-uatradio.rules.example), then falls back to
+// scanning sysfs directly in case the udev rule isn't installed.
+func DetectUATRadio() (devicePath string, ok bool) {
+	if fi, err := os.Lstat("/dev/stratux-uatradio"); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+		return "/dev/stratux-uatradio", true
+	}
+
+	matches, _ := filepath.Glob("/sys/bus/usb/devices/*/idVendor")
+	for _, vendorFile := range matches {
+		dir := filepath.Dir(vendorFile)
+		vendor, _ := os.ReadFile(vendorFile)
+		product, _ := os.ReadFile(filepath.Join(dir, "idProduct"))
+		if strings.TrimSpace(string(vendor)) != "0403" || strings.TrimSpace(string(product)) != "7028" {
+			continue
+		}
+		ttyDirs, _ := filepath.Glob(filepath.Join(dir, "*", "tty", "ttyUSB*"))
+		for _, t := range ttyDirs {
+			return "/dev/" + filepath.Base(t), true
+		}
+	}
+	return "", false
 }

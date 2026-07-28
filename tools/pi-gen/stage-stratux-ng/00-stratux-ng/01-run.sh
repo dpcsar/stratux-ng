@@ -13,6 +13,7 @@ install -d "${ROOTFS_DIR}/data/stratux-ng"
 install -m 0755 files/usr/local/bin/stratux-ng "${ROOTFS_DIR}/usr/local/bin/stratux-ng"
 install -m 0644 files/etc/systemd/system/stratux-ng.service "${ROOTFS_DIR}/etc/systemd/system/stratux-ng.service"
 install -m 0644 files/etc/udev/rules.d/99-stratux-gps.rules "${ROOTFS_DIR}/etc/udev/rules.d/99-stratux-gps.rules"
+install -m 0644 files/etc/udev/rules.d/99-stratux-uatradio.rules "${ROOTFS_DIR}/etc/udev/rules.d/99-stratux-uatradio.rules"
 install -m 0644 files/data/stratux-ng/config.yaml "${ROOTFS_DIR}/data/stratux-ng/config.yaml"
 install -m 0644 files/etc/modules-load.d/stratux-ng.conf "${ROOTFS_DIR}/etc/modules-load.d/stratux-ng.conf"
 
