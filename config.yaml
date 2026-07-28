@@ -25,7 +25,7 @@ aircraft:
         - name: STRATUX
           icao: F00000
           callsign: STRATUX
-        - name: ev
+        - name: STRATUX_1
           icao: F00001
           callsign: EV
 ahrs:
