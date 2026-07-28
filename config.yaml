@@ -20,7 +20,7 @@ ownship:
     icao: F00001
     callsign: EV
 aircraft:
-    active: ev
+    active: STRATUX
     profiles:
         - name: STRATUX
           icao: F00000
