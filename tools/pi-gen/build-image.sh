@@ -14,7 +14,7 @@ PIGEN_REPO_URL="${PIGEN_REPO_URL:-https://github.com/RPi-Distro/pi-gen.git}"
 # upstream has changed qemu package requirements (qemu-aarch64-static ->
 # qemu-aarch64/qemu-user-binfmt) between tags, which broke our release build
 # without any change on our side. Override via PIGEN_REF if you need to bump it.
-PIGEN_REF="${PIGEN_REF:-2026-06-18-raspios-trixie-arm64}"
+PIGEN_REF="${PIGEN_REF:-2026-10-06-raspios-trixie-arm64}"
 PIGEN_RELEASE="${PIGEN_RELEASE:-trixie}"
 PIGEN_ARCH="${PIGEN_ARCH:-arm64}"
 
@@ -115,20 +115,6 @@ sudo -n modprobe loop >/dev/null 2>&1 || true
     fi
   fi
 )
-
-# 2d) Work around pi-gen registering qemu handlers before its own fallback
-# remount of binfmt_misc. On hosts where the kernel namespaces binfmt_misc per
-# mount-namespace, pi-gen's original order (dpkg-reconfigure qemu-user-binfmt,
-# then remount binfmt_misc "in case it wasn't mounted") wipes out the just-
-# registered qemu entries, so build.sh's arch-test check fails with
-# "arm64: not supported on this machine/kernel" for both native and emulated
-# execution even though QEMU is installed and working. Swap the order so the
-# remount happens first and dpkg-reconfigure registers into the final mount.
-BUILD_DOCKER_SH="${PIGEN_DIR}/build-docker.sh"
-if [[ -f "${BUILD_DOCKER_SH}" ]]; then
-  echo "==> ensuring pi-gen build-docker.sh mounts binfmt_misc before dpkg-reconfigure"
-  perl -0777 -i -pe 's/    dpkg-reconfigure qemu-user-binfmt &&\n    # binfmt_misc is sometimes not mounted with debian trixie image\n    \(mount binfmt_misc -t binfmt_misc \/proc\/sys\/fs\/binfmt_misc \|\| true\) &&/    (mount binfmt_misc -t binfmt_misc \/proc\/sys\/fs\/binfmt_misc || true) &&\n    # binfmt_misc is sometimes not mounted with debian trixie image\n    dpkg-reconfigure qemu-user-binfmt &&/' "${BUILD_DOCKER_SH}"
-fi
 
 # 3) Copy our custom stage into the pi-gen tree.
 # pi-gen supports custom stage names via STAGE_LIST.

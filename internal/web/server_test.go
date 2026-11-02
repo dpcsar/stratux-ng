@@ -26,7 +26,7 @@ func (f fakeAHRSPersist) Orientation() (forwardAxis int, gravity [3]float64, gra
 func TestAPI_AHRSOrientDone_PersistsOrientation(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "config.yaml")
-	if err := os.WriteFile(cfgPath, []byte("gdl90:\n  dest: '127.0.0.1:4000'\n"), 0o644); err != nil {
+	if err := os.WriteFile(cfgPath, []byte(testConfigYAML), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 

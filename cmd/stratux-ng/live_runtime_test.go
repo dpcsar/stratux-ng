@@ -17,6 +17,13 @@ func minimalCfg(t *testing.T, dest string, interval time.Duration) config.Config
 			Dest:     dest,
 			Interval: interval,
 		},
+		Aircraft: config.AircraftConfig{
+			Profiles: []config.AircraftProfile{{
+				Name:     "Stratux",
+				ICAO:     "F00000",
+				Callsign: "STRATUX",
+			}},
+		},
 	}
 	if err := config.DefaultAndValidate(&cfg); err != nil {
 		t.Fatalf("DefaultAndValidate() error: %v", err)

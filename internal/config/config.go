@@ -15,7 +15,7 @@ import (
 type Config struct {
 	GDL90    GDL90Config    `yaml:"gdl90"`
 	GPS      GPSConfig      `yaml:"gps"`
-	Ownship  OwnshipConfig  `yaml:"ownship"`
+	Ownship  OwnshipConfig  `yaml:"-"` // Effective identity from the active aircraft profile.
 	Aircraft AircraftConfig `yaml:"aircraft"`
 	AHRS     AHRSConfig     `yaml:"ahrs"`
 	Fan      FanConfig      `yaml:"fan"`
@@ -194,12 +194,8 @@ type AircraftProfile struct {
 
 // AircraftConfig holds the set of aircraft profiles and which one is active.
 //
-// When Profiles is empty, DefaultAndValidate synthesizes a single profile
-// from the legacy top-level `ownship` block so existing single-aircraft
-// configs keep working unchanged. After validation, the active profile's
-// ICAO/Callsign are mirrored into Config.Ownship, which remains the single
-// effective ownship identity used by the rest of Stratux-NG (GDL90 packing,
-// status API, etc.).
+// Profiles must contain at least one aircraft. After validation, the active
+// profile's ICAO/Callsign are mirrored into Config.Ownship for runtime use.
 type AircraftConfig struct {
 	Active   string            `yaml:"active"`
 	Profiles []AircraftProfile `yaml:"profiles"`
@@ -423,60 +419,39 @@ func DefaultAndValidate(cfg *Config) error {
 		return fmt.Errorf("gps.horizontal_accuracy_m must be >= 0")
 	}
 
-	if strings.TrimSpace(cfg.Ownship.ICAO) == "" {
-		cfg.Ownship.ICAO = "F00000"
-	}
-	if strings.TrimSpace(cfg.Ownship.Callsign) == "" {
-		cfg.Ownship.Callsign = "STRATUX"
-	}
-
-	// Aircraft profiles: support multiple named profiles so the appliance can
-	// be moved between airframes. When none are configured, migrate the
-	// legacy single ownship block into an implicit single profile.
 	if len(cfg.Aircraft.Profiles) == 0 {
-		name := strings.TrimSpace(cfg.Ownship.Callsign)
-		if name == "" {
-			name = "Default"
-		}
-		cfg.Aircraft.Profiles = []AircraftProfile{{
-			Name:     name,
-			ICAO:     cfg.Ownship.ICAO,
-			Callsign: cfg.Ownship.Callsign,
-		}}
-		cfg.Aircraft.Active = name
-	} else {
-		seen := make(map[string]struct{}, len(cfg.Aircraft.Profiles))
-		for i := range cfg.Aircraft.Profiles {
-			p := &cfg.Aircraft.Profiles[i]
-			p.Name = strings.TrimSpace(p.Name)
-			if p.Name == "" {
-				return fmt.Errorf("aircraft.profiles[%d].name must be non-empty", i)
-			}
-			if strings.TrimSpace(p.ICAO) == "" {
-				return fmt.Errorf("aircraft.profiles[%d].icao must be non-empty", i)
-			}
-			p.ICAO = strings.ToUpper(strings.TrimSpace(p.ICAO))
-			p.Callsign = strings.TrimSpace(p.Callsign)
-			if p.Callsign == "" {
-				return fmt.Errorf("aircraft.profiles[%d].callsign must be non-empty", i)
-			}
-			key := strings.ToLower(p.Name)
-			if _, dup := seen[key]; dup {
-				return fmt.Errorf("aircraft.profiles[%d]: duplicate profile name %q", i, p.Name)
-			}
-			seen[key] = struct{}{}
-		}
-		cfg.Aircraft.Active = strings.TrimSpace(cfg.Aircraft.Active)
-		if cfg.Aircraft.Active == "" {
-			cfg.Aircraft.Active = cfg.Aircraft.Profiles[0].Name
-		} else if _, ok := seen[strings.ToLower(cfg.Aircraft.Active)]; !ok {
-			return fmt.Errorf("aircraft.active %q does not match any aircraft.profiles name", cfg.Aircraft.Active)
-		}
+		return fmt.Errorf("aircraft.profiles must contain at least one profile")
 	}
 
-	// Mirror the active aircraft profile into the legacy ownship block so all
-	// downstream code (GDL90 packing, status API) continues to read a single
-	// effective ownship identity.
+	seen := make(map[string]struct{}, len(cfg.Aircraft.Profiles))
+	for i := range cfg.Aircraft.Profiles {
+		p := &cfg.Aircraft.Profiles[i]
+		p.Name = strings.TrimSpace(p.Name)
+		if p.Name == "" {
+			return fmt.Errorf("aircraft.profiles[%d].name must be non-empty", i)
+		}
+		if strings.TrimSpace(p.ICAO) == "" {
+			return fmt.Errorf("aircraft.profiles[%d].icao must be non-empty", i)
+		}
+		p.ICAO = strings.ToUpper(strings.TrimSpace(p.ICAO))
+		p.Callsign = strings.TrimSpace(p.Callsign)
+		if p.Callsign == "" {
+			return fmt.Errorf("aircraft.profiles[%d].callsign must be non-empty", i)
+		}
+		key := strings.ToLower(p.Name)
+		if _, dup := seen[key]; dup {
+			return fmt.Errorf("aircraft.profiles[%d]: duplicate profile name %q", i, p.Name)
+		}
+		seen[key] = struct{}{}
+	}
+	cfg.Aircraft.Active = strings.TrimSpace(cfg.Aircraft.Active)
+	if cfg.Aircraft.Active == "" {
+		cfg.Aircraft.Active = cfg.Aircraft.Profiles[0].Name
+	} else if _, ok := seen[strings.ToLower(cfg.Aircraft.Active)]; !ok {
+		return fmt.Errorf("aircraft.active %q does not match any aircraft.profiles name", cfg.Aircraft.Active)
+	}
+
+	// Keep the runtime ownship identity in sync with the selected profile.
 	for _, p := range cfg.Aircraft.Profiles {
 		if strings.EqualFold(p.Name, cfg.Aircraft.Active) {
 			cfg.Ownship.ICAO = p.ICAO
