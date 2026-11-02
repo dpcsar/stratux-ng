@@ -71,6 +71,20 @@ Stratux-NG supports a dual-mode Wi-Fi configuration on Raspberry Pi hardware (us
 
 This allows your EFB to receive GDL90 data from Stratux-NG while maintaining internet connectivity for weather updates, charts, etc.
 
+### SSH access (images built by this project)
+
+SSH is enabled on the image. Connect your computer to the Stratux access point,
+then log in with the image's default account:
+
+```sh
+ssh pi@192.168.10.1
+```
+
+The default password is `pi` (not `raspberry`). Change it immediately after
+logging in with `passwd`. The default access point has no Wi-Fi password, so
+anyone in range can attempt to connect; set an access-point password in the
+Web UI before using the device in an untrusted area.
+
 Configuration is available via the Web UI (`Settings` -> `Wi-Fi`) or the API.
 
 ### Wi-Fi Prerequisites (Built-in)
