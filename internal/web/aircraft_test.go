@@ -15,8 +15,10 @@ import (
 	"stratux-ng/internal/config"
 )
 
-func TestAircraftGET_ReturnsSynthesizedProfileByDefault(t *testing.T) {
-	cfgPath := writeTempConfigFile(t, "gdl90:\n  dest: '127.0.0.1:4000'\nownship:\n  icao: ABC123\n  callsign: N12345\n")
+func TestAircraftGET_ReturnsConfiguredProfile(t *testing.T) {
+	cfgPath := writeTempConfigFile(t, "gdl90:\n  dest: '127.0.0.1:4000'\n"+
+		"aircraft:\n  profiles:\n"+
+		"    - name: N12345\n      icao: ABC123\n      callsign: N12345\n")
 	store := SettingsStore{ConfigPath: cfgPath}
 
 	ts := httptest.NewServer(store.Handler())
@@ -44,7 +46,7 @@ func TestAircraftGET_ReturnsSynthesizedProfileByDefault(t *testing.T) {
 }
 
 func TestAircraftPOST_AppliesAndSavesMultipleProfiles(t *testing.T) {
-	cfgPath := writeTempConfigFile(t, "gdl90:\n  dest: '127.0.0.1:4000'\n")
+	cfgPath := writeTempConfigFile(t, testConfigYAML)
 
 	appliedCh := make(chan config.Config, 1)
 	store := SettingsStore{
@@ -106,7 +108,7 @@ func TestAircraftPOST_AppliesAndSavesMultipleProfiles(t *testing.T) {
 		t.Fatalf("expected saved profile in yaml, got: %s", text)
 	}
 
-	// GET should now reflect the active profile mirrored into ownship.
+	// GET should now reflect the active profile.
 	resp2, err := http.Get(ts.URL + "/api/settings")
 	if err != nil {
 		t.Fatalf("GET /api/settings error: %v", err)
@@ -122,7 +124,7 @@ func TestAircraftPOST_AppliesAndSavesMultipleProfiles(t *testing.T) {
 }
 
 func TestAircraftPOST_UnknownActiveRejected(t *testing.T) {
-	original := "gdl90:\n  dest: '127.0.0.1:4000'\n"
+	original := testConfigYAML
 	cfgPath := writeTempConfigFile(t, original)
 	store := SettingsStore{ConfigPath: cfgPath}
 
@@ -157,7 +159,7 @@ func TestAircraftPOST_UnknownActiveRejected(t *testing.T) {
 }
 
 func TestAircraftPOST_DuplicateProfileNameRejected(t *testing.T) {
-	original := "gdl90:\n  dest: '127.0.0.1:4000'\n"
+	original := testConfigYAML
 	cfgPath := writeTempConfigFile(t, original)
 	store := SettingsStore{ConfigPath: cfgPath}
 
@@ -185,7 +187,7 @@ func TestAircraftPOST_DuplicateProfileNameRejected(t *testing.T) {
 }
 
 func TestAircraftPOST_EmptyProfilesRejected(t *testing.T) {
-	original := "gdl90:\n  dest: '127.0.0.1:4000'\n"
+	original := testConfigYAML
 	cfgPath := writeTempConfigFile(t, original)
 	store := SettingsStore{ConfigPath: cfgPath}
 
@@ -205,7 +207,7 @@ func TestAircraftPOST_EmptyProfilesRejected(t *testing.T) {
 }
 
 func TestAircraftPOST_UnknownKeyRejected(t *testing.T) {
-	cfgPath := writeTempConfigFile(t, "gdl90:\n  dest: '127.0.0.1:4000'\n")
+	cfgPath := writeTempConfigFile(t, testConfigYAML)
 	store := SettingsStore{ConfigPath: cfgPath}
 
 	ts := httptest.NewServer(store.Handler())
@@ -224,7 +226,7 @@ func TestAircraftPOST_UnknownKeyRejected(t *testing.T) {
 }
 
 func TestAircraftPOST_ApplyFailureDoesNotSave(t *testing.T) {
-	original := "gdl90:\n  dest: '127.0.0.1:4000'\n"
+	original := testConfigYAML
 	cfgPath := writeTempConfigFile(t, original)
 
 	store := SettingsStore{

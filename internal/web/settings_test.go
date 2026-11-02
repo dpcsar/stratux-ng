@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -16,18 +15,8 @@ import (
 	"stratux-ng/internal/config"
 )
 
-func writeTempConfigFile(t *testing.T, contents string) string {
-	t.Helper()
-	dir := t.TempDir()
-	p := filepath.Join(dir, "config.yaml")
-	if err := os.WriteFile(p, []byte(contents), 0o644); err != nil {
-		t.Fatalf("WriteFile() error: %v", err)
-	}
-	return p
-}
-
 func TestSettingsPOST_AppliesAndSaves(t *testing.T) {
-	cfgPath := writeTempConfigFile(t, "gdl90:\n  dest: '127.0.0.1:4000'\n")
+	cfgPath := writeTempConfigFile(t, testConfigYAML)
 
 	appliedCh := make(chan config.Config, 1)
 	store := SettingsStore{
@@ -51,7 +40,10 @@ func TestSettingsPOST_AppliesAndSaves(t *testing.T) {
 		OwnshipICAO:     &icao,
 		OwnshipCallsign: &callsign,
 	}
-	b, _ := json.Marshal(payload)
+	b, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal settings payload: %v", err)
+	}
 
 	resp, err := http.Post(ts.URL+"/api/settings", "application/json", bytes.NewReader(b))
 	if err != nil {
@@ -93,10 +85,20 @@ func TestSettingsPOST_AppliesAndSaves(t *testing.T) {
 	if !strings.Contains(text, "250ms") {
 		t.Fatalf("expected saved interval in yaml, got: %s", text)
 	}
+	if strings.Contains(text, "\nownship:") {
+		t.Fatalf("expected ownship identity to be stored only in aircraft profiles, got: %s", text)
+	}
+	savedCfg, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("saved config is invalid: %v", err)
+	}
+	if savedCfg.Aircraft.Profiles[0].ICAO != icao || savedCfg.Aircraft.Profiles[0].Callsign != callsign {
+		t.Fatalf("expected settings to update active aircraft profile, got %+v", savedCfg.Aircraft.Profiles[0])
+	}
 }
 
 func TestSettingsPOST_ApplyFailureDoesNotSave(t *testing.T) {
-	original := "gdl90:\n  dest: '127.0.0.1:4000'\n"
+	original := testConfigYAML
 	cfgPath := writeTempConfigFile(t, original)
 
 	store := SettingsStore{
@@ -119,9 +121,15 @@ func TestSettingsPOST_ApplyFailureDoesNotSave(t *testing.T) {
 		OwnshipICAO:     &icao,
 		OwnshipCallsign: &callsign,
 	}
-	b, _ := json.Marshal(payload)
+	b, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal settings payload: %v", err)
+	}
 
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/settings", bytes.NewReader(b))
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/settings", bytes.NewReader(b))
+	if err != nil {
+		t.Fatalf("create settings request: %v", err)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -143,7 +151,7 @@ func TestSettingsPOST_ApplyFailureDoesNotSave(t *testing.T) {
 }
 
 func TestSettingsPOST_MissingIntervalRejected(t *testing.T) {
-	original := "gdl90:\n  dest: '127.0.0.1:4000'\n"
+	original := testConfigYAML
 	cfgPath := writeTempConfigFile(t, original)
 
 	store := SettingsStore{ConfigPath: cfgPath}
@@ -161,9 +169,15 @@ func TestSettingsPOST_MissingIntervalRejected(t *testing.T) {
 		OwnshipICAO:     &icao,
 		OwnshipCallsign: &callsign,
 	}
-	b, _ := json.Marshal(payload)
+	b, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal settings payload: %v", err)
+	}
 
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/settings", bytes.NewReader(b))
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/settings", bytes.NewReader(b))
+	if err != nil {
+		t.Fatalf("create settings request: %v", err)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -185,7 +199,7 @@ func TestSettingsPOST_MissingIntervalRejected(t *testing.T) {
 }
 
 func TestSettingsPOST_DuplicateKeysRejected(t *testing.T) {
-	original := "gdl90:\n  dest: '127.0.0.1:4000'\n"
+	original := testConfigYAML
 	cfgPath := writeTempConfigFile(t, original)
 
 	store := SettingsStore{ConfigPath: cfgPath}
@@ -201,7 +215,10 @@ func TestSettingsPOST_DuplicateKeysRejected(t *testing.T) {
 		"ownship_callsign": "N12345"
 	}`)
 
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/settings", bytes.NewReader(dup))
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/settings", bytes.NewReader(dup))
+	if err != nil {
+		t.Fatalf("create settings request: %v", err)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

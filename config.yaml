@@ -16,9 +16,6 @@ gps:
     device: /dev/stratux-gps
     baud: 9600
     horizontal_accuracy_m: 10
-ownship:
-    icao: F00001
-    callsign: EV
 aircraft:
     active: STRATUX
     profiles:

@@ -34,7 +34,9 @@ func TestLoad_RequiresDest(t *testing.T) {
 }
 
 func TestLoad_DefaultsApplied(t *testing.T) {
-	path := writeTempConfig(t, "gdl90:\n  dest: '127.0.0.1:4000'\n")
+	path := writeTempConfig(t, "gdl90:\n  dest: '127.0.0.1:4000'\n"+
+		"aircraft:\n  profiles:\n"+
+		"    - name: Stratux\n      icao: F00000\n      callsign: STRATUX\n")
 	cfg, err := Load(path)
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
@@ -45,7 +47,7 @@ func TestLoad_DefaultsApplied(t *testing.T) {
 	// Output is always framed GDL90.
 
 	if cfg.Ownship.ICAO != "F00000" || cfg.Ownship.Callsign != "STRATUX" {
-		t.Fatalf("expected ownship defaults applied: %+v", cfg.Ownship)
+		t.Fatalf("expected ownship identity from active profile: %+v", cfg.Ownship)
 	}
 }
 
@@ -56,7 +58,9 @@ func TestLoad_RecordRequiresPath(t *testing.T) {
 }
 
 func TestLoad_RecordDisallowedInTestMode(t *testing.T) {
-	path := writeTempConfig(t, "gdl90:\n  dest: '127.0.0.1:4000'\n  record:\n    enable: true\n    path: './x.log'\n")
+	path := writeTempConfig(t, "gdl90:\n  dest: '127.0.0.1:4000'\n  record:\n    enable: true\n    path: './x.log'\n"+
+		"aircraft:\n  profiles:\n"+
+		"    - name: Stratux\n      icao: F00000\n      callsign: STRATUX\n")
 	_, err := Load(path)
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
@@ -70,7 +74,9 @@ func TestLoad_ReplayRequiresPath(t *testing.T) {
 }
 
 func TestLoad_ReplayDisallowedInTestMode(t *testing.T) {
-	path := writeTempConfig(t, "gdl90:\n  dest: '127.0.0.1:4000'\n  replay:\n    enable: true\n    path: './x.log'\n")
+	path := writeTempConfig(t, "gdl90:\n  dest: '127.0.0.1:4000'\n  replay:\n    enable: true\n    path: './x.log'\n"+
+		"aircraft:\n  profiles:\n"+
+		"    - name: Stratux\n      icao: F00000\n      callsign: STRATUX\n")
 	_, err := Load(path)
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
@@ -78,7 +84,9 @@ func TestLoad_ReplayDisallowedInTestMode(t *testing.T) {
 }
 
 func TestLoad_ReplaySpeedDefaultsToOne(t *testing.T) {
-	path := writeTempConfig(t, "gdl90:\n  dest: '127.0.0.1:4000'\n  replay:\n    enable: true\n    path: './x.log'\n    speed: 0\n")
+	path := writeTempConfig(t, "gdl90:\n  dest: '127.0.0.1:4000'\n  replay:\n    enable: true\n    path: './x.log'\n    speed: 0\n"+
+		"aircraft:\n  profiles:\n"+
+		"    - name: Stratux\n      icao: F00000\n      callsign: STRATUX\n")
 	cfg, err := Load(path)
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
@@ -106,22 +114,16 @@ func TestLoad_RejectsUnknownField(t *testing.T) {
 	requireErrEq(t, err, "config contains unknown fields: field mode not found in type config.GDL90Config")
 }
 
-func TestLoad_AircraftProfileSynthesizedFromLegacyOwnship(t *testing.T) {
+func TestLoad_RequiresAircraftProfile(t *testing.T) {
+	path := writeTempConfig(t, "gdl90:\n  dest: '127.0.0.1:4000'\n")
+	_, err := Load(path)
+	requireErrEq(t, err, "aircraft.profiles must contain at least one profile")
+}
+
+func TestLoad_RejectsLegacyOwnshipConfig(t *testing.T) {
 	path := writeTempConfig(t, "gdl90:\n  dest: '127.0.0.1:4000'\nownship:\n  icao: ABC123\n  callsign: N12345\n")
-	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("Load() error: %v", err)
-	}
-	if len(cfg.Aircraft.Profiles) != 1 {
-		t.Fatalf("expected 1 synthesized profile, got %d: %+v", len(cfg.Aircraft.Profiles), cfg.Aircraft.Profiles)
-	}
-	p := cfg.Aircraft.Profiles[0]
-	if p.Name != "N12345" || p.ICAO != "ABC123" || p.Callsign != "N12345" {
-		t.Fatalf("unexpected synthesized profile: %+v", p)
-	}
-	if cfg.Aircraft.Active != "N12345" {
-		t.Fatalf("active=%q want N12345", cfg.Aircraft.Active)
-	}
+	_, err := Load(path)
+	requireErrEq(t, err, "config contains unknown fields: field ownship not found in type config.Config")
 }
 
 func TestLoad_AircraftMultipleProfilesActiveMirroredToOwnship(t *testing.T) {

@@ -61,9 +61,12 @@ func newTrafficTestConfig(t *testing.T) config.Config {
 	cfg := config.Config{
 		GDL90: config.GDL90Config{Dest: "127.0.0.1:4000", Interval: 1 * time.Second},
 		GPS:   config.GPSConfig{Enable: true, HorizontalAccuracyM: 10},
-		Ownship: config.OwnshipConfig{
-			ICAO:     "ABCDEF",
-			Callsign: "STRATUX",
+		Aircraft: config.AircraftConfig{
+			Profiles: []config.AircraftProfile{{
+				Name:     "Stratux",
+				ICAO:     "ABCDEF",
+				Callsign: "STRATUX",
+			}},
 		},
 	}
 	if err := config.DefaultAndValidate(&cfg); err != nil {

@@ -212,9 +212,7 @@
     radarRangeNm: 'stratuxng.radar.range_nm',
     radarAlertRangeNm: 'stratuxng.radar.alert_range_nm',
     radarAlertAltBandFeet: 'stratuxng.radar.alert_alt_band_ft',
-    // Back-compat: older builds stored audio_mode + alerts_enabled separately.
     radarAudioMode: 'stratuxng.radar.audio_mode',
-    radarAlertsEnabled: 'stratuxng.radar.alerts_enabled',
 
     // Web UI-only VSI display settings.
     vsiTrafficDeadbandFpm: 'stratuxng.webui.vsi.traffic_deadband_fpm',
@@ -3215,10 +3213,7 @@
     const m = String(mode || '').toLowerCase();
     if (!['off', 'both', 'speech', 'beep'].includes(m)) return;
     radarAlertsMode = m;
-    // Persist using the existing audio_mode key for continuity.
     lsSet(lsKeys.radarAudioMode, radarAlertsMode);
-    // Back-compat: keep the old enabled flag consistent.
-    lsSet(lsKeys.radarAlertsEnabled, radarAlertsMode === 'off' ? '0' : '1');
     applyRadarControlStateToUI();
     drawRadar();
   }
@@ -3283,16 +3278,8 @@
   if (!radarAlertRangesNm.includes(radarAlertRangeNm)) radarAlertRangeNm = 2;
   radarAlertAltBandFeet = lsGetNumber(lsKeys.radarAlertAltBandFeet, radarAlertAltBandFeet);
   if (!radarAlertAltBandsFeet.includes(radarAlertAltBandFeet)) radarAlertAltBandFeet = 1000;
-  // Default required: BOTH.
-  // Back-compat: if alerts_enabled was explicitly off, honor it.
-  const enabledFlag = lsGetString(lsKeys.radarAlertsEnabled, '1');
-  if (enabledFlag === '0') {
-    radarAlertsMode = 'off';
-  } else {
-    const storedMode = lsGetString(lsKeys.radarAudioMode, 'both');
-    radarAlertsMode = ['off', 'both', 'speech', 'beep'].includes(storedMode) ? storedMode : 'both';
-    // If storedMode is 'off' but enabledFlag isn't, still honor 'off'.
-  }
+  const storedMode = lsGetString(lsKeys.radarAudioMode, 'both');
+  radarAlertsMode = ['off', 'both', 'speech', 'beep'].includes(storedMode) ? storedMode : 'both';
   applyRadarControlStateToUI();
 
   // Load persisted Web UI-only VSI settings.
